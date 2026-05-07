@@ -1,6 +1,6 @@
-#include <iostream>
+#include "log.h"
 
 int main(int argc, char* argv[]) {
-    std::cout << "Hello, Zeta!" << std::endl;
+    ZETA_DEBUG("Hello, Zeta!");
     return 0;
 }
