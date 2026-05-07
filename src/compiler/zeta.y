@@ -1,0 +1,7 @@
+%{
+    #define YYSTYPE Zeta::Node*    
+%}
+
+%%
+
+%%

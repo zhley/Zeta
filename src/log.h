@@ -1,5 +1,7 @@
 #pragma once
 
+namespace Zeta {
+
 enum class LogLevel {
     DEBUG = 0,
     INFO,
@@ -23,7 +25,9 @@ private:
     LogLevel currentLevel;
 };
 
-#define ZETA_DEBUG(...) Logger::getInstance().log(LogLevel::DEBUG, __VA_ARGS__)
-#define ZETA_INFO(...)  Logger::getInstance().log(LogLevel::INFO,  __VA_ARGS__)
-#define ZETA_WARN(...)  Logger::getInstance().log(LogLevel::WARN,  __VA_ARGS__)
-#define ZETA_ERROR(...) Logger::getInstance().log(LogLevel::ERROR, __VA_ARGS__)
+} // namespace Zeta
+
+#define ZETA_DEBUG(...) Zeta::Logger::getInstance().log(Zeta::LogLevel::DEBUG, __VA_ARGS__)
+#define ZETA_INFO(...)  Zeta::Logger::getInstance().log(Zeta::LogLevel::INFO,  __VA_ARGS__)
+#define ZETA_WARN(...)  Zeta::Logger::getInstance().log(Zeta::LogLevel::WARN,  __VA_ARGS__)
+#define ZETA_ERROR(...) Zeta::Logger::getInstance().log(Zeta::LogLevel::ERROR, __VA_ARGS__)

@@ -18,8 +18,8 @@ set(LEXER_OUTPUT ${GEN_DIR}/lex.yy.cpp)
 set(PARSER_OUTPUT ${GEN_DIR}/syntax.tab.cpp)
 set(PARSER_HEADER ${GEN_DIR}/syntax.tab.h)
 
-FLEX_TARGET(Scanner src/compiler/lexical.l ${LEXER_OUTPUT})
-BISON_TARGET(Parser src/compiler/syntax.y ${PARSER_OUTPUT}
+FLEX_TARGET(Scanner src/compiler/zeta.l ${LEXER_OUTPUT})
+BISON_TARGET(Parser src/compiler/zeta.y ${PARSER_OUTPUT}
     COMPILE_FLAGS "-d --defines=${PARSER_HEADER}")
 
 add_flex_bison_dependency(Scanner Parser)

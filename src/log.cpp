@@ -10,6 +10,8 @@
 #define COLOR_WARN    "\033[33m"
 #define COLOR_ERROR   "\033[31m"
 
+namespace Zeta{
+
 Logger::Logger() : currentLevel(LogLevel::DEBUG) {}
 
 Logger& Logger::getInstance() {
@@ -59,3 +61,5 @@ void Logger::log(LogLevel level, const char* format, ...) {
     fprintf(stderr, "\n");
     fflush(stderr);
 }
+
+} // namespace Zeta
