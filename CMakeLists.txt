@@ -27,9 +27,8 @@ add_flex_bison_dependency(Scanner Parser)
 file(GLOB_RECURSE ZETA_SRC
     src/*.cpp
     src/*.h
-    ${LEXER_OUTPUT}
-    ${PARSER_OUTPUT}
 )
 
-add_executable(zeta ${ZETA_SRC})
-target_include_directories(zeta PRIVATE ${GEN_DIR})
+add_executable(zeta ${ZETA_SRC} ${LEXER_OUTPUT} ${PARSER_OUTPUT})
+target_include_directories(zeta PRIVATE ${GEN_DIR} src)
+
