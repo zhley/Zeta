@@ -4,19 +4,31 @@
 
     #include <stdint.h>
     #include <stdlib.h>
+    #include <memory>
+    #include <string>
+    #include <utility>
+    #include <vector>
 
     enum Relop { RP_EQ, RP_NEQ, RP_LT, RP_GT, RP_LEQ, RP_GEQ };
     enum AssignOp { AS_ASSIGN, AS_PLUS, AS_MINUS, AS_STAR, AS_DIV, AS_MOD, AS_BITAND, AS_BITOR, AS_BITXOR, AS_LSHIFT, AS_RSHIFT };
 
     extern int yylineno;
     extern int yycolumn;
-    extern int yylex();
-    extern void yyerror(const char*);
 
-    Zeta::AST::AssignExp::Op toAssignOp(int assignOp);
-    Zeta::AST::BinaryExp::Op relopToBinaryOp(int relop); 
+    Zeta::AST::AssignExp::Op toAssignOp(AssignOp assignOp);
+    Zeta::AST::BinaryExp::Op relopToBinaryOp(Relop relop);
+    void yyerror(const char* msg);
 
-    // TODO: 产生错误可能导致内存泄露, 需要注意
+    namespace Zeta::ParserTypes {
+        using ImportList = std::vector<std::unique_ptr<Zeta::AST::Import>>;
+        using DecList = std::vector<std::unique_ptr<Zeta::AST::Dec>>;
+        using VarDecList = std::vector<std::unique_ptr<Zeta::AST::VarDec>>;
+        using ClassMemberList = std::vector<std::pair<bool, std::unique_ptr<Zeta::AST::Dec>>>;
+        using StmtList = std::vector<std::unique_ptr<Zeta::AST::Stmt>>;
+        using ExpList = std::vector<std::unique_ptr<Zeta::AST::Exp>>;
+        using MapEntryList = std::vector<std::pair<std::string, std::unique_ptr<Zeta::AST::Exp>>>;
+        using ParamList = std::vector<std::string>;
+    }
 }
 
 %code top{
@@ -24,17 +36,23 @@
     using namespace Zeta::AST;
 }
 
-%define parse.error verbose
-%union {
-    int64_t int_;
-    double double_;
-    char* str;
-    void* ptr;
+%code {
+    Zeta::Parser::symbol_type yylex();
 }
 
-%token <int_> INT BOOL NULL_ RELOP ASSIGN
-%token <double_> FLOAT
-%token <str> ID STR
+%language "c++"
+%define api.namespace {Zeta}
+%define api.parser.class {Parser}
+%define api.value.type variant
+%define api.token.constructor
+%define parse.error verbose
+%token <int64_t> INT
+%token <double> FLOAT
+%token <bool> BOOL
+%token <Relop> RELOP
+%token <AssignOp> ASSIGN
+%token <std::string> ID STR
+%token NULL_
 %token VAR LET FN RETURN IF ELSE WHILE FOR BREAK CONTINUE CLASS EXTENDS THIS STATIC IMPORT AS
 %token AND OR LSHIFT RSHIFT SEMI DOT COMMA COLON QMARK LP RP LB RB LC RC PLUS MINUS STAR DIV MOD NOT BITAND BITOR BITXOR BITNOT
 
@@ -51,143 +69,155 @@
 %left LP RP LB RB DOT
 %right ELSE
 
-%type <ptr> Program ImportList Import DecList VarDec VarList Var
-%type <ptr> FuncDec ParamList ClassDec ClassBody
-%type <ptr> StmtList Stmt BlockStmt
-%type <ptr> Exp ArgList Literal ArrayLit ElemList MapLit MapElemList MapElem
-%type <ptr> FuncLit
-%type <str> Param
+%type <std::unique_ptr<Zeta::AST::Program>> Program
+%type <Zeta::ParserTypes::ImportList> ImportList
+%type <std::unique_ptr<Zeta::AST::Import>> Import
+%type <Zeta::ParserTypes::DecList> DecList
+%type <Zeta::ParserTypes::VarDecList> VarDec VarList
+%type <std::unique_ptr<Zeta::AST::VarDec>> Var
+%type <std::unique_ptr<Zeta::AST::FuncDec>> FuncDec
+%type <Zeta::ParserTypes::ParamList> ParamList
+%type <std::string> Param
+%type <std::unique_ptr<Zeta::AST::ClassDec>> ClassDec
+%type <Zeta::ParserTypes::ClassMemberList> ClassBody
+%type <Zeta::ParserTypes::StmtList> StmtList
+%type <std::unique_ptr<Zeta::AST::Stmt>> Stmt
+%type <std::unique_ptr<Zeta::AST::BlockStmt>> BlockStmt
+%type <std::unique_ptr<Zeta::AST::Exp>> Exp Literal ArrayLit MapLit FuncLit
+%type <Zeta::ParserTypes::ExpList> ArgList ElemList
+%type <Zeta::ParserTypes::MapEntryList> MapElemList
+%type <std::pair<std::string, std::unique_ptr<Zeta::AST::Exp>>> MapElem
 
 %%
-Program: ImportList DecList { auto p = new Program(); p->imports = std::move(*((std::vector<std::unique_ptr<Import> >*)$1)); p->decs = std::move(*((std::vector<std::unique_ptr<Dec> >*)$2)); delete (std::vector<std::unique_ptr<Import> >*)$1; delete (std::vector<std::unique_ptr<Dec> >*)$2; $$ = p; }
+Program: ImportList DecList { auto p = std::make_unique<Program>(); p->imports = std::move($1); p->decs = std::move($2); $$ = std::move(p); }
     ;
 
-ImportList: ImportList Import { ((std::vector<std::unique_ptr<Import> >*)$1)->push_back(std::unique_ptr<Import>((Import*)$2)); $$ = $1; }
-    | { $$ = new std::vector<std::unique_ptr<Import> >(); }
+ImportList: ImportList Import { $1.push_back(std::move($2)); $$ = std::move($1); }
+    | { $$ = Zeta::ParserTypes::ImportList{}; }
     ;
-Import: IMPORT STR SEMI { auto t = new Import(); t->path = std::string($2); $$ = t; free($2); }
-    | IMPORT STR AS ID SEMI { auto t = new Import(); t->path = std::string($2); t->alias = std::string($4); $$ = t; free($2); free($4); }
+Import: IMPORT STR SEMI { auto t = std::make_unique<Import>(); t->path = std::move($2); $$ = std::move(t); }
+    | IMPORT STR AS ID SEMI { auto t = std::make_unique<Import>(); t->path = std::move($2); t->alias = std::move($4); $$ = std::move(t); }
     | error SEMI { $$ = nullptr; }
     ;
 
-DecList: DecList VarDec SEMI { for(auto& d: *(std::vector<std::unique_ptr<VarDec> >*)$2) ((std::vector<std::unique_ptr<Dec> >*)$1)->push_back(std::move(d)); $$ = $1; delete (std::vector<std::unique_ptr<VarDec> >*)$2; }
-    | DecList FuncDec { ((std::vector<std::unique_ptr<Dec> >*)$1)->push_back(std::unique_ptr<Dec>((Dec*)$2)); $$ = $1; }
-    | DecList ClassDec { ((std::vector<std::unique_ptr<Dec> >*)$1)->push_back(std::unique_ptr<Dec>((Dec*)$2)); $$ = $1; }
-    | { $$ = new std::vector<std::unique_ptr<Dec> >(); }
+DecList: DecList VarDec SEMI { for(auto& d: $2) $1.push_back(std::unique_ptr<Dec>(std::move(d))); $$ = std::move($1); }
+    | DecList FuncDec { $1.push_back(std::unique_ptr<Dec>(std::move($2))); $$ = std::move($1); }
+    | DecList ClassDec { $1.push_back(std::unique_ptr<Dec>(std::move($2))); $$ = std::move($1); }
+    | { $$ = Zeta::ParserTypes::DecList{}; }
     ;
 
-VarDec: LET VarList { $$ = $2; for(auto& v: *(std::vector<std::unique_ptr<VarDec> >*)$$) v->isMutable = false; }
-    | VAR VarList { $$ = $2; }
+VarDec: LET VarList { for(auto& v: $2) v->isMutable = false; $$ = std::move($2); }
+    | VAR VarList { $$ = std::move($2); }
     ;
-VarList: VarList COMMA Var { ((std::vector<std::unique_ptr<VarDec> >*)$1)->push_back(std::unique_ptr<VarDec>((VarDec*)$3)); $$ = $1; }
-    | Var { auto t = new std::vector<std::unique_ptr<VarDec> >(); t->push_back(std::unique_ptr<VarDec>((VarDec*)$1)); $$ = t; }
+VarList: VarList COMMA Var { $1.push_back(std::move($3)); $$ = std::move($1); }
+    | Var { Zeta::ParserTypes::VarDecList t; t.push_back(std::move($1)); $$ = std::move(t); }
     ;
-Var: ID { auto t = new VarDec(); t->name = std::string($1); t->isMutable = true; $$ = t; free($1); }
-    | ID ASSIGN Exp { auto t = new VarDec(); t->name = std::string($1); t->isMutable = true; t->init = std::unique_ptr<Exp>((Exp*)$3); $$ = t; if($2 != AS_ASSIGN) { yyerror("Initialization only allowed with '='"); } free($1); }
+Var: ID { auto t = std::make_unique<VarDec>(); t->name = std::move($1); t->isMutable = true; $$ = std::move(t); }
+    | ID ASSIGN Exp { auto t = std::make_unique<VarDec>(); t->name = std::move($1); t->isMutable = true; t->init = std::move($3); $$ = std::move(t); if($2 != AS_ASSIGN) { yyerror("Initialization only allowed with '='"); } }
     ;
 
-FuncDec: FN ID LP ParamList RP BlockStmt { auto f = new FuncDec(); f->name = std::string($2); f->params = std::move(*((std::vector<std::string>*)$4)); delete (std::vector<std::string>*)$4; f->body = std::unique_ptr<BlockStmt>((BlockStmt*)$6); $$ = f; free($2); }
-    | FN ID LP RP BlockStmt { auto f = new FuncDec(); f->name = std::string($2); f->body = std::unique_ptr<BlockStmt>((BlockStmt*)$5); $$ = f; free($2); }
+FuncDec: FN ID LP ParamList RP BlockStmt { auto f = std::make_unique<FuncDec>(); f->name = std::move($2); f->params = std::move($4); f->body = std::move($6); $$ = std::move(f); }
+    | FN ID LP RP BlockStmt { auto f = std::make_unique<FuncDec>(); f->name = std::move($2); f->body = std::move($5); $$ = std::move(f); }
     | error RP BlockStmt { $$ = nullptr; }
     | error RC { $$ = nullptr; }
     ;
-ParamList: ParamList COMMA Param { ((std::vector<std::string>*)$1)->push_back(std::string($3)); $$ = $1; }
-    | Param { auto t = new std::vector<std::string>(); t->push_back(std::string($1)); $$ = t; }
+ParamList: ParamList COMMA Param { $1.push_back(std::move($3)); $$ = std::move($1); }
+    | Param { Zeta::ParserTypes::ParamList t; t.push_back(std::move($1)); $$ = std::move(t); }
     ;
-Param: ID { $$ = $1; }
+Param: ID { $$ = std::move($1); }
     ;
 
-ClassDec: CLASS ID LC ClassBody RC { auto c = new ClassDec(); c->name = std::string($2); c->members = std::move(*((std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$4)); delete (std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$4; $$ = c; free($2); }
-    | CLASS ID EXTENDS ID LC ClassBody RC { auto c = new ClassDec(); c->name = std::string($2); c->base = std::string($4); c->members = std::move(*((std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$6)); delete (std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$6; $$ = c; free($2); free($4); }
+ClassDec: CLASS ID LC ClassBody RC { auto c = std::make_unique<ClassDec>(); c->name = std::move($2); c->members = std::move($4); $$ = std::move(c); }
+    | CLASS ID EXTENDS ID LC ClassBody RC { auto c = std::make_unique<ClassDec>(); c->name = std::move($2); c->base = std::move($4); c->members = std::move($6); $$ = std::move(c); }
     | error LC ClassBody RC { $$ = nullptr; }
     ;
-ClassBody: ClassBody VarDec SEMI { for(auto& d: *(std::vector<std::unique_ptr<VarDec> >*)$2) ((std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$1)->push_back(std::make_pair(false, std::move(d))); $$ = $1; delete (std::vector<std::unique_ptr<VarDec> >*)$2; }
-    | ClassBody FuncDec { ((std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$1)->push_back(std::make_pair(false, std::unique_ptr<FuncDec>((FuncDec*)$2))); $$ = $1; }
-    | ClassBody STATIC VarDec SEMI { for(auto& d: *(std::vector<std::unique_ptr<VarDec> >*)$3) ((std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$1)->push_back(std::make_pair(true, std::move(d))); $$ = $1; delete (std::vector<std::unique_ptr<VarDec> >*)$3; }
-    | ClassBody STATIC FuncDec { ((std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$1)->push_back(std::make_pair(true, std::unique_ptr<FuncDec>((FuncDec*)$3))); $$ = $1; }
-    | { $$ = new std::vector<std::pair<bool, std::unique_ptr<Dec> > >(); }
+ClassBody: ClassBody VarDec SEMI { for(auto& d: $2) $1.push_back(std::make_pair(false, std::unique_ptr<Dec>(std::move(d)))); $$ = std::move($1); }
+    | ClassBody FuncDec { $1.push_back(std::make_pair(false, std::unique_ptr<Dec>(std::move($2)))); $$ = std::move($1); }
+    | ClassBody STATIC VarDec SEMI { for(auto& d: $3) $1.push_back(std::make_pair(true, std::unique_ptr<Dec>(std::move(d)))); $$ = std::move($1); }
+    | ClassBody STATIC FuncDec { $1.push_back(std::make_pair(true, std::unique_ptr<Dec>(std::move($3)))); $$ = std::move($1); }
+    | { $$ = Zeta::ParserTypes::ClassMemberList{}; }
     ;
 
-StmtList: StmtList Stmt { ((std::vector<std::unique_ptr<Stmt> >*)$1)->push_back(std::unique_ptr<Stmt>((Stmt*)$2)); $$ = $1; }
-    | { $$ = new std::vector<std::unique_ptr<Stmt> >(); }
+StmtList: StmtList Stmt { $1.push_back(std::move($2)); $$ = std::move($1); }
+    | { $$ = Zeta::ParserTypes::StmtList{}; }
     ;
-BlockStmt: LC StmtList RC { auto b = new BlockStmt(); b->stmts = std::move(*((std::vector<std::unique_ptr<Stmt> >*)$2)); delete (std::vector<std::unique_ptr<Stmt> >*)$2; $$ = b; }
+BlockStmt: LC StmtList RC { auto b = std::make_unique<BlockStmt>(); b->stmts = std::move($2); $$ = std::move(b); }
     ;
-Stmt: VarDec SEMI { auto s = new VarDecStmt(); s->varDecs = std::move(*((std::vector<std::unique_ptr<VarDec> >*)$1)); delete (std::vector<std::unique_ptr<VarDec> >*)$1; $$ = s; }
-    | Exp SEMI { auto s = new ExpStmt(); s->exp = std::unique_ptr<Exp>((Exp*)$1); $$ = s; }
-    | IF LP Exp RP Stmt %prec ELSE { auto s = new IfStmt(); s->cond = std::unique_ptr<Exp>((Exp*)$3); s->thenBranch = std::unique_ptr<Stmt>((Stmt*)$5); $$ = s; }
-    | IF LP Exp RP Stmt ELSE Stmt { auto s = new IfStmt(); s->cond = std::unique_ptr<Exp>((Exp*)$3); s->thenBranch = std::unique_ptr<Stmt>((Stmt*)$5); s->elseBranch = std::unique_ptr<Stmt>((Stmt*)$7); $$ = s; }
-    | WHILE LP Exp RP Stmt { auto s = new WhileStmt(); s->cond = std::unique_ptr<Exp>((Exp*)$3); s->body = std::unique_ptr<Stmt>((Stmt*)$5); $$ = s; }
-    | FOR LP ID COLON Exp RP Stmt { auto s = new ForStmt(); s->valVarName = std::string($3); s->iterable = std::unique_ptr<Exp>((Exp*)$5); s->body = std::unique_ptr<Stmt>((Stmt*)$7); $$ = s; free($3); }
-    | FOR LP ID COMMA ID COLON Exp RP Stmt { auto s = new ForStmt(); s->idxVarName = std::string($3); s->valVarName = std::string($5); s->iterable = std::unique_ptr<Exp>((Exp*)$7); s->body = std::unique_ptr<Stmt>((Stmt*)$9); $$ = s; free($3); free($5); }
-    | BREAK SEMI { auto s = new BreakStmt(); $$ = s; }
-    | CONTINUE SEMI { auto s = new ContinueStmt(); $$ = s; }
-    | RETURN SEMI { auto s = new ReturnStmt(); $$ = s; }
-    | RETURN Exp SEMI { auto s = new ReturnStmt(); s->value = std::unique_ptr<Exp>((Exp*)$2); $$ = s; }
-    | BlockStmt { $$ = $1; }
+Stmt: VarDec SEMI { auto s = std::make_unique<VarDecStmt>(); s->varDecs = std::move($1); $$ = std::move(s); }
+    | Exp SEMI { auto s = std::make_unique<ExpStmt>(); s->exp = std::move($1); $$ = std::move(s); }
+    | IF LP Exp RP Stmt %prec ELSE { auto s = std::make_unique<IfStmt>(); s->cond = std::move($3); s->thenBranch = std::move($5); $$ = std::move(s); }
+    | IF LP Exp RP Stmt ELSE Stmt { auto s = std::make_unique<IfStmt>(); s->cond = std::move($3); s->thenBranch = std::move($5); s->elseBranch = std::move($7); $$ = std::move(s); }
+    | WHILE LP Exp RP Stmt { auto s = std::make_unique<WhileStmt>(); s->cond = std::move($3); s->body = std::move($5); $$ = std::move(s); }
+    | FOR LP ID COLON Exp RP Stmt { auto s = std::make_unique<ForStmt>(); s->valVarName = std::move($3); s->iterable = std::move($5); s->body = std::move($7); $$ = std::move(s); }
+    | FOR LP ID COMMA ID COLON Exp RP Stmt { auto s = std::make_unique<ForStmt>(); s->idxVarName = std::move($3); s->valVarName = std::move($5); s->iterable = std::move($7); s->body = std::move($9); $$ = std::move(s); }
+    | BREAK SEMI { auto s = std::make_unique<BreakStmt>(); $$ = std::move(s); }
+    | CONTINUE SEMI { auto s = std::make_unique<ContinueStmt>(); $$ = std::move(s); }
+    | RETURN SEMI { auto s = std::make_unique<ReturnStmt>(); $$ = std::move(s); }
+    | RETURN Exp SEMI { auto s = std::make_unique<ReturnStmt>(); s->value = std::move($2); $$ = std::move(s); }
+    | BlockStmt { $$ = std::move($1); }
     | SEMI { $$ = nullptr; }
     | error SEMI { $$ = nullptr; }
     | error RC { $$ = nullptr; }
     ;
 
-Exp: Exp QMARK Exp COLON Exp { auto e = new ConditionalExp(); e->cond = std::unique_ptr<Exp>((Exp*)$1); e->thenBranch = std::unique_ptr<Exp>((Exp*)$3); e->elseBranch = std::unique_ptr<Exp>((Exp*)$5); $$ = e; }
-    | Exp ASSIGN Exp { auto e = new AssignExp(); e->op = toAssignOp($2); e->target = std::unique_ptr<Exp>((Exp*)$1); e->value = std::unique_ptr<Exp>((Exp*)$3); $$ = e; }
-    | Exp RELOP Exp { auto e = new BinaryExp(); e->op = relopToBinaryOp($2); e->left = std::unique_ptr<Exp>((Exp*)$1); e->right = std::unique_ptr<Exp>((Exp*)$3); $$ = e; }
-    | Exp AND Exp { auto e = new BinaryExp(); e->op = BinaryExp::Op::And; e->left = std::unique_ptr<Exp>((Exp*)$1); e->right = std::unique_ptr<Exp>((Exp*)$3); $$ = e; }
-    | Exp OR Exp { auto e = new BinaryExp(); e->op = BinaryExp::Op::Or; e->left = std::unique_ptr<Exp>((Exp*)$1); e->right = std::unique_ptr<Exp>((Exp*)$3); $$ = e; }
-    | Exp LSHIFT Exp { auto e = new BinaryExp(); e->op = BinaryExp::Op::Shl; e->left = std::unique_ptr<Exp>((Exp*)$1); e->right = std::unique_ptr<Exp>((Exp*)$3); $$ = e; }
-    | Exp RSHIFT Exp { auto e = new BinaryExp(); e->op = BinaryExp::Op::Shr; e->left = std::unique_ptr<Exp>((Exp*)$1); e->right = std::unique_ptr<Exp>((Exp*)$3); $$ = e; }
-    | Exp PLUS Exp { auto e = new BinaryExp(); e->op = BinaryExp::Op::Add; e->left = std::unique_ptr<Exp>((Exp*)$1); e->right = std::unique_ptr<Exp>((Exp*)$3); $$ = e; }
-    | Exp MINUS Exp { auto e = new BinaryExp(); e->op = BinaryExp::Op::Sub; e->left = std::unique_ptr<Exp>((Exp*)$1); e->right = std::unique_ptr<Exp>((Exp*)$3); $$ = e; }
-    | Exp STAR Exp { auto e = new BinaryExp(); e->op = BinaryExp::Op::Mul; e->left = std::unique_ptr<Exp>((Exp*)$1); e->right = std::unique_ptr<Exp>((Exp*)$3); $$ = e; }
-    | Exp DIV Exp { auto e = new BinaryExp(); e->op = BinaryExp::Op::Div; e->left = std::unique_ptr<Exp>((Exp*)$1); e->right = std::unique_ptr<Exp>((Exp*)$3); $$ = e; }
-    | Exp MOD Exp { auto e = new BinaryExp(); e->op = BinaryExp::Op::Mod; e->left = std::unique_ptr<Exp>((Exp*)$1); e->right = std::unique_ptr<Exp>((Exp*)$3); $$ = e; }
-    | Exp BITAND Exp { auto e = new BinaryExp(); e->op = BinaryExp::Op::BitAnd; e->left = std::unique_ptr<Exp>((Exp*)$1); e->right = std::unique_ptr<Exp>((Exp*)$3); $$ = e; }
-    | Exp BITOR Exp { auto e = new BinaryExp(); e->op = BinaryExp::Op::BitOr; e->left = std::unique_ptr<Exp>((Exp*)$1); e->right = std::unique_ptr<Exp>((Exp*)$3); $$ = e; }
-    | Exp BITXOR Exp { auto e = new BinaryExp(); e->op = BinaryExp::Op::BitXor; e->left = std::unique_ptr<Exp>((Exp*)$1); e->right = std::unique_ptr<Exp>((Exp*)$3); $$ = e; }
-    | MINUS Exp %prec MINUS_S { auto e = new UnaryExp(); e->op = UnaryExp::Op::Neg; e->operand = std::unique_ptr<Exp>((Exp*)$2); $$ = e; }
-    | NOT Exp { auto e = new UnaryExp(); e->op = UnaryExp::Op::Not; e->operand = std::unique_ptr<Exp>((Exp*)$2); $$ = e; }
-    | BITNOT Exp { auto e = new UnaryExp(); e->op = UnaryExp::Op::BitNot; e->operand = std::unique_ptr<Exp>((Exp*)$2); $$ = e; }
-    | LP Exp RP { $$ = $2; }
-    | Exp DOT ID LP ArgList RP { auto e = new CallExp(); e->caller = std::unique_ptr<Exp>((Exp*)$1); e->funcName = std::string($3); e->args = std::move(*((std::vector<std::unique_ptr<Exp> >*)$5)); delete (std::vector<std::unique_ptr<Exp> >*)$5; $$ = e; free($3); }
-    | Exp DOT ID LP RP { auto e = new CallExp(); e->caller = std::unique_ptr<Exp>((Exp*)$1); e->funcName = std::string($3); $$ = e; free($3); }
-    | Exp DOT ID { auto e = new MemberAccessExp(); e->object = std::unique_ptr<Exp>((Exp*)$1); e->member = std::string($3); $$ = e; free($3); }
-    | Exp LB Exp RB { auto e = new IndexAccessExp(); e->object = std::unique_ptr<Exp>((Exp*)$1); e->index = std::unique_ptr<Exp>((Exp*)$3); $$ = e; }
-    | ID LP ArgList RP { auto e = new CallExp(); e->funcName = std::string($1); e->args = std::move(*((std::vector<std::unique_ptr<Exp> >*)$3)); delete (std::vector<std::unique_ptr<Exp> >*)$3; $$ = e; free($1); }
-    | ID LP RP { auto e = new CallExp(); e->funcName = std::string($1); $$ = e; free($1); }
-    | ID { auto e = new IdentifierExp(); e->name = std::string($1); $$ = e; free($1); }
-    | Literal { $$ = $1; }
-    | THIS { auto e = new ThisExp(); $$ = e; }
+Exp: Exp QMARK Exp COLON Exp { auto e = std::make_unique<ConditionalExp>(); e->cond = std::move($1); e->thenBranch = std::move($3); e->elseBranch = std::move($5); $$ = std::move(e); }
+    | Exp ASSIGN Exp { auto e = std::make_unique<AssignExp>(); e->op = toAssignOp($2); e->target = std::move($1); e->value = std::move($3); $$ = std::move(e); }
+    | Exp RELOP Exp { auto e = std::make_unique<BinaryExp>(); e->op = relopToBinaryOp($2); e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
+    | Exp AND Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::And; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
+    | Exp OR Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Or; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
+    | Exp LSHIFT Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Shl; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
+    | Exp RSHIFT Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Shr; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
+    | Exp PLUS Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Add; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
+    | Exp MINUS Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Sub; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
+    | Exp STAR Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Mul; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
+    | Exp DIV Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Div; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
+    | Exp MOD Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Mod; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
+    | Exp BITAND Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::BitAnd; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
+    | Exp BITOR Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::BitOr; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
+    | Exp BITXOR Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::BitXor; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
+    | MINUS Exp %prec MINUS_S { auto e = std::make_unique<UnaryExp>(); e->op = UnaryExp::Op::Neg; e->operand = std::move($2); $$ = std::move(e); }
+    | NOT Exp { auto e = std::make_unique<UnaryExp>(); e->op = UnaryExp::Op::Not; e->operand = std::move($2); $$ = std::move(e); }
+    | BITNOT Exp { auto e = std::make_unique<UnaryExp>(); e->op = UnaryExp::Op::BitNot; e->operand = std::move($2); $$ = std::move(e); }
+    | LP Exp RP { $$ = std::move($2); }
+    | Exp DOT ID LP ArgList RP { auto e = std::make_unique<CallExp>(); e->caller = std::move($1); e->funcName = std::move($3); e->args = std::move($5); $$ = std::move(e); }
+    | Exp DOT ID LP RP { auto e = std::make_unique<CallExp>(); e->caller = std::move($1); e->funcName = std::move($3); $$ = std::move(e); }
+    | Exp DOT ID { auto e = std::make_unique<MemberAccessExp>(); e->object = std::move($1); e->member = std::move($3); $$ = std::move(e); }
+    | Exp LB Exp RB { auto e = std::make_unique<IndexAccessExp>(); e->object = std::move($1); e->index = std::move($3); $$ = std::move(e); }
+    | ID LP ArgList RP { auto e = std::make_unique<CallExp>(); e->funcName = std::move($1); e->args = std::move($3); $$ = std::move(e); }
+    | ID LP RP { auto e = std::make_unique<CallExp>(); e->funcName = std::move($1); $$ = std::move(e); }
+    | ID { auto e = std::make_unique<IdentifierExp>(); e->name = std::move($1); $$ = std::move(e); }
+    | Literal { $$ = std::move($1); }
+    | THIS { auto e = std::make_unique<ThisExp>(); $$ = std::move(e); }
     ;
-ArgList: ArgList COMMA Exp { ((std::vector<std::unique_ptr<Exp> >*)$1)->push_back(std::unique_ptr<Exp>((Exp*)$3)); $$ = $1; }
-    | Exp { auto t = new std::vector<std::unique_ptr<Exp> >(); t->push_back(std::unique_ptr<Exp>((Exp*)$1)); $$ = t; }
+ArgList: ArgList COMMA Exp { $1.push_back(std::move($3)); $$ = std::move($1); }
+    | Exp { Zeta::ParserTypes::ExpList t; t.push_back(std::move($1)); $$ = std::move(t); }
     ;
-Literal: INT { auto e = new IntLitExp(); e->value = $1; $$ = e; }
-    | FLOAT { auto e = new FloatLitExp(); e->value = $1; $$ = e; }
-    | BOOL { auto e = new BoolLitExp(); e->value = $1; $$ = e; }
-    | NULL_ { auto e = new NullLitExp(); $$ = e; }
-    | STR { auto e = new StrLitExp(); e->value = std::string($1); $$ = e; free($1); }
-    | ArrayLit { $$ = $1; }
-    | MapLit { $$ = $1; }
-    | FuncLit { $$ = $1; }
+Literal: INT { auto e = std::make_unique<IntLitExp>(); e->value = $1; $$ = std::move(e); }
+    | FLOAT { auto e = std::make_unique<FloatLitExp>(); e->value = $1; $$ = std::move(e); }
+    | BOOL { auto e = std::make_unique<BoolLitExp>(); e->value = $1; $$ = std::move(e); }
+    | NULL_ { auto e = std::make_unique<NullLitExp>(); $$ = std::move(e); }
+    | STR { auto e = std::make_unique<StrLitExp>(); e->value = std::move($1); $$ = std::move(e); }
+    | ArrayLit { $$ = std::move($1); }
+    | MapLit { $$ = std::move($1); }
+    | FuncLit { $$ = std::move($1); }
     ;
-ArrayLit: LB ElemList RB { auto e = new ArrayLitExp(); e->elements = std::move(*((std::vector<std::unique_ptr<Exp> >*)$2)); delete (std::vector<std::unique_ptr<Exp> >*)$2; $$ = e; }
-    | LB RB { auto e = new ArrayLitExp(); $$ = e; }
+ArrayLit: LB ElemList RB { auto e = std::make_unique<ArrayLitExp>(); e->elements = std::move($2); $$ = std::move(e); }
+    | LB RB { auto e = std::make_unique<ArrayLitExp>(); $$ = std::move(e); }
     ;
-ElemList: ElemList COMMA Exp { ((std::vector<std::unique_ptr<Exp> >*)$1)->push_back(std::unique_ptr<Exp>((Exp*)$3)); $$ = $1; }
-    | Exp { auto e = new std::vector<std::unique_ptr<Exp> >(); e->push_back(std::unique_ptr<Exp>((Exp*)$1)); $$ = e; }
+ElemList: ElemList COMMA Exp { $1.push_back(std::move($3)); $$ = std::move($1); }
+    | Exp { Zeta::ParserTypes::ExpList t; t.push_back(std::move($1)); $$ = std::move(t); }
     ;
-MapLit: LC MapElemList RC { auto e = new MapLitExp(); e->entries = std::move(*((std::vector<std::pair<std::string, std::unique_ptr<Exp> > >*)$2)); delete (std::vector<std::pair<std::string, std::unique_ptr<Exp> > >*)$2; $$ = e; }
-    | LC RC { auto e = new MapLitExp(); $$ = e; }
+MapLit: LC MapElemList RC { auto e = std::make_unique<MapLitExp>(); e->entries = std::move($2); $$ = std::move(e); }
+    | LC RC { auto e = std::make_unique<MapLitExp>(); $$ = std::move(e); }
     ;
-MapElemList: MapElemList COMMA MapElem { ((std::vector<std::pair<std::string, std::unique_ptr<Exp> > >*)$1)->push_back(std::move(*((std::pair<std::string, std::unique_ptr<Exp> >*)$3))); delete (std::pair<std::string, std::unique_ptr<Exp> >*)$3; $$ = $1; }
-    | MapElem { auto t = new std::vector<std::pair<std::string, std::unique_ptr<Exp> > >(); t->push_back(std::move(*((std::pair<std::string, std::unique_ptr<Exp> >*)$1))); delete (std::pair<std::string, std::unique_ptr<Exp> >*)$1; $$ = t; }
+MapElemList: MapElemList COMMA MapElem { $1.push_back(std::move($3)); $$ = std::move($1); }
+    | MapElem { Zeta::ParserTypes::MapEntryList t; t.push_back(std::move($1)); $$ = std::move(t); }
     ;
-MapElem: ID COLON Exp { auto m = new std::pair<std::string, std::unique_ptr<Exp> >(std::string($1), std::unique_ptr<Exp>((Exp*)$3)); $$ = m; free($1); }
-    | STR COLON Exp { auto m = new std::pair<std::string, std::unique_ptr<Exp> >(std::string($1), std::unique_ptr<Exp>((Exp*)$3)); $$ = m; free($1); }
+MapElem: ID COLON Exp { $$ = std::make_pair(std::move($1), std::move($3)); }
+    | STR COLON Exp { $$ = std::make_pair(std::move($1), std::move($3)); }
     ;
-FuncLit: FN LP ParamList RP BlockStmt { auto f = new FuncLitExp(); f->params = std::move(*((std::vector<std::string>*)$3)); delete (std::vector<std::string>*)$3; f->body = std::unique_ptr<BlockStmt>((BlockStmt*)$5); $$ = f; }
-    | FN LP RP BlockStmt { auto f = new FuncLitExp(); f->body = std::unique_ptr<BlockStmt>((BlockStmt*)$4); $$ = f; }
+FuncLit: FN LP ParamList RP BlockStmt { auto f = std::make_unique<FuncLitExp>(); f->params = std::move($3); f->body = std::move($5); $$ = std::move(f); }
+    | FN LP RP BlockStmt { auto f = std::make_unique<FuncLitExp>(); f->body = std::move($4); $$ = std::move(f); }
     | error RC { $$ = nullptr; }
     ;
 
@@ -197,7 +227,11 @@ void yyerror(const char* msg) {
     REPORT_SYNTAX_ERROR(yylineno, yycolumn, msg);
 }
 
-Zeta::AST::AssignExp::Op toAssignOp(int assignOp) {
+void Zeta::Parser::error(const std::string& msg) {
+    REPORT_SYNTAX_ERROR(yylineno, yycolumn, msg.c_str());
+}
+
+Zeta::AST::AssignExp::Op toAssignOp(AssignOp assignOp) {
     switch(assignOp) {
         case AS_ASSIGN: return Zeta::AST::AssignExp::Op::Assign;
         case AS_PLUS: return Zeta::AST::AssignExp::Op::AddAssign;
@@ -214,7 +248,7 @@ Zeta::AST::AssignExp::Op toAssignOp(int assignOp) {
     }
 }
 
-Zeta::AST::BinaryExp::Op relopToBinaryOp(int relop) {
+Zeta::AST::BinaryExp::Op relopToBinaryOp(Relop relop) {
     switch(relop) {
         case RP_EQ: return Zeta::AST::BinaryExp::Op::Eq;
         case RP_NEQ: return Zeta::AST::BinaryExp::Op::Neq;

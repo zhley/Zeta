@@ -16,7 +16,7 @@ set(GEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/gen)
 file(MAKE_DIRECTORY ${GEN_DIR})
 set(LEXER_OUTPUT ${GEN_DIR}/lex.yy.cpp)
 set(PARSER_OUTPUT ${GEN_DIR}/syntax.tab.cpp)
-set(PARSER_HEADER ${GEN_DIR}/syntax.tab.h)
+set(PARSER_HEADER ${GEN_DIR}/syntax.tab.hpp)
 
 FLEX_TARGET(Scanner src/compiler/zeta.l ${LEXER_OUTPUT})
 BISON_TARGET(Parser src/compiler/zeta.y ${PARSER_OUTPUT}
