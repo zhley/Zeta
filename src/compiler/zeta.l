@@ -12,9 +12,13 @@
     int64_t textToInt(const char* text);
     double textToFloat(const char* text);
     char* textToStr(const char* text);
+
+    int yycolumn = 1;
+    #define YY_USER_ACTION yycolumn += yyleng;
 %}
 
-BLANK       [ \t\r\n]+
+NEWLINE     \n
+BLANK       [ \t\r]+
 SEMI        ;
 DOT         \.
 COMMA       ,
@@ -53,7 +57,7 @@ NULL_       null
 
 VAR         var
 LET         let
-FN        fn
+FN          fn
 RETURN      return
 IF          if
 ELSE        else
@@ -71,6 +75,7 @@ AS          as
 COMMMENT    (\/\/.*)|(\/\*([^*]|\*+[^\/])*\*\/)
 
 %%
+{NEWLINE}   { yycolumn = 1; }
 {BLANK}     {}
 {COMMMENT}  {}
 
@@ -127,7 +132,7 @@ COMMMENT    (\/\/.*)|(\/\*([^*]|\*+[^\/])*\*\/)
 
 {ID}        { yylval.str = strdup(yytext); return ID; }
 
-.           { /* TODO: 未知字符, 词法错误 */ }
+.           { REPORT_LEXICAL_ERROR(yylineno, yycolumn, "Misterious character: %s", yytext); }
 
 %%
 

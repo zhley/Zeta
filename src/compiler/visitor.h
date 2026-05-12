@@ -9,7 +9,7 @@ namespace AST {
     class Dec;
     class VarDec;
     class FuncDec;
-    class CLassDec;
+    class ClassDec;
     class Stmt;
     class BlockStmt;
     class ExpStmt;
@@ -46,7 +46,7 @@ public:
     virtual void visit(AST::Import& import) = 0;
     virtual void visit(AST::VarDec& varDec) = 0;
     virtual void visit(AST::FuncDec& funcDec) = 0;
-    virtual void visit(AST::CLassDec& classDec) = 0;
+    virtual void visit(AST::ClassDec& classDec) = 0;
     virtual void visit(AST::BlockStmt& blockStmt) = 0;
     virtual void visit(AST::ExpStmt& expStmt) = 0;
     virtual void visit(AST::VarDecStmt& varDecStmt) = 0;

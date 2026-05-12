@@ -60,7 +60,7 @@ public:
     std::unique_ptr<BlockStmt> body;
 };
 
-class CLassDec: public Dec {
+class ClassDec: public Dec {
 public:
     ACCEPT
     std::string name;
@@ -98,7 +98,7 @@ public:
 class VarDecStmt: public Stmt {
 public:
     ACCEPT
-    std::unique_ptr<VarDec> varDec;
+    std::vector<std::unique_ptr<VarDec>> varDecs;
 };
 
 class IfStmt: public Stmt {
@@ -183,7 +183,8 @@ public:
 class CallExp: public Exp {
 public:
     ACCEPT
-    std::unique_ptr<Exp> callee;
+    std::unique_ptr<Exp> caller; // empty for normal function call
+    std::string funcName;
     std::vector<std::unique_ptr<Exp>> args;
 };
 
