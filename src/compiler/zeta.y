@@ -95,8 +95,8 @@ ParamList: ParamList COMMA Param { ((std::vector<std::string>*)$1)->push_back(st
 Param: ID { $$ = $1; }
     ;
 
-ClassDec: CLASS ID LC ClassBody RC { auto c = new ClassDec(); c->name = std::string($2); c->members = std::move(*((std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$4)); delete (std::vector<std::pair<bool, std::unique_ptr<Dec> >*)$4; $$ = c; }
-    | CLASS ID EXTENDS ID LC ClassBody RC { auto c = new ClassDec(); c->name = std::string($2); c->base = std::string($4); c->members = std::move(*((std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$6)); delete (std::vector<std::pair<bool, std::unique_ptr<Dec> >*)$6; $$ = c; }
+ClassDec: CLASS ID LC ClassBody RC { auto c = new ClassDec(); c->name = std::string($2); c->members = std::move(*((std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$4)); delete (std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$4; $$ = c; }
+    | CLASS ID EXTENDS ID LC ClassBody RC { auto c = new ClassDec(); c->name = std::string($2); c->base = std::string($4); c->members = std::move(*((std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$6)); delete (std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$6; $$ = c; }
     | error LC ClassBody RC { $$ = nullptr; }
     | error RC { $$ = nullptr; }
     ;
@@ -178,7 +178,7 @@ ArrayLit: LB ElemList RB { auto e = new ArrayLitExp(); e->elements = std::move(*
 ElemList: ElemList COMMA Exp { ((std::vector<std::unique_ptr<Exp> >*)$1)->push_back(std::unique_ptr<Exp>((Exp*)$3)); $$ = $1; }
     | Exp { auto e = new std::vector<std::unique_ptr<Exp> >(); e->push_back(std::unique_ptr<Exp>((Exp*)$1)); $$ = e; }
     ;
-MapLit: LC MapElemList RC { auto e = new MapLitExp(); e->entries = std::move(*((std::vector<std::pair<std::string, std::unique_ptr<Exp> > >*)$2)); delete (std::vector<std::pair<std::string, std::unique_ptr<Exp> >*)$2; $$ = e; }
+MapLit: LC MapElemList RC { auto e = new MapLitExp(); e->entries = std::move(*((std::vector<std::pair<std::string, std::unique_ptr<Exp> > >*)$2)); delete (std::vector<std::pair<std::string, std::unique_ptr<Exp> > >*)$2; $$ = e; }
     | LC RC { auto e = new MapLitExp(); $$ = e; }
     ;
 MapElemList: MapElemList COMMA MapElem { ((std::vector<std::pair<std::string, std::unique_ptr<Exp> > >*)$1)->push_back(std::move(*((std::pair<std::string, std::unique_ptr<Exp> >*)$3))); delete (std::pair<std::string, std::unique_ptr<Exp> >*)$3; $$ = $1; }
