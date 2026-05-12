@@ -15,6 +15,8 @@
 
     Zeta::AST::AssignExp::Op toAssignOp(int assignOp);
     Zeta::AST::BinaryExp::Op relopToBinaryOp(int relop); 
+
+    // TODO: 产生错误可能导致内存泄露, 需要注意
 }
 
 %code top{
@@ -50,7 +52,7 @@
 %right ELSE
 
 %type <ptr> Program ImportList Import DecList VarDec VarList Var
-%type <ptr> FuncDec ParamList ClassDec ClassBody ClassMember
+%type <ptr> FuncDec ParamList ClassDec ClassBody
 %type <ptr> StmtList Stmt BlockStmt
 %type <ptr> Exp ArgList Literal ArrayLit ElemList MapLit MapElemList MapElem
 %type <ptr> FuncLit
@@ -63,8 +65,8 @@ Program: ImportList DecList { auto p = new Program(); p->imports = std::move(*((
 ImportList: ImportList Import { ((std::vector<std::unique_ptr<Import> >*)$1)->push_back(std::unique_ptr<Import>((Import*)$2)); $$ = $1; }
     | { $$ = new std::vector<std::unique_ptr<Import> >(); }
     ;
-Import: IMPORT STR SEMI { auto t = new Import(); t->path = std::string($2); $$ = t; }
-    | IMPORT STR AS ID SEMI { auto t = new Import(); t->path = std::string($2); t->alias = std::string($4); $$ = t; }
+Import: IMPORT STR SEMI { auto t = new Import(); t->path = std::string($2); $$ = t; free($2); }
+    | IMPORT STR AS ID SEMI { auto t = new Import(); t->path = std::string($2); t->alias = std::string($4); $$ = t; free($2); free($4); }
     | error SEMI { $$ = nullptr; }
     ;
 
@@ -80,12 +82,12 @@ VarDec: LET VarList { $$ = $2; for(auto& v: *(std::vector<std::unique_ptr<VarDec
 VarList: VarList COMMA Var { ((std::vector<std::unique_ptr<VarDec> >*)$1)->push_back(std::unique_ptr<VarDec>((VarDec*)$3)); $$ = $1; }
     | Var { auto t = new std::vector<std::unique_ptr<VarDec> >(); t->push_back(std::unique_ptr<VarDec>((VarDec*)$1)); $$ = t; }
     ;
-Var: ID { auto t = new VarDec(); t->name = std::string($1); t->isMutable = true; $$ = t; }
-    | ID ASSIGN Exp { auto t = new VarDec(); t->name = std::string($1); t->isMutable = true; t->init = std::unique_ptr<Exp>((Exp*)$3); $$ = t; if($2 != AS_ASSIGN) { yyerror("Initialization only allowed with '='"); } }
+Var: ID { auto t = new VarDec(); t->name = std::string($1); t->isMutable = true; $$ = t; free($1); }
+    | ID ASSIGN Exp { auto t = new VarDec(); t->name = std::string($1); t->isMutable = true; t->init = std::unique_ptr<Exp>((Exp*)$3); $$ = t; if($2 != AS_ASSIGN) { yyerror("Initialization only allowed with '='"); } free($1); }
     ;
 
-FuncDec: FN ID LP ParamList RP BlockStmt { auto f = new FuncDec(); f->name = std::string($2); f->params = std::move(*((std::vector<std::string>*)$4)); delete (std::vector<std::string>*)$4; f->body = std::unique_ptr<BlockStmt>((BlockStmt*)$6); $$ = f; }
-    | FN ID LP RP BlockStmt { auto f = new FuncDec(); f->name = std::string($2); f->body = std::unique_ptr<BlockStmt>((BlockStmt*)$5); $$ = f; }
+FuncDec: FN ID LP ParamList RP BlockStmt { auto f = new FuncDec(); f->name = std::string($2); f->params = std::move(*((std::vector<std::string>*)$4)); delete (std::vector<std::string>*)$4; f->body = std::unique_ptr<BlockStmt>((BlockStmt*)$6); $$ = f; free($2); }
+    | FN ID LP RP BlockStmt { auto f = new FuncDec(); f->name = std::string($2); f->body = std::unique_ptr<BlockStmt>((BlockStmt*)$5); $$ = f; free($2); }
     | error RP BlockStmt { $$ = nullptr; }
     | error RC { $$ = nullptr; }
     ;
@@ -95,18 +97,15 @@ ParamList: ParamList COMMA Param { ((std::vector<std::string>*)$1)->push_back(st
 Param: ID { $$ = $1; }
     ;
 
-ClassDec: CLASS ID LC ClassBody RC { auto c = new ClassDec(); c->name = std::string($2); c->members = std::move(*((std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$4)); delete (std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$4; $$ = c; }
-    | CLASS ID EXTENDS ID LC ClassBody RC { auto c = new ClassDec(); c->name = std::string($2); c->base = std::string($4); c->members = std::move(*((std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$6)); delete (std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$6; $$ = c; }
+ClassDec: CLASS ID LC ClassBody RC { auto c = new ClassDec(); c->name = std::string($2); c->members = std::move(*((std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$4)); delete (std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$4; $$ = c; free($2); }
+    | CLASS ID EXTENDS ID LC ClassBody RC { auto c = new ClassDec(); c->name = std::string($2); c->base = std::string($4); c->members = std::move(*((std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$6)); delete (std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$6; $$ = c; free($2); free($4); }
     | error LC ClassBody RC { $$ = nullptr; }
-    | error RC { $$ = nullptr; }
     ;
-ClassBody: ClassBody ClassMember { ((std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$1)->push_back(std::move(*((std::pair<bool, std::unique_ptr<Dec> >*)$2))); delete (std::pair<bool, std::unique_ptr<Dec> >*)$2; $$ = $1; }
+ClassBody: ClassBody VarDec SEMI { for(auto& d: *(std::vector<std::unique_ptr<VarDec> >*)$2) ((std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$1)->push_back(std::make_pair(false, std::move(d))); $$ = $1; delete (std::vector<std::unique_ptr<VarDec> >*)$2; }
+    | ClassBody FuncDec { ((std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$1)->push_back(std::make_pair(false, std::unique_ptr<FuncDec>((FuncDec*)$2))); $$ = $1; }
+    | ClassBody STATIC VarDec SEMI { for(auto& d: *(std::vector<std::unique_ptr<VarDec> >*)$3) ((std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$1)->push_back(std::make_pair(true, std::move(d))); $$ = $1; delete (std::vector<std::unique_ptr<VarDec> >*)$3; }
+    | ClassBody STATIC FuncDec { ((std::vector<std::pair<bool, std::unique_ptr<Dec> > >*)$1)->push_back(std::make_pair(true, std::unique_ptr<FuncDec>((FuncDec*)$3))); $$ = $1; }
     | { $$ = new std::vector<std::pair<bool, std::unique_ptr<Dec> > >(); }
-    ;
-ClassMember: VarDec { auto m = new std::pair<bool, std::unique_ptr<Dec> >(false, std::unique_ptr<VarDec>((VarDec*)$1)); $$ = m; }
-    | FuncDec { auto m = new std::pair<bool, std::unique_ptr<Dec> >(false, std::unique_ptr<FuncDec>((FuncDec*)$1)); $$ = m; }
-    | STATIC FuncDec { auto m = new std::pair<bool, std::unique_ptr<Dec> >(true, std::unique_ptr<FuncDec>((FuncDec*)$2)); $$ = m; }
-    | STATIC VarDec { auto m = new std::pair<bool, std::unique_ptr<Dec> >(true, std::unique_ptr<VarDec>((VarDec*)$2)); $$ = m; }
     ;
 
 StmtList: StmtList Stmt { ((std::vector<std::unique_ptr<Stmt> >*)$1)->push_back(std::unique_ptr<Stmt>((Stmt*)$2)); $$ = $1; }
@@ -119,8 +118,8 @@ Stmt: VarDec SEMI { auto s = new VarDecStmt(); s->varDecs = std::move(*((std::ve
     | IF LP Exp RP Stmt %prec ELSE { auto s = new IfStmt(); s->cond = std::unique_ptr<Exp>((Exp*)$3); s->thenBranch = std::unique_ptr<Stmt>((Stmt*)$5); $$ = s; }
     | IF LP Exp RP Stmt ELSE Stmt { auto s = new IfStmt(); s->cond = std::unique_ptr<Exp>((Exp*)$3); s->thenBranch = std::unique_ptr<Stmt>((Stmt*)$5); s->elseBranch = std::unique_ptr<Stmt>((Stmt*)$7); $$ = s; }
     | WHILE LP Exp RP Stmt { auto s = new WhileStmt(); s->cond = std::unique_ptr<Exp>((Exp*)$3); s->body = std::unique_ptr<Stmt>((Stmt*)$5); $$ = s; }
-    | FOR LP ID COLON Exp RP Stmt { auto s = new ForStmt(); s->valVarName = std::string($3); s->iterable = std::unique_ptr<Exp>((Exp*)$5); s->body = std::unique_ptr<Stmt>((Stmt*)$7); $$ = s; }
-    | FOR LP ID COMMA ID COLON Exp RP Stmt { auto s = new ForStmt(); s->idxVarName = std::string($3); s->valVarName = std::string($5); s->iterable = std::unique_ptr<Exp>((Exp*)$7); s->body = std::unique_ptr<Stmt>((Stmt*)$9); $$ = s; }
+    | FOR LP ID COLON Exp RP Stmt { auto s = new ForStmt(); s->valVarName = std::string($3); s->iterable = std::unique_ptr<Exp>((Exp*)$5); s->body = std::unique_ptr<Stmt>((Stmt*)$7); $$ = s; free($3); }
+    | FOR LP ID COMMA ID COLON Exp RP Stmt { auto s = new ForStmt(); s->idxVarName = std::string($3); s->valVarName = std::string($5); s->iterable = std::unique_ptr<Exp>((Exp*)$7); s->body = std::unique_ptr<Stmt>((Stmt*)$9); $$ = s; free($3); free($5); }
     | BREAK SEMI { auto s = new BreakStmt(); $$ = s; }
     | CONTINUE SEMI { auto s = new ContinueStmt(); $$ = s; }
     | RETURN SEMI { auto s = new ReturnStmt(); $$ = s; }
@@ -150,13 +149,13 @@ Exp: Exp QMARK Exp COLON Exp { auto e = new ConditionalExp(); e->cond = std::uni
     | NOT Exp { auto e = new UnaryExp(); e->op = UnaryExp::Op::Not; e->operand = std::unique_ptr<Exp>((Exp*)$2); $$ = e; }
     | BITNOT Exp { auto e = new UnaryExp(); e->op = UnaryExp::Op::BitNot; e->operand = std::unique_ptr<Exp>((Exp*)$2); $$ = e; }
     | LP Exp RP { $$ = $2; }
-    | Exp DOT ID LP ArgList RP { auto e = new CallExp(); e->caller = std::unique_ptr<Exp>((Exp*)$1); e->funcName = std::string($3); e->args = std::move(*((std::vector<std::unique_ptr<Exp> >*)$5)); delete (std::vector<std::unique_ptr<Exp> >*)$5; $$ = e; }
-    | Exp DOT ID LP RP { auto e = new CallExp(); e->caller = std::unique_ptr<Exp>((Exp*)$1); e->funcName = std::string($3); $$ = e; }
-    | Exp DOT ID { auto e = new MemberAccessExp(); e->object = std::unique_ptr<Exp>((Exp*)$1); e->member = std::string($3); $$ = e; }
+    | Exp DOT ID LP ArgList RP { auto e = new CallExp(); e->caller = std::unique_ptr<Exp>((Exp*)$1); e->funcName = std::string($3); e->args = std::move(*((std::vector<std::unique_ptr<Exp> >*)$5)); delete (std::vector<std::unique_ptr<Exp> >*)$5; $$ = e; free($3); }
+    | Exp DOT ID LP RP { auto e = new CallExp(); e->caller = std::unique_ptr<Exp>((Exp*)$1); e->funcName = std::string($3); $$ = e; free($3); }
+    | Exp DOT ID { auto e = new MemberAccessExp(); e->object = std::unique_ptr<Exp>((Exp*)$1); e->member = std::string($3); $$ = e; free($3); }
     | Exp LB Exp RB { auto e = new IndexAccessExp(); e->object = std::unique_ptr<Exp>((Exp*)$1); e->index = std::unique_ptr<Exp>((Exp*)$3); $$ = e; }
-    | ID LP ArgList RP { auto e = new CallExp(); e->funcName = std::string($1); e->args = std::move(*((std::vector<std::unique_ptr<Exp> >*)$3)); delete (std::vector<std::unique_ptr<Exp> >*)$3; $$ = e; }
-    | ID LP RP { auto e = new CallExp(); e->funcName = std::string($1); $$ = e; }
-    | ID { auto e = new IdentifierExp(); e->name = std::string($1); $$ = e; }
+    | ID LP ArgList RP { auto e = new CallExp(); e->funcName = std::string($1); e->args = std::move(*((std::vector<std::unique_ptr<Exp> >*)$3)); delete (std::vector<std::unique_ptr<Exp> >*)$3; $$ = e; free($1); }
+    | ID LP RP { auto e = new CallExp(); e->funcName = std::string($1); $$ = e; free($1); }
+    | ID { auto e = new IdentifierExp(); e->name = std::string($1); $$ = e; free($1); }
     | Literal { $$ = $1; }
     | THIS { auto e = new ThisExp(); $$ = e; }
     ;
@@ -167,7 +166,7 @@ Literal: INT { auto e = new IntLitExp(); e->value = $1; $$ = e; }
     | FLOAT { auto e = new FloatLitExp(); e->value = $1; $$ = e; }
     | BOOL { auto e = new BoolLitExp(); e->value = $1; $$ = e; }
     | NULL_ { auto e = new NullLitExp(); $$ = e; }
-    | STR { auto e = new StrLitExp(); e->value = std::string($1); $$ = e; }
+    | STR { auto e = new StrLitExp(); e->value = std::string($1); $$ = e; free($1); }
     | ArrayLit { $$ = $1; }
     | MapLit { $$ = $1; }
     | FuncLit { $$ = $1; }
@@ -184,8 +183,8 @@ MapLit: LC MapElemList RC { auto e = new MapLitExp(); e->entries = std::move(*((
 MapElemList: MapElemList COMMA MapElem { ((std::vector<std::pair<std::string, std::unique_ptr<Exp> > >*)$1)->push_back(std::move(*((std::pair<std::string, std::unique_ptr<Exp> >*)$3))); delete (std::pair<std::string, std::unique_ptr<Exp> >*)$3; $$ = $1; }
     | MapElem { auto t = new std::vector<std::pair<std::string, std::unique_ptr<Exp> > >(); t->push_back(std::move(*((std::pair<std::string, std::unique_ptr<Exp> >*)$1))); delete (std::pair<std::string, std::unique_ptr<Exp> >*)$1; $$ = t; }
     ;
-MapElem: ID COLON Exp { auto m = new std::pair<std::string, std::unique_ptr<Exp> >(std::string($1), std::unique_ptr<Exp>((Exp*)$3)); $$ = m; }
-    | STR COLON Exp { auto m = new std::pair<std::string, std::unique_ptr<Exp> >(std::string($1), std::unique_ptr<Exp>((Exp*)$3)); $$ = m; }
+MapElem: ID COLON Exp { auto m = new std::pair<std::string, std::unique_ptr<Exp> >(std::string($1), std::unique_ptr<Exp>((Exp*)$3)); $$ = m; free($1); }
+    | STR COLON Exp { auto m = new std::pair<std::string, std::unique_ptr<Exp> >(std::string($1), std::unique_ptr<Exp>((Exp*)$3)); $$ = m; free($1); }
     ;
 FuncLit: FN LP ParamList RP BlockStmt { auto f = new FuncLitExp(); f->params = std::move(*((std::vector<std::string>*)$3)); delete (std::vector<std::string>*)$3; f->body = std::unique_ptr<BlockStmt>((BlockStmt*)$5); $$ = f; }
     | FN LP RP BlockStmt { auto f = new FuncLitExp(); f->body = std::unique_ptr<BlockStmt>((BlockStmt*)$4); $$ = f; }
