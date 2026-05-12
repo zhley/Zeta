@@ -12,6 +12,7 @@
     int64_t textToInt(const char* text);
     double textToFloat(const char* text);
     char* textToStr(const char* text);
+    AssignOp textToAssignOp(const char* op);
 
     int yycolumn = 1;
     #define YY_USER_ACTION yycolumn += yyleng;

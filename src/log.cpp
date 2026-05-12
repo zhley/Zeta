@@ -2,7 +2,6 @@
 
 #include <cstdarg>
 #include <cstdio>
-#include <vector>
 
 
 #define COLOR_RESET   "\033[0m"

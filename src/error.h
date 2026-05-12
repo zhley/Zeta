@@ -40,7 +40,7 @@ std::string formatString(const char* format, ...);
 
 }
 
-#define REPORT_LEXICAL_ERROR(line, column, msg, ...) Zeta::ErrorCollector::get().addError(Zeta::Error(Zeta::Error::Type::Lexical, line, column, formatString(msg, ##__VA_ARGS__)))
-#define REPORT_SYNTAX_ERROR(line, column, msg, ...) Zeta::ErrorCollector::get().addError(Zeta::Error(Zeta::Error::Type::Syntax, line, column, formatString(msg, ##__VA_ARGS__)))
-#define REPORT_SEMANTIC_ERROR(line, column, msg, ...) Zeta::ErrorCollector::get().addError(Zeta::Error(Zeta::Error::Type::Semantic, line, column, formatString(msg, ##__VA_ARGS__)))
-#define REPORT_RUNTIME_ERROR(line, column, msg, ...) Zeta::ErrorCollector::get().addError(Zeta::Error(Zeta::Error::Type::Runtime, line, column, formatString(msg, ##__VA_ARGS__)))
+#define REPORT_LEXICAL_ERROR(line, column, msg, ...) Zeta::ErrorCollector::get().addError(Zeta::Error(Zeta::Error::Type::Lexical, line, column, Zeta::formatString(msg, ##__VA_ARGS__)))
+#define REPORT_SYNTAX_ERROR(line, column, msg, ...) Zeta::ErrorCollector::get().addError(Zeta::Error(Zeta::Error::Type::Syntax, line, column, Zeta::formatString(msg, ##__VA_ARGS__)))
+#define REPORT_SEMANTIC_ERROR(line, column, msg, ...) Zeta::ErrorCollector::get().addError(Zeta::Error(Zeta::Error::Type::Semantic, line, column, Zeta::formatString(msg, ##__VA_ARGS__)))
+#define REPORT_RUNTIME_ERROR(line, column, msg, ...) Zeta::ErrorCollector::get().addError(Zeta::Error(Zeta::Error::Type::Runtime, line, column, Zeta::formatString(msg, ##__VA_ARGS__)))
