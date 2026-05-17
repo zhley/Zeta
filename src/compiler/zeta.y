@@ -2,12 +2,11 @@
     #include "compiler/ast.h"
     #include "error.h"
 
-    #include <stdint.h>
-    #include <stdlib.h>
     #include <memory>
     #include <string>
     #include <utility>
     #include <vector>
+    #include <assert.h>
 
     enum Relop { RP_EQ, RP_NEQ, RP_LT, RP_GT, RP_LEQ, RP_GEQ };
     enum AssignOp { AS_ASSIGN, AS_PLUS, AS_MINUS, AS_STAR, AS_DIV, AS_MOD, AS_BITAND, AS_BITOR, AS_BITXOR, AS_LSHIFT, AS_RSHIFT };
@@ -113,7 +112,7 @@ VarList: VarList COMMA Var { $1.push_back(std::move($3)); $$ = std::move($1); }
     | Var { Zeta::ParserTypes::VarDecList t; t.push_back(std::move($1)); $$ = std::move(t); }
     ;
 Var: ID { auto t = std::make_unique<VarDec>(); t->name = std::move($1); t->isMutable = true; $$ = std::move(t); }
-    | ID ASSIGN Exp { auto t = std::make_unique<VarDec>(); t->name = std::move($1); t->isMutable = true; t->init = std::move($3); $$ = std::move(t); if($2 != AS_ASSIGN) { yyerror("Initialization only allowed with '='"); } }
+    | ID ASSIGN Exp { auto t = std::make_unique<VarDec>(); t->name = std::move($1); t->isMutable = true; t->init = std::move($3); $$ = std::move(t); if($2 != AS_ASSIGN) { Zeta::Parser::error("Initialization only allowed with '='"); } }
     ;
 
 FuncDec: FN ID LP ParamList RP BlockStmt { auto f = std::make_unique<FuncDec>(); f->name = std::move($2); f->params = std::move($4); f->body = std::move($6); $$ = std::move(f); }
@@ -223,10 +222,6 @@ FuncLit: FN LP ParamList RP BlockStmt { auto f = std::make_unique<FuncLitExp>();
 
 %%
 
-void yyerror(const char* msg) {
-    REPORT_SYNTAX_ERROR(yylineno, yycolumn, msg);
-}
-
 void Zeta::Parser::error(const std::string& msg) {
     REPORT_SYNTAX_ERROR(yylineno, yycolumn, msg.c_str());
 }
@@ -244,7 +239,7 @@ Zeta::AST::AssignExp::Op toAssignOp(AssignOp assignOp) {
         case AS_BITXOR: return Zeta::AST::AssignExp::Op::BitXorAssign;
         case AS_LSHIFT: return Zeta::AST::AssignExp::Op::ShlAssign;
         case AS_RSHIFT: return Zeta::AST::AssignExp::Op::ShrAssign;
-        default: yyerror("Unknown assignment operator"); return Zeta::AST::AssignExp::Op::Assign; 
+        default: assert(false); return Zeta::AST::AssignExp::Op::Assign; 
     }
 }
 
@@ -256,6 +251,6 @@ Zeta::AST::BinaryExp::Op relopToBinaryOp(Relop relop) {
         case RP_GT: return Zeta::AST::BinaryExp::Op::Gt;
         case RP_LEQ: return Zeta::AST::BinaryExp::Op::Leq;
         case RP_GEQ: return Zeta::AST::BinaryExp::Op::Geq;
-        default: yyerror("Unknown relational operator"); return Zeta::AST::BinaryExp::Op::Eq; 
+        default: assert(false); return Zeta::AST::BinaryExp::Op::Eq; 
     }
 }
