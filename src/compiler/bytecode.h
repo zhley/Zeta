@@ -60,16 +60,16 @@ enum class Opcode : uint8_t {
 struct Proto {
     std::vector<uint8_t> bytecode;
     std::vector<Value> constants;
-};
-
-struct Import {
-    std::string moduleName;
-    std::string alias;
+    int arity = 0;
+    int localCount = 0;
+    int maxStackSize = 0;
 };
 
 struct Symbol{
-    bool external = false; 
-    Value initValue;
+    bool external; 
+    bool isMutable; // for non-external
+    Value initValue; // for non-external
+    std::string moduleName; // for external
 
     struct Pos{
         uint32_t protoIndex;
@@ -79,8 +79,7 @@ struct Symbol{
 };
 
 struct Module{
-    std::string name;
-    std::vector<Import> imports;
+    std::vector<std::string> imports;
     std::unordered_map<std::string, Symbol> globalSyms;
     std::vector<std::unique_ptr<Proto>> protos;
 };

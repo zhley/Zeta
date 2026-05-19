@@ -1,7 +1,5 @@
 #pragma once
 
-// #include "ast.h"
-
 namespace Zeta {
 namespace AST {
     class Program;

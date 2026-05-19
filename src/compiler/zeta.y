@@ -115,8 +115,8 @@ Var: ID { auto t = std::make_unique<VarDec>(); t->name = std::move($1); t->isMut
     | ID ASSIGN Exp { auto t = std::make_unique<VarDec>(); t->name = std::move($1); t->isMutable = true; t->init = std::move($3); $$ = std::move(t); if($2 != AS_ASSIGN) { Zeta::Parser::error("Initialization only allowed with '='"); } }
     ;
 
-FuncDec: FN ID LP ParamList RP BlockStmt { auto f = std::make_unique<FuncDec>(); f->name = std::move($2); f->params = std::move($4); f->body = std::move($6); $$ = std::move(f); }
-    | FN ID LP RP BlockStmt { auto f = std::make_unique<FuncDec>(); f->name = std::move($2); f->body = std::move($5); $$ = std::move(f); }
+FuncDec: FN ID LP ParamList RP BlockStmt { auto f = std::make_unique<FuncDec>(); f->name = std::move($2); f->params = std::move($4); $6->isFuncBody = true; f->body = std::move($6); $$ = std::move(f); }
+    | FN ID LP RP BlockStmt { auto f = std::make_unique<FuncDec>(); f->name = std::move($2); $5->isFuncBody = true; f->body = std::move($5); $$ = std::move(f); }
     | error RP BlockStmt { $$ = nullptr; }
     | error RC { $$ = nullptr; }
     ;
@@ -215,8 +215,8 @@ MapElemList: MapElemList COMMA MapElem { $1.push_back(std::move($3)); $$ = std::
 MapElem: ID COLON Exp { $$ = std::make_pair(std::move($1), std::move($3)); }
     | STR COLON Exp { $$ = std::make_pair(std::move($1), std::move($3)); }
     ;
-FuncLit: FN LP ParamList RP BlockStmt { auto f = std::make_unique<FuncLitExp>(); f->params = std::move($3); f->body = std::move($5); $$ = std::move(f); }
-    | FN LP RP BlockStmt { auto f = std::make_unique<FuncLitExp>(); f->body = std::move($4); $$ = std::move(f); }
+FuncLit: FN LP ParamList RP BlockStmt { auto f = std::make_unique<FuncLitExp>(); f->params = std::move($3); $5->isFuncBody = true; f->body = std::move($5); $$ = std::move(f); }
+    | FN LP RP BlockStmt { auto f = std::make_unique<FuncLitExp>(); $4->isFuncBody = true; f->body = std::move($4); $$ = std::move(f); }
     | error RC { $$ = nullptr; }
     ;
 

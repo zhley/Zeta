@@ -86,6 +86,7 @@ public:
 class BlockStmt: public Stmt {
 public:
     ACCEPT
+    bool isFuncBody = false;
     std::vector<std::unique_ptr<Stmt>> stmts;
 };
 
