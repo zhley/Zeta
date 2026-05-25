@@ -2,9 +2,12 @@
 
 #include "bytecode.h"
 #include "visitor.h"
+
+#include <cstdint>
 #include <memory>
-#include <sys/types.h>
+#include <stack>
 #include <unordered_map>
+#include <vector>
 
 namespace Zeta {
 
@@ -21,8 +24,10 @@ public:
     };
     void enterScope();
     void exitScope();
-    int declare(const std::string& name, bool isMutable);
+    uint32_t declare(const std::string& name, bool isMutable);
     const Scope::Sym* resolve(const std::string& name) const;
+
+    uint32_t getMaxIndex() const { return maxIndex; }
 
 private:
     std::vector<std::unique_ptr<Scope>> scopes;
@@ -69,12 +74,91 @@ public:
 
 private:
     // State
-    Module* module;
+    Module* module = nullptr;
     std::unordered_map<std::string, std::string> aliasToModule; 
     bool inGlobalScope = true;
-
-    Value value;
+    std::unique_ptr<CompileValue> value;
     bool isConstExpr = false;
+    Proto* curProto = nullptr;
+    ScopeManager* curScopeMgr = nullptr;
+
+    std::stack<std::vector<uint32_t>> breakPosStack;
+    std::stack<std::vector<uint32_t>> continuePosStack;
+
+    struct NameSpace{
+        std::string moduleAlias;
+        std::string className;
+
+        bool empty() const { return moduleAlias.empty() && className.empty(); }
+    };
+    NameSpace nameSpace;
+
+    uint32_t pushOpcode(Opcode opcode) {
+        uint32_t offset = curProto->bytecode.size();
+        curProto->bytecode.push_back(static_cast<uint8_t>(opcode));
+        return offset;
+    }
+
+    uint32_t push4B(uint32_t value){
+        curProto->bytecode.resize(curProto->bytecode.size() + 4);
+        uint32_t offset = curProto->bytecode.size() - 4;
+        std::memcpy(curProto->bytecode.data() + offset, &value, 4);
+        return offset;
+    }
+
+    uint32_t set4B(uint32_t offset, uint32_t value){
+        std::memcpy(curProto->bytecode.data() + offset, &value, 4);
+        return offset;
+    }
+
+    uint32_t skip4B(){
+        curProto->bytecode.resize(curProto->bytecode.size() + 4);
+        return curProto->bytecode.size() - 4;
+    }
+
+    // TODO: 最终字节码最后需要追加一个空操作保证标签不越界
+    uint32_t getLabel() {
+        return curProto->bytecode.size();
+    }
+
+    void callBuiltin(Builtin builtin) {
+        pushOpcode(Opcode::CallBuiltin);
+        curProto->bytecode.push_back(static_cast<uint8_t>(builtin));
+    }
+
+    // const
+    uint32_t makeConstIdx(const CompileValue& val) {
+        for(size_t i = 0; i < curProto->constants.size(); ++i){
+            if(*curProto->constants[i] == val){
+                return i;
+            }
+        }
+        curProto->constants.push_back(std::make_unique<CompileValue>(val));
+        return curProto->constants.size() - 1;
+    }
+
+    void recordGlobalSym(const std::string& name, const std::string& moduleName, uint32_t pos) {
+        if(moduleName.empty()){
+            auto it = module->globalSyms.find(name);
+            if(it == module->globalSyms.end()){
+                auto it = std::find(module->externalSyms.begin(), module->externalSyms.end(), ExtSymbol{name, ""});
+                if(it == module->externalSyms.end()){
+                    module->externalSyms.push_back({name, ""});
+                    it = module->externalSyms.end() - 1;
+                }
+                it->relocations.push_back({curProto->index, pos});
+            } else {
+                it->second.relocations.push_back({curProto->index, pos});
+            }
+        } else {
+            auto it = std::find(module->externalSyms.begin(), module->externalSyms.end(), ExtSymbol{name, moduleName});
+            if(it == module->externalSyms.end()){
+                module->externalSyms.push_back({name, moduleName});
+                it = module->externalSyms.end() - 1;
+            }
+            it->relocations.push_back({curProto->index, pos});
+        }
+    }
 };
 
 } // namespace Zeta

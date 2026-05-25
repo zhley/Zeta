@@ -23,6 +23,12 @@ struct Value{
         double floatValue;
         Object* ptrValue;
     };
+
+    Value() : type(Type::Null) {}
+    Value(int64_t i) : type(Type::Int), intValue(i) {}
+    Value(double f) : type(Type::Float), floatValue(f) {}
+    Value(bool b) : type(Type::Bool), intValue(b ? 1 : 0) {}
+    Value(Object* obj) : type(Type::Object), ptrValue(obj) {}
 };
 
 struct Object{
@@ -34,6 +40,8 @@ struct Object{
         Class,
         Instance
     } type;
+
+    Object(Type t) : type(t) {}
 };
 
 // immutable string
@@ -42,8 +50,7 @@ struct String : public Object {
     uint32_t length;
     uint32_t hash;
 
-    String(const char* str, uint32_t len) : length(len) {
-        type = Type::String;
+    String(const char* str, uint32_t len) : Object(Type::String), length(len) {
         data = new char[len + 1];
         std::memcpy(data, str, len);
         data[len] = '\0';
@@ -76,6 +83,9 @@ struct Map : public Object {
 
 struct Function : public Object {
     Proto* proto;
+
+    Function() : Object(Type::Function), proto(nullptr) {}
+    Function(Proto* p) : Object(Type::Function), proto(p) {}
 };
 
 struct Class : public Object {
@@ -83,6 +93,8 @@ struct Class : public Object {
     Class* base;
     StringMap<Value> fields; // field name -> default value
     StringMap<Value> methods;
+
+    Class() : Object(Type::Class), name(nullptr), base(nullptr) {}
 };
 
 struct Instance : public Object {

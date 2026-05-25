@@ -50,6 +50,8 @@ public:
     bool isMutable; // var: true, let: false
     std::string name;
     std::unique_ptr<Exp> init; // can be null for 'var'
+
+    VarDec() { type = DecType::Var; }
 };
 
 class FuncDec: public Dec {
@@ -58,6 +60,8 @@ public:
     std::string name;
     std::vector<std::string> params;
     std::unique_ptr<BlockStmt> body;
+
+    FuncDec() { type = DecType::Func; }
 };
 
 class ClassDec: public Dec {
@@ -66,10 +70,13 @@ public:
     std::string name;
     std::string base;
     std::vector<std::pair<bool, std::unique_ptr<Dec>>> members; // true: static
+
+    ClassDec() { type = DecType::Class; }
 };
 
 class Stmt: public Node {
 public:
+    // TODO: 类型信息不一定用到
     enum class StmtType {
         Block,
         Exp,

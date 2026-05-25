@@ -4,11 +4,16 @@
 
 #include <cstdint>
 #include <memory>
+#include <regex>
 #include <string>
 #include <vector>
 #include <unordered_map>
 
 namespace Zeta {
+
+struct CompileFunction;
+struct CompileClass;
+struct CompileValue;
 
 enum class Opcode : uint8_t {
     Nop         = 0x00,
@@ -31,6 +36,7 @@ enum class Opcode : uint8_t {
     BitNot      = 0x19,
     Shl         = 0x1A,
     Shr         = 0x1B,
+    Not         = 0x1C,
     // Comparison
     Eq          = 0x20,
     Neq         = 0x21,
@@ -40,9 +46,10 @@ enum class Opcode : uint8_t {
     Ge          = 0x25,
     // Control Flow
     Jump        = 0x30,
-    JumpIfTrue  = 0x31,
-    Ret         = 0x32,
-    Call        = 0x33,
+    JumpIfFalse = 0x31,
+    JumpIfTrue  = 0x32,
+    Ret         = 0x33,
+    Call        = 0x34,
     // Object
     NewInstance = 0x40,
     GetField    = 0x41, 
@@ -57,31 +64,154 @@ enum class Opcode : uint8_t {
     Halt        = 0xFF
 };
 
+enum class Builtin : uint8_t {
+    GetIter,
+    IterNext,
+};
+
+struct CompileFunction {
+    uint32_t protoIndex;
+};
+
+struct CompileClass {
+    std::string name;
+    std::string base;
+    std::unordered_map<std::string, std::unique_ptr<CompileValue>> fields;
+    std::unordered_map<std::string, CompileFunction> methods;
+};
+
+struct CompileValue{
+    enum class Type : uint8_t {
+        Null = 0x00,
+        Int,
+        Float,
+        String,
+        Array,
+        Map,
+        Function,
+        Class
+    } type;
+    union {
+        int64_t intValue;
+        double floatValue;
+        std::string* strValue;
+        std::vector<CompileValue>* arrayValue;
+        std::unordered_map<std::string, CompileValue>* mapValue;
+        CompileFunction* funcValue;
+        CompileClass* classValue;
+    };
+
+    CompileValue() : type(Type::Null) {}
+    CompileValue(int64_t i) : type(Type::Int), intValue(i) {}
+    CompileValue(double f) : type(Type::Float), floatValue(f) {}
+    CompileValue(const std::string& s) : type(Type::String), strValue(new std::string(s)) {}
+    CompileValue(std::vector<CompileValue>* arr) : type(Type::Array), arrayValue(arr) {}
+    CompileValue(std::unordered_map<std::string, CompileValue>* m) : type(Type::Map), mapValue(m) {}
+    CompileValue(CompileFunction* f) : type(Type::Function), funcValue(f) {}
+    CompileValue(CompileClass* c) : type(Type::Class), classValue(c) {}
+    ~CompileValue() {
+        switch (type) {
+            case Type::String:      delete strValue; break;
+            case Type::Array:       delete arrayValue; break;
+            case Type::Map:         delete mapValue; break;
+            case Type::Function:    delete funcValue; break;
+            case Type::Class:       delete classValue; break;
+            default: break;
+        }
+    }
+    CompileValue(const CompileValue& other) {
+        type = other.type;
+        switch (type) {
+            case Type::Int:         intValue = other.intValue; break;
+            case Type::Float:       floatValue = other.floatValue; break;
+            case Type::String:      strValue = new std::string(*other.strValue); break;
+            case Type::Array:       arrayValue = new std::vector<CompileValue>(*other.arrayValue); break;
+            case Type::Map:         mapValue = new std::unordered_map<std::string, CompileValue>(*other.mapValue); break;
+            case Type::Function:    funcValue = new CompileFunction(*other.funcValue); break;
+            case Type::Class:       classValue = new CompileClass(*other.classValue); break;
+            default: break;
+        }
+    }
+    CompileValue& operator=(const CompileValue& other) {
+        if (this == &other) return *this;
+        this->~CompileValue();
+        new (this) CompileValue(other);
+        return *this;
+    }
+    CompileValue(CompileValue&& other) noexcept : type(other.type) {
+        switch (type) {
+            case Type::Int:         intValue = other.intValue; break;
+            case Type::Float:       floatValue = other.floatValue; break;
+            case Type::String:      strValue = other.strValue; other.strValue = nullptr; break;
+            case Type::Array:       arrayValue = other.arrayValue; other.arrayValue = nullptr; break;
+            case Type::Map:         mapValue = other.mapValue; other.mapValue = nullptr; break;
+            case Type::Function:    funcValue = other.funcValue; other.funcValue = nullptr; break;
+            case Type::Class:       classValue = other.classValue; other.classValue = nullptr; break;
+            default: break;
+        }
+    }
+    CompileValue& operator=(CompileValue&& other) noexcept {
+        if (this == &other) return *this;
+        this->~CompileValue();
+        new (this) CompileValue(std::move(other));
+        return *this;
+    }
+    bool operator==(const CompileValue& other) const {
+        if (type != other.type) return false;
+        switch (type) {
+            case Type::Null:        return true;
+            case Type::Int:         return intValue == other.intValue;
+            case Type::Float:       return floatValue == other.floatValue;
+            case Type::String:      return *strValue == *other.strValue;
+            case Type::Array:       return *arrayValue == *other.arrayValue;
+            case Type::Map:         return *mapValue == *other.mapValue;
+            case Type::Function:    return funcValue->protoIndex == other.funcValue->protoIndex;
+            case Type::Class:       return classValue->name == other.classValue->name;
+            default: return false;
+        }
+    }
+};
+
 struct Proto {
+    uint32_t index;
     std::vector<uint8_t> bytecode;
-    std::vector<Value> constants;
+    std::vector<std::unique_ptr<CompileValue>> constants;
     int arity = 0;
     int localCount = 0;
     int maxStackSize = 0;
 };
 
-struct Symbol{
-    bool external; 
-    bool isMutable; // for non-external
-    Value initValue; // for non-external
-    std::string moduleName; // for external
+struct Pos{
+    uint32_t protoIndex;
+    uint32_t bytecodeOffset;
+};
 
-    struct Pos{
-        uint32_t protoIndex;
-        uint32_t bytecodeOffset;
-    };
+struct Symbol{
+    bool isMutable; // for non-external
+    std::unique_ptr<CompileValue> initValue; // for non-external
     std::vector<Pos> relocations;
+};
+
+struct ExtSymbol{
+    std::string name;
+    std::string moduleName;
+    std::vector<Pos> relocations;
+
+    bool operator==(const ExtSymbol& other) const {
+        return name == other.name && moduleName == other.moduleName;
+    }
 };
 
 struct Module{
     std::vector<std::string> imports;
     std::unordered_map<std::string, Symbol> globalSyms;
+    std::vector<ExtSymbol> externalSyms;
     std::vector<std::unique_ptr<Proto>> protos;
 };
+
+// Helper function to create a unique symbol name for static class members. "ClassName.FieldName"
+inline std::string makeGlobalSymbol(const std::string& className, const std::string& fieldName) {
+    return className + "." + fieldName;
+}
 
 } // namespace Zeta
