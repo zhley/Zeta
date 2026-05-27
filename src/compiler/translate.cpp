@@ -461,10 +461,28 @@ void Translator::visit(AST::IndexAccessExp& indexAccessExp) {
     pushOpcode(Opcode::IndexGet);
 }
 
-void Translator::visit(AST::AssignExp& assignExp) {
+void Translator::visit(AST::AssignExp& assignExp) { 
+    if(assignExp.op == AST::AssignExp::Op::Assign){
+        assignExp.value->accept(*this);
+    }else{
+        assignExp.target->accept(*this);
+        assignExp.value->accept(*this);
+        switch (assignExp.op) {
+            case AST::AssignExp::Op::AddAssign: pushOpcode(Opcode::Add); break;
+            case AST::AssignExp::Op::SubAssign: pushOpcode(Opcode::Sub); break;
+            case AST::AssignExp::Op::MulAssign: pushOpcode(Opcode::Mul); break;
+            case AST::AssignExp::Op::DivAssign: pushOpcode(Opcode::Div); break;
+            case AST::AssignExp::Op::ModAssign: pushOpcode(Opcode::Mod); break;
+            case AST::AssignExp::Op::BitAndAssign: pushOpcode(Opcode::BitAnd); break;
+            case AST::AssignExp::Op::BitOrAssign: pushOpcode(Opcode::BitOr); break;
+            case AST::AssignExp::Op::BitXorAssign: pushOpcode(Opcode::BitXor); break;
+            case AST::AssignExp::Op::ShlAssign: pushOpcode(Opcode::Shl); break;
+            case AST::AssignExp::Op::ShrAssign: pushOpcode(Opcode::Shr); break;
+            default: break;
+        }
+    }
     if(assignExp.target->type == AST::Exp::ExpType::Identifier){
         auto* idExp = static_cast<AST::IdentifierExp*>(assignExp.target.get());
-        assignExp.value->accept(*this);
         auto* varSym = curFunc->scopeMgr.resolve(idExp->name);
         if(varSym){
             if(!varSym->isMutable){
@@ -488,13 +506,11 @@ void Translator::visit(AST::AssignExp& assignExp) {
             }
         }
         if(!moduleName.empty()){
-            assignExp.value->accept(*this);
             pushOpcode(Opcode::StoreGlobal);
             uint32_t pos = skip4B();
             recordGlobalSym(memberAccess->member, moduleName, pos);
         } else {
             memberAccess->object->accept(*this);
-            assignExp.value->accept(*this);
             uint32_t memberIdx = makeConstIdx(CompileValue(memberAccess->member));
             pushOpcode(Opcode::SetField);
             push4B(memberIdx);
@@ -503,7 +519,6 @@ void Translator::visit(AST::AssignExp& assignExp) {
         auto* indexAccess = static_cast<AST::IndexAccessExp*>(assignExp.target.get());
         indexAccess->object->accept(*this);
         indexAccess->index->accept(*this);
-        assignExp.value->accept(*this);
         pushOpcode(Opcode::IndexSet);
     } else {
         REPORT_SEMANTIC_ERROR(assignExp.line, assignExp.column, "Invalid assignment target");

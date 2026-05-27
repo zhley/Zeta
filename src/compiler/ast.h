@@ -230,7 +230,7 @@ public:
     ACCEPT
     enum class Op {
         Assign, AddAssign, SubAssign, MulAssign, DivAssign, ModAssign,
-        AndAssign, OrAssign, BitAndAssign, BitOrAssign, BitXorAssign,
+        BitAndAssign, BitOrAssign, BitXorAssign,
         ShlAssign, ShrAssign
     } op;
     std::unique_ptr<Exp> target;
