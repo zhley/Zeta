@@ -13,9 +13,7 @@
 
 // NOTE: 模块别名和全局符号名可能冲突, 行为: 优先模块别名
 
-// TODO: 去掉静态成员支持; 
-// TODO: 构造函数特殊处理, 将其变成返回一个实例的全局函数;
-// TODO: 函数调用将参数个数压栈, 以支持重载;
+// TODO: 构造函数特殊处理, 将其变成返回一个实例的全局函数; 放到运行期处理: 遇到函数调用, 发现栈顶是类, 则调用构造函数.
 
 namespace Zeta {
 
@@ -92,7 +90,7 @@ void Translator::visit(AST::Import& import) {
 }
 
 void Translator::visit(AST::VarDec& varDec) {
-    if(curScopeMgr.empty()){
+    if(curFunc->scopeMgr.empty()){
         if(module->globalSyms.find(varDec.name) != module->globalSyms.end()){
             REPORT_SEMANTIC_ERROR(varDec.line, varDec.column, "Duplicate global variable '%s'", varDec.name.c_str());
         }
@@ -106,7 +104,7 @@ void Translator::visit(AST::VarDec& varDec) {
         }
         module->globalSyms[varDec.name] = {varDec.isMutable, std::move(value)};
     } else {
-        int index = curScopeMgr.declare(varDec.name, varDec.isMutable);
+        int index = curFunc->scopeMgr.declare(varDec.name, varDec.isMutable);
         if(index == -1){
             REPORT_SEMANTIC_ERROR(varDec.line, varDec.column, "Duplicate local variable '%s'", varDec.name.c_str());
         }
@@ -122,22 +120,8 @@ void Translator::visit(AST::FuncDec& funcDec) {
     if(module->globalSyms.find(funcDec.name) != module->globalSyms.end()){
         REPORT_SEMANTIC_ERROR(funcDec.line, funcDec.column, "Duplicate global function '%s'", funcDec.name.c_str());
     }
-    module->protos.push_back(std::make_unique<Proto>());
-    curProto = module->protos.back().get();
-    curProto->index = module->protos.size() - 1;
-    curProto->arity = funcDec.params.size();
-    curScopeMgr.reset();
-    curScopeMgr.enterScope();
-    for(size_t i = 0; i < funcDec.params.size(); ++i){
-        const std::string& paramName = funcDec.params[i];
-        if(curScopeMgr.declare(paramName, true) == -1){
-            REPORT_SEMANTIC_ERROR(funcDec.line, funcDec.column, "Duplicate parameter name '%s' in function '%s'", paramName.c_str(), funcDec.name.c_str());
-        }
-    }
-    funcDec.body->accept(*this);
-    curScopeMgr.exitScope();
-    curProto->localCount = curScopeMgr.getMaxIndex() + 1;
-    module->globalSyms[funcDec.name] = {false, std::make_unique<CompileValue>(new CompileFunction{curProto->index})};
+    uint32_t protoIdx = compileFunctionProto(funcDec.params, funcDec.body.get(), false);
+    module->globalSyms[funcDec.name] = {false, std::make_unique<CompileValue>(new CompileFunction{protoIdx})};
 }
 
 void Translator::visit(AST::ClassDec& classDec) {
@@ -164,28 +148,11 @@ void Translator::visit(AST::ClassDec& classDec) {
             compileClass->fields[varDec->name] = std::move(value);
         } else if(member->type == AST::Dec::DecType::Func){
             auto* funcDec = static_cast<AST::FuncDec*>(member.get());
-            module->protos.push_back(std::make_unique<Proto>());
-            curProto = module->protos.back().get();
-            curProto->index = module->protos.size() - 1;
-            curProto->arity = funcDec->params.size() + 1;
-            inMethod = true;
-            curScopeMgr.reset();
-            curScopeMgr.enterScope();
-            curScopeMgr.declare("this", false);
-            for(size_t i = 0; i < funcDec->params.size(); ++i){
-                const std::string& paramName = funcDec->params[i];
-                if(curScopeMgr.declare(paramName, true) == -1){
-                    REPORT_SEMANTIC_ERROR(funcDec->line, funcDec->column, "Duplicate parameter name '%s' in method '%s' of class '%s'", paramName.c_str(), funcDec->name.c_str(), classDec.name.c_str());
-                }
-            }
-            funcDec->body->accept(*this);
-            curScopeMgr.exitScope();
-            curProto->localCount = curScopeMgr.getMaxIndex() + 1;
-            inMethod = false;
+            uint32_t protoIdx = compileFunctionProto(funcDec->params, funcDec->body.get(), true);
             if(compileClass->methods.find(funcDec->name) != compileClass->methods.end()){
                 REPORT_SEMANTIC_ERROR(funcDec->line, funcDec->column, "Duplicate instance member '%s' in class '%s'", funcDec->name.c_str(), classDec.name.c_str());
             }
-            compileClass->methods[funcDec->name] = CompileFunction{curProto->index};
+            compileClass->methods[funcDec->name] = CompileFunction{protoIdx};
         } else {
             REPORT_SEMANTIC_ERROR(member->line, member->column, "Invalid instance member in class '%s'", classDec.name.c_str());
         }
@@ -199,11 +166,11 @@ void Translator::visit(AST::BlockStmt& blockStmt) {
             stmt->accept(*this);
         }
     } else {
-        curScopeMgr.enterScope();
+        curFunc->scopeMgr.enterScope();
         for(auto& stmt : blockStmt.stmts){
             stmt->accept(*this);
         }
-        curScopeMgr.exitScope();
+        curFunc->scopeMgr.exitScope();
     }
 }
 
@@ -234,8 +201,8 @@ void Translator::visit(AST::IfStmt& ifStmt) {
 }
 
 void Translator::visit(AST::WhileStmt& whileStmt) {
-    breakPosStack.push({});
-    continuePosStack.push({});
+    curFunc->breakPosStack.push({});
+    curFunc->continuePosStack.push({});
     uint32_t loopStart = getLabel();
     whileStmt.cond->accept(*this);
     pushOpcode(Opcode::JumpIfFalse);
@@ -245,23 +212,23 @@ void Translator::visit(AST::WhileStmt& whileStmt) {
     push4B(loopStart);
     uint32_t loopEnd = getLabel();
     set4B(loopEndPos, loopEnd);
-    for(uint32_t breakPos : breakPosStack.top()){
+    for(uint32_t breakPos : curFunc->breakPosStack.top()){
         set4B(breakPos, loopEnd);
     }
-    for(uint32_t continuePos : continuePosStack.top()){
+    for(uint32_t continuePos : curFunc->continuePosStack.top()){
         set4B(continuePos, loopStart);
     }
-    breakPosStack.pop();
-    continuePosStack.pop();
+    curFunc->breakPosStack.pop();
+    curFunc->continuePosStack.pop();
 }
 
 void Translator::visit(AST::ForStmt& forStmt) {
-    breakPosStack.push({});
-    continuePosStack.push({});
-    curScopeMgr.enterScope();
-    uint32_t valSlot = curScopeMgr.declare(forStmt.valVarName, true);
+    curFunc->breakPosStack.push({});
+    curFunc->continuePosStack.push({});
+    curFunc->scopeMgr.enterScope();
+    uint32_t valSlot = curFunc->scopeMgr.declare(forStmt.valVarName, true);
     if(!forStmt.idxVarName.empty()){
-        uint32_t idxSlot = curScopeMgr.declare(forStmt.idxVarName, true);
+        uint32_t idxSlot = curFunc->scopeMgr.declare(forStmt.idxVarName, true);
         if(idxSlot == -1){
             REPORT_SEMANTIC_ERROR(forStmt.line, forStmt.column, "Duplicate index variable '%s' in for loop", forStmt.idxVarName.c_str());
         }
@@ -289,14 +256,14 @@ void Translator::visit(AST::ForStmt& forStmt) {
         uint32_t loopEnd = getLabel();
         pushOpcode(Opcode::Pop);
         set4B(loopEndPos, loopEnd);
-        for(uint32_t breakPos : breakPosStack.top()){
+        for(uint32_t breakPos : curFunc->breakPosStack.top()){
             set4B(breakPos, loopEnd);
         }
-        for(uint32_t continuePos : continuePosStack.top()){
+        for(uint32_t continuePos : curFunc->continuePosStack.top()){
             set4B(continuePos, loopStart);
         }
-        breakPosStack.pop();
-        continuePosStack.pop();
+        curFunc->breakPosStack.pop();
+        curFunc->continuePosStack.pop();
     } else {
         forStmt.iterable->accept(*this);
         uint32_t loopStart = getLabel();
@@ -313,16 +280,16 @@ void Translator::visit(AST::ForStmt& forStmt) {
         uint32_t loopEnd = getLabel();
         pushOpcode(Opcode::Pop);
         set4B(loopEndPos, loopEnd);
-        for(uint32_t breakPos : breakPosStack.top()){
+        for(uint32_t breakPos : curFunc->breakPosStack.top()){
             set4B(breakPos, loopEnd);
         }
-        for(uint32_t continuePos : continuePosStack.top()){
+        for(uint32_t continuePos : curFunc->continuePosStack.top()){
             set4B(continuePos, loopStart);
         }
-        breakPosStack.pop();
-        continuePosStack.pop();
+        curFunc->breakPosStack.pop();
+        curFunc->continuePosStack.pop();
     }
-    curScopeMgr.exitScope();
+    curFunc->scopeMgr.exitScope();
 }
 
 void Translator::visit(AST::ReturnStmt& returnStmt) {
@@ -336,21 +303,21 @@ void Translator::visit(AST::ReturnStmt& returnStmt) {
 }
 
 void Translator::visit(AST::BreakStmt& breakStmt) {
-    if(breakPosStack.empty()){
+    if(curFunc->breakPosStack.empty()){
         REPORT_SEMANTIC_ERROR(breakStmt.line, breakStmt.column, "Break statement not within a loop");
     }
     pushOpcode(Opcode::Jump);
     uint32_t breakPos = skip4B();
-    breakPosStack.top().push_back(breakPos);
+    curFunc->breakPosStack.top().push_back(breakPos);
 }
 
 void Translator::visit(AST::ContinueStmt& continueStmt) {
-    if(continuePosStack.empty()){
+    if(curFunc->continuePosStack.empty()){
         REPORT_SEMANTIC_ERROR(continueStmt.line, continueStmt.column, "Continue statement not within a loop");
     }
     pushOpcode(Opcode::Jump);
     uint32_t continuePos = skip4B();
-    continuePosStack.top().push_back(continuePos);
+    curFunc->continuePosStack.top().push_back(continuePos);
 }
 
 void Translator::visit(AST::ConditionalExp& conditionalExp) {
@@ -453,10 +420,17 @@ void Translator::visit(AST::CallExp& callExp) {
         for(auto& arg : callExp.args){
             arg->accept(*this);
         }
-        pushOpcode(Opcode::LoadGlobal);
-        uint32_t pos = skip4B();
-        pushOpcode(Opcode::Call);
-        recordGlobalSym(callExp.funcName, "", pos);
+        auto* funcSym = curFunc->scopeMgr.resolve(callExp.funcName);
+        if(funcSym){
+            pushOpcode(Opcode::LoadVar);
+            push4B(funcSym->index);
+            pushOpcode(Opcode::Call);
+        } else {
+            pushOpcode(Opcode::LoadGlobal);
+            uint32_t pos = skip4B();
+            pushOpcode(Opcode::Call);
+            recordGlobalSym(callExp.funcName, "", pos);
+        }
     }
 }
 
@@ -491,7 +465,7 @@ void Translator::visit(AST::AssignExp& assignExp) {
     if(assignExp.target->type == AST::Exp::ExpType::Identifier){
         auto* idExp = static_cast<AST::IdentifierExp*>(assignExp.target.get());
         assignExp.value->accept(*this);
-        auto* varSym = curScopeMgr.resolve(idExp->name);
+        auto* varSym = curFunc->scopeMgr.resolve(idExp->name);
         if(varSym){
             if(!varSym->isMutable){
                 REPORT_SEMANTIC_ERROR(assignExp.line, assignExp.column, "Cannot assign to immutable variable '%s'", idExp->name.c_str());
@@ -537,7 +511,7 @@ void Translator::visit(AST::AssignExp& assignExp) {
 }
 
 void Translator::visit(AST::IdentifierExp& identifierExp) {
-    auto* varSym = curScopeMgr.resolve(identifierExp.name);
+    auto* varSym = curFunc->scopeMgr.resolve(identifierExp.name);
     if(varSym){
         pushOpcode(Opcode::LoadVar);
         push4B(varSym->index);
@@ -551,9 +525,29 @@ void Translator::visit(AST::IdentifierExp& identifierExp) {
 void Translator::visit(AST::ThisExp& thisExp) {
     pushOpcode(Opcode::LoadVar);
     push4B(0); // "this" is always at slot 0
-    if(!inMethod){
+    if(!curFunc->inMethod){
         REPORT_SEMANTIC_ERROR(thisExp.line, thisExp.column, "'this' can only be used in methods");
     }
+}
+
+void Translator::visit(AST::ArrayExp& arrayExp) {
+    for(auto& elem : arrayExp.elements){
+        elem->accept(*this);
+    }
+    pushOpcode(Opcode::LoadConst);
+    push4B(makeConstIdx(CompileValue((int64_t)arrayExp.elements.size())));
+    callBuiltin(Builtin::NewArray);
+}
+
+void Translator::visit(AST::MapExp& mapExp) {
+    for(auto& pair : mapExp.entries){
+        pushOpcode(Opcode::LoadConst);
+        push4B(makeConstIdx(CompileValue(pair.first)));
+        pair.second->accept(*this);
+    }
+    pushOpcode(Opcode::LoadConst);
+    push4B(makeConstIdx(CompileValue((int64_t)mapExp.entries.size())));
+    callBuiltin(Builtin::NewMap);
 }
 
 void Translator::visit(AST::IntLitExp& intLitExp) {
@@ -582,42 +576,29 @@ void Translator::visit(AST::NullLitExp& nullLitExp) {
 }
 
 void Translator::visit(AST::ArrayLitExp& arrayLitExp) {
+    std::vector<CompileValue>* arr = new std::vector<CompileValue>();
     for(auto& elem : arrayLitExp.elements){
-        elem->accept(*this);
+        auto elemVal = getValue(elem.get());
+        arr->emplace_back(std::move(*elemVal));
     }
     pushOpcode(Opcode::LoadConst);
-    push4B(makeConstIdx(CompileValue((int64_t)arrayLitExp.elements.size())));
-    callBuiltin(Builtin::NewArray);
+    push4B(makeConstIdx(CompileValue(arr)));
 }
 
 void Translator::visit(AST::MapLitExp& mapLitExp) {
+    std::vector<std::pair<std::string, CompileValue>>* m = new std::vector<std::pair<std::string, CompileValue>>();
     for(auto& pair : mapLitExp.entries){
-        pushOpcode(Opcode::LoadConst);
-        push4B(makeConstIdx(CompileValue(pair.first)));
-        pair.second->accept(*this);
+        auto val = getValue(pair.second.get());
+        m->emplace_back(pair.first, std::move(*val));
     }
     pushOpcode(Opcode::LoadConst);
-    push4B(makeConstIdx(CompileValue((int64_t)mapLitExp.entries.size())));
-    callBuiltin(Builtin::NewMap);
+    push4B(makeConstIdx(CompileValue(m)));
 }
 
 void Translator::visit(AST::FuncLitExp& funcLitExp) {
-    Proto* parentProto = curProto;
-    module->protos.push_back(std::make_unique<Proto>());
-    curProto = module->protos.back().get();
-    curProto->index = module->protos.size() - 1;
-    curProto->arity = funcLitExp.params.size();
-    curScopeMgr.enterScope();
-    for(auto& paramName : funcLitExp.params){
-        if(curScopeMgr.declare(paramName, true) == -1){
-            REPORT_SEMANTIC_ERROR(funcLitExp.line, funcLitExp.column, "Duplicate parameter name '%s' in function literal", paramName.c_str());
-        }
-    }
-    funcLitExp.body->accept(*this);
-    curScopeMgr.exitScope();
-    curProto->localCount = curScopeMgr.getMaxIndex() + 1;
+    uint32_t protoIdx = compileFunctionProto(funcLitExp.params, funcLitExp.body.get(), false);
     pushOpcode(Opcode::LoadConst);
-    push4B(makeConstIdx(CompileValue(new CompileFunction{curProto->index})));
+    push4B(makeConstIdx(CompileValue(new CompileFunction{protoIdx})));
 }
 
 std::unique_ptr<CompileValue> Translator::getValue(const AST::LiteralExp* exp) {
@@ -646,10 +627,38 @@ std::unique_ptr<CompileValue> Translator::getValue(const AST::LiteralExp* exp) {
             return std::make_unique<CompileValue>(m);
         }
         case AST::LiteralExp::LiteralType::Func: {
-            // TODO: 要处理状态保存等问题
+            auto funcExp = static_cast<const AST::FuncLitExp*>(exp);
+            uint32_t protoIdx = compileFunctionProto(funcExp->params, funcExp->body.get(), false);
+            return std::make_unique<CompileValue>(new CompileFunction{protoIdx});
         }
         default: return nullptr;
     }
+}
+
+uint32_t Translator::compileFunctionProto(const std::vector<std::string>& params, AST::BlockStmt* body, bool isMethod) {
+    std::unique_ptr<FuncState> savedFunc = std::move(curFunc);
+    curFunc = std::make_unique<FuncState>();
+    module->protos.push_back(std::make_unique<Proto>());
+    curFunc->proto = module->protos.back().get();
+    curFunc->proto->index = module->protos.size() - 1;
+    curFunc->proto->arity = params.size() + (isMethod ? 1 : 0);
+    curFunc->inMethod = isMethod;
+    curFunc->scopeMgr.reset();
+    curFunc->scopeMgr.enterScope();
+    if(isMethod){
+        curFunc->scopeMgr.declare("this", false);
+    }
+    for(auto& paramName : params){
+        if(curFunc->scopeMgr.declare(paramName, true) == -1){
+            REPORT_SEMANTIC_ERROR(body->line, body->column, "Duplicate parameter name '%s' in function literal", paramName.c_str());
+        }
+    }
+    body->accept(*this);
+    curFunc->scopeMgr.exitScope();
+    curFunc->proto->localCount = curFunc->scopeMgr.getMaxIndex() + 1;
+    uint32_t protoIdx = curFunc->proto->index;
+    curFunc = std::move(savedFunc);
+    return protoIdx;
 }
 
 } // namespace Zeta

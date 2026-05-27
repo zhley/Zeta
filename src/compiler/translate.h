@@ -66,6 +66,8 @@ public:
     void visit(AST::AssignExp& assignExp) override;
     void visit(AST::IdentifierExp& identifierExp) override;
     void visit(AST::ThisExp& thisExp) override;
+    void visit(AST::ArrayExp& arrayExp) override;
+    void visit(AST::MapExp& mapExp) override;
     void visit(AST::IntLitExp& intLitExp) override;
     void visit(AST::FloatLitExp& floatLitExp) override;
     void visit(AST::StrLitExp& strLitExp) override;
@@ -80,55 +82,58 @@ private:
     Module* module = nullptr;
     std::unordered_map<std::string, std::string> aliasToModule; 
     
-    Proto* curProto = nullptr;
-    bool inMethod = false;
-    ScopeManager curScopeMgr;
+    struct FuncState {
+        Proto* proto = nullptr;
+        bool inMethod = false;
+        ScopeManager scopeMgr;
 
-    std::stack<std::vector<uint32_t>> breakPosStack;
-    std::stack<std::vector<uint32_t>> continuePosStack;
+        std::stack<std::vector<uint32_t>> breakPosStack;
+        std::stack<std::vector<uint32_t>> continuePosStack;
+    };
+    std::unique_ptr<FuncState> curFunc;
 
     uint32_t pushOpcode(Opcode opcode) {
-        uint32_t offset = curProto->bytecode.size();
-        curProto->bytecode.push_back(static_cast<uint8_t>(opcode));
+        uint32_t offset = curFunc->proto->bytecode.size();
+        curFunc->proto->bytecode.push_back(static_cast<uint8_t>(opcode));
         return offset;
     }
 
     uint32_t push4B(uint32_t value){
-        curProto->bytecode.resize(curProto->bytecode.size() + 4);
-        uint32_t offset = curProto->bytecode.size() - 4;
-        std::memcpy(curProto->bytecode.data() + offset, &value, 4);
+        curFunc->proto->bytecode.resize(curFunc->proto->bytecode.size() + 4);
+        uint32_t offset = curFunc->proto->bytecode.size() - 4;
+        std::memcpy(curFunc->proto->bytecode.data() + offset, &value, 4);
         return offset;
     }
 
     uint32_t set4B(uint32_t offset, uint32_t value){
-        std::memcpy(curProto->bytecode.data() + offset, &value, 4);
+        std::memcpy(curFunc->proto->bytecode.data() + offset, &value, 4);
         return offset;
     }
 
     uint32_t skip4B(){
-        curProto->bytecode.resize(curProto->bytecode.size() + 4);
-        return curProto->bytecode.size() - 4;
+        curFunc->proto->bytecode.resize(curFunc->proto->bytecode.size() + 4);
+        return curFunc->proto->bytecode.size() - 4;
     }
 
     // TODO: 最终字节码最后需要追加一个空操作保证标签不越界
     uint32_t getLabel() {
-        return curProto->bytecode.size();
+        return curFunc->proto->bytecode.size();
     }
 
     void callBuiltin(Builtin builtin) {
         pushOpcode(Opcode::CallBuiltin);
-        curProto->bytecode.push_back(static_cast<uint8_t>(builtin));
+        curFunc->proto->bytecode.push_back(static_cast<uint8_t>(builtin));
     }
 
     // const
     uint32_t makeConstIdx(const CompileValue& val) {
-        for(size_t i = 0; i < curProto->constants.size(); ++i){
-            if(*curProto->constants[i] == val){
+        for(size_t i = 0; i < curFunc->proto->constants.size(); ++i){
+            if(*curFunc->proto->constants[i] == val){
                 return i;
             }
         }
-        curProto->constants.push_back(std::make_unique<CompileValue>(val));
-        return curProto->constants.size() - 1;
+        curFunc->proto->constants.push_back(std::make_unique<CompileValue>(val));
+        return curFunc->proto->constants.size() - 1;
     }
 
     void recordGlobalSym(const std::string& name, const std::string& moduleName, uint32_t pos) {
@@ -140,9 +145,9 @@ private:
                     module->externalSyms.push_back({name, ""});
                     it = module->externalSyms.end() - 1;
                 }
-                it->relocations.push_back({curProto->index, pos});
+                it->relocations.push_back({curFunc->proto->index, pos});
             } else {
-                it->second.relocations.push_back({curProto->index, pos});
+                it->second.relocations.push_back({curFunc->proto->index, pos});
             }
         } else {
             auto it = std::find(module->externalSyms.begin(), module->externalSyms.end(), ExtSymbol{name, moduleName});
@@ -150,11 +155,12 @@ private:
                 module->externalSyms.push_back({name, moduleName});
                 it = module->externalSyms.end() - 1;
             }
-            it->relocations.push_back({curProto->index, pos});
+            it->relocations.push_back({curFunc->proto->index, pos});
         }
     }
 
     std::unique_ptr<CompileValue> getValue(const AST::LiteralExp* exp);
+    uint32_t compileFunctionProto(const std::vector<std::string>& params, AST::BlockStmt* body, bool isMethod = false);
 };
 
 } // namespace Zeta
