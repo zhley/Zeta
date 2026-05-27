@@ -17,6 +17,7 @@
     Zeta::AST::AssignExp::Op toAssignOp(AssignOp assignOp);
     Zeta::AST::BinaryExp::Op relopToBinaryOp(Relop relop);
     void yyerror(const char* msg);
+    std::unique_ptr<Zeta::AST::Exp> tryExpFold(std::unique_ptr<Zeta::AST::Exp> exp);
 
     namespace Zeta::ParserTypes {
         using ImportList = std::vector<std::unique_ptr<Zeta::AST::Import>>;
@@ -157,24 +158,24 @@ Stmt: VarDec SEMI { auto s = std::make_unique<VarDecStmt>(); s->varDecs = std::m
     | error RC { $$ = nullptr; }
     ;
 
-Exp: Exp QMARK Exp COLON Exp { auto e = std::make_unique<ConditionalExp>(); e->cond = std::move($1); e->thenBranch = std::move($3); e->elseBranch = std::move($5); $$ = std::move(e); }
+Exp: Exp QMARK Exp COLON Exp { auto e = std::make_unique<ConditionalExp>(); e->cond = std::move($1); e->thenBranch = std::move($3); e->elseBranch = std::move($5); e = tryExpFold(std::move(e)); $$ = std::move(e); }
     | Exp ASSIGN Exp { auto e = std::make_unique<AssignExp>(); e->op = toAssignOp($2); e->target = std::move($1); e->value = std::move($3); $$ = std::move(e); }
-    | Exp RELOP Exp { auto e = std::make_unique<BinaryExp>(); e->op = relopToBinaryOp($2); e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
-    | Exp AND Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::And; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
-    | Exp OR Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Or; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
-    | Exp LSHIFT Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Shl; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
-    | Exp RSHIFT Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Shr; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
-    | Exp PLUS Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Add; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
-    | Exp MINUS Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Sub; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
-    | Exp STAR Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Mul; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
-    | Exp DIV Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Div; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
-    | Exp MOD Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Mod; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
-    | Exp BITAND Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::BitAnd; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
-    | Exp BITOR Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::BitOr; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
-    | Exp BITXOR Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::BitXor; e->left = std::move($1); e->right = std::move($3); $$ = std::move(e); }
-    | MINUS Exp %prec MINUS_S { auto e = std::make_unique<UnaryExp>(); e->op = UnaryExp::Op::Neg; e->operand = std::move($2); $$ = std::move(e); }
-    | NOT Exp { auto e = std::make_unique<UnaryExp>(); e->op = UnaryExp::Op::Not; e->operand = std::move($2); $$ = std::move(e); }
-    | BITNOT Exp { auto e = std::make_unique<UnaryExp>(); e->op = UnaryExp::Op::BitNot; e->operand = std::move($2); $$ = std::move(e); }
+    | Exp RELOP Exp { auto e = std::make_unique<BinaryExp>(); e->op = relopToBinaryOp($2); e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
+    | Exp AND Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::And; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
+    | Exp OR Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Or; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
+    | Exp LSHIFT Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Shl; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
+    | Exp RSHIFT Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Shr; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
+    | Exp PLUS Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Add; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
+    | Exp MINUS Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Sub; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
+    | Exp STAR Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Mul; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
+    | Exp DIV Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Div; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
+    | Exp MOD Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Mod; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
+    | Exp BITAND Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::BitAnd; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
+    | Exp BITOR Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::BitOr; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
+    | Exp BITXOR Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::BitXor; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
+    | MINUS Exp %prec MINUS_S { auto e = std::make_unique<UnaryExp>(); e->op = UnaryExp::Op::Neg; e->operand = std::move($2); e = tryExpFold(std::move(e)); $$ = std::move(e); }
+    | NOT Exp { auto e = std::make_unique<UnaryExp>(); e->op = UnaryExp::Op::Not; e->operand = std::move($2); e = tryExpFold(std::move(e)); $$ = std::move(e); }
+    | BITNOT Exp { auto e = std::make_unique<UnaryExp>(); e->op = UnaryExp::Op::BitNot; e->operand = std::move($2); e = tryExpFold(std::move(e)); $$ = std::move(e); }
     | LP Exp RP { $$ = std::move($2); }
     | Exp DOT ID LP ArgList RP { auto e = std::make_unique<CallExp>(); e->caller = std::move($1); e->funcName = std::move($3); e->args = std::move($5); $$ = std::move(e); }
     | Exp DOT ID LP RP { auto e = std::make_unique<CallExp>(); e->caller = std::move($1); e->funcName = std::move($3); $$ = std::move(e); }
@@ -195,17 +196,17 @@ Literal: INT { auto e = std::make_unique<IntLitExp>(); e->value = $1; $$ = std::
     | NULL_ { auto e = std::make_unique<NullLitExp>(); $$ = std::move(e); }
     | STR { auto e = std::make_unique<StrLitExp>(); e->value = std::move($1); $$ = std::move(e); }
     | ArrayLit { $$ = std::move($1); }
-    | MapLit { $$ = std::move($1); }
-    | FuncLit { $$ = std::move($1); }
+    | MapLit { $1 = tryExpFold(std::move($1)); $$ = std::move($1); }
+    | FuncLit { $1 = tryExpFold(std::move($1)); $$ = std::move($1); }
     ;
-ArrayLit: LB ElemList RB { auto e = std::make_unique<ArrayLitExp>(); e->elements = std::move($2); $$ = std::move(e); }
-    | LB RB { auto e = std::make_unique<ArrayLitExp>(); $$ = std::move(e); }
+ArrayLit: LB ElemList RB { auto e = std::make_unique<ArrayExp>(); e->elements = std::move($2); $$ = std::move(e); }
+    | LB RB { auto e = std::make_unique<ArrayExp>(); $$ = std::move(e); }
     ;
 ElemList: ElemList COMMA Exp { $1.push_back(std::move($3)); $$ = std::move($1); }
     | Exp { Zeta::ParserTypes::ExpList t; t.push_back(std::move($1)); $$ = std::move(t); }
     ;
-MapLit: LC MapElemList RC { auto e = std::make_unique<MapLitExp>(); e->entries = std::move($2); $$ = std::move(e); }
-    | LC RC { auto e = std::make_unique<MapLitExp>(); $$ = std::move(e); }
+MapLit: LC MapElemList RC { auto e = std::make_unique<MapExp>(); e->entries = std::move($2); $$ = std::move(e); }
+    | LC RC { auto e = std::make_unique<MapExp>(); $$ = std::move(e); }
     ;
 MapElemList: MapElemList COMMA MapElem { $1.push_back(std::move($3)); $$ = std::move($1); }
     | MapElem { Zeta::ParserTypes::MapEntryList t; t.push_back(std::move($1)); $$ = std::move(t); }
@@ -252,3 +253,272 @@ Zeta::AST::BinaryExp::Op relopToBinaryOp(Relop relop) {
         default: assert(false); return Zeta::AST::BinaryExp::Op::Eq; 
     }
 }
+
+bool boolean(const Zeta::AST::LiteralExp* exp){
+    switch(exp->type){
+        case Zeta::AST::LiteralExp::LiteralType::Int:
+            return static_cast<const Zeta::AST::IntLitExp*>(exp)->value != 0;
+        case Zeta::AST::LiteralExp::LiteralType::Float:
+            return static_cast<const Zeta::AST::FloatLitExp*>(exp)->value != 0.0;
+        case Zeta::AST::LiteralExp::LiteralType::Str:
+            return !static_cast<const Zeta::AST::StrLitExp*>(exp)->value.empty();
+        case Zeta::AST::LiteralExp::LiteralType::Bool:
+            return static_cast<const Zeta::AST::BoolLitExp*>(exp)->value;
+        case Zeta::AST::LiteralExp::LiteralType::Null:
+            return false;
+        case Zeta::AST::LiteralExp::LiteralType::Array:
+            return !static_cast<const Zeta::AST::ArrayLitExp*>(exp)->elements.empty();
+        case Zeta::AST::LiteralExp::LiteralType::Map:
+            return !static_cast<const Zeta::AST::MapLitExp*>(exp)->entries.empty();
+        default:
+            return true; // function literals are always truthy
+    }
+}
+
+std::unique_ptr<Zeta::AST::Exp> tryExpFold(std::unique_ptr<Zeta::AST::Exp> exp) {
+    auto makeInt = [](int64_t value) {
+        auto out = std::make_unique<Zeta::AST::IntLitExp>();
+        out->value = value;
+        return out;
+    };
+    auto makeFloat = [](double value) {
+        auto out = std::make_unique<Zeta::AST::FloatLitExp>();
+        out->value = value;
+        return out;
+    };
+    auto makeStr = [](std::string value) {
+        auto out = std::make_unique<Zeta::AST::StrLitExp>();
+        out->value = std::move(value);
+        return out;
+    };
+    auto makeBool = [](bool value) {
+        auto out = std::make_unique<Zeta::AST::BoolLitExp>();
+        out->value = value;
+        return out;
+    };
+    switch(exp->type) {
+        case Zeta::AST::Exp::ExpType::Conditional: {
+            auto* condExp = static_cast<Zeta::AST::ConditionalExp*>(exp.get());
+            if(condExp->cond->type == Zeta::AST::Exp::ExpType::Literal){
+                auto* literalExp = static_cast<Zeta::AST::LiteralExp*>(condExp->cond.get());
+                return boolean(literalExp) ? std::move(condExp->thenBranch) : std::move(condExp->elseBranch);
+            }
+            return std::move(exp);
+        }
+        case Zeta::AST::Exp::ExpType::Binary: {
+            auto* binaryExp = static_cast<Zeta::AST::BinaryExp*>(exp.get());
+            if(binaryExp->left->type == Zeta::AST::Exp::ExpType::Literal && binaryExp->right->type == Zeta::AST::Exp::ExpType::Literal){
+                auto* leftLit = static_cast<Zeta::AST::LiteralExp*>(binaryExp->left.get());
+                auto* rightLit = static_cast<Zeta::AST::LiteralExp*>(binaryExp->right.get());
+
+                if(binaryExp->op == Zeta::AST::BinaryExp::Op::And){
+                    return makeBool(boolean(leftLit) && boolean(rightLit));
+                }
+                if(binaryExp->op == Zeta::AST::BinaryExp::Op::Or){
+                    return makeBool(boolean(leftLit) || boolean(rightLit));
+                }
+
+                const bool leftIsInt = leftLit->type == Zeta::AST::LiteralExp::LiteralType::Int;
+                const bool rightIsInt = rightLit->type == Zeta::AST::LiteralExp::LiteralType::Int;
+                const bool leftIsFloat = leftLit->type == Zeta::AST::LiteralExp::LiteralType::Float;
+                const bool rightIsFloat = rightLit->type == Zeta::AST::LiteralExp::LiteralType::Float;
+                const bool leftIsNum = leftIsInt || leftIsFloat;
+                const bool rightIsNum = rightIsInt || rightIsFloat;
+
+                if(leftIsNum && rightIsNum){
+                    if(leftIsInt && rightIsInt){
+                        const int64_t leftVal = static_cast<const Zeta::AST::IntLitExp*>(leftLit)->value;
+                        const int64_t rightVal = static_cast<const Zeta::AST::IntLitExp*>(rightLit)->value;
+                        switch(binaryExp->op){
+                            case Zeta::AST::BinaryExp::Op::Add:
+                                return makeInt(leftVal + rightVal);
+                            case Zeta::AST::BinaryExp::Op::Sub:
+                                return makeInt(leftVal - rightVal);
+                            case Zeta::AST::BinaryExp::Op::Mul:
+                                return makeInt(leftVal * rightVal);
+                            case Zeta::AST::BinaryExp::Op::Div:
+                                if(rightVal == 0){
+                                    REPORT_SEMANTIC_ERROR(binaryExp->line, binaryExp->column, "Division by zero");
+                                    return std::move(exp);
+                                }
+                                return makeInt(leftVal / rightVal);
+                            case Zeta::AST::BinaryExp::Op::Mod:
+                                if(rightVal == 0){
+                                    REPORT_SEMANTIC_ERROR(binaryExp->line, binaryExp->column, "Modulo by zero");
+                                    return std::move(exp);
+                                }
+                                return makeInt(leftVal % rightVal);
+                            case Zeta::AST::BinaryExp::Op::Eq:
+                                return makeBool(leftVal == rightVal);
+                            case Zeta::AST::BinaryExp::Op::Neq:
+                                return makeBool(leftVal != rightVal);
+                            case Zeta::AST::BinaryExp::Op::Lt:
+                                return makeBool(leftVal < rightVal);
+                            case Zeta::AST::BinaryExp::Op::Gt:
+                                return makeBool(leftVal > rightVal);
+                            case Zeta::AST::BinaryExp::Op::Leq:
+                                return makeBool(leftVal <= rightVal);
+                            case Zeta::AST::BinaryExp::Op::Geq:
+                                return makeBool(leftVal >= rightVal);
+                            case Zeta::AST::BinaryExp::Op::BitAnd:
+                                return makeInt(leftVal & rightVal);
+                            case Zeta::AST::BinaryExp::Op::BitOr:
+                                return makeInt(leftVal | rightVal);
+                            case Zeta::AST::BinaryExp::Op::BitXor:
+                                return makeInt(leftVal ^ rightVal);
+                            case Zeta::AST::BinaryExp::Op::Shl:
+                                return makeInt(leftVal << rightVal);
+                            case Zeta::AST::BinaryExp::Op::Shr:
+                                return makeInt(leftVal >> rightVal);
+                            default:
+                                break;
+                        }
+                    } else {
+                        const double leftVal = leftIsFloat
+                            ? static_cast<const Zeta::AST::FloatLitExp*>(leftLit)->value
+                            : static_cast<const Zeta::AST::IntLitExp*>(leftLit)->value;
+                        const double rightVal = rightIsFloat
+                            ? static_cast<const Zeta::AST::FloatLitExp*>(rightLit)->value
+                            : static_cast<const Zeta::AST::IntLitExp*>(rightLit)->value;
+                        switch(binaryExp->op){
+                            case Zeta::AST::BinaryExp::Op::Add:
+                                return makeFloat(leftVal + rightVal);
+                            case Zeta::AST::BinaryExp::Op::Sub:
+                                return makeFloat(leftVal - rightVal);
+                            case Zeta::AST::BinaryExp::Op::Mul:
+                                return makeFloat(leftVal * rightVal);
+                            case Zeta::AST::BinaryExp::Op::Div:
+                                if(rightVal == 0.0){
+                                    REPORT_SEMANTIC_ERROR(binaryExp->line, binaryExp->column, "Division by zero");
+                                    return std::move(exp);
+                                }
+                                return makeFloat(leftVal / rightVal);
+                            case Zeta::AST::BinaryExp::Op::Eq:
+                                return makeBool(leftVal == rightVal);
+                            case Zeta::AST::BinaryExp::Op::Neq:
+                                return makeBool(leftVal != rightVal);
+                            case Zeta::AST::BinaryExp::Op::Lt:
+                                return makeBool(leftVal < rightVal);
+                            case Zeta::AST::BinaryExp::Op::Gt:
+                                return makeBool(leftVal > rightVal);
+                            case Zeta::AST::BinaryExp::Op::Leq:
+                                return makeBool(leftVal <= rightVal);
+                            case Zeta::AST::BinaryExp::Op::Geq:
+                                return makeBool(leftVal >= rightVal);
+                            default:
+                                break;
+                        }
+                    }
+                }
+
+                if(leftLit->type == Zeta::AST::LiteralExp::LiteralType::Str && rightLit->type == Zeta::AST::LiteralExp::LiteralType::Str){
+                    const auto& leftVal = static_cast<const Zeta::AST::StrLitExp*>(leftLit)->value;
+                    const auto& rightVal = static_cast<const Zeta::AST::StrLitExp*>(rightLit)->value;
+                    switch(binaryExp->op){
+                        case Zeta::AST::BinaryExp::Op::Add:
+                            return makeStr(leftVal + rightVal);
+                        case Zeta::AST::BinaryExp::Op::Eq:
+                            return makeBool(leftVal == rightVal);
+                        case Zeta::AST::BinaryExp::Op::Neq:
+                            return makeBool(leftVal != rightVal);
+                        default:
+                            break;
+                    }
+                }
+
+                if(leftLit->type == Zeta::AST::LiteralExp::LiteralType::Bool && rightLit->type == Zeta::AST::LiteralExp::LiteralType::Bool){
+                    const bool leftVal = static_cast<const Zeta::AST::BoolLitExp*>(leftLit)->value;
+                    const bool rightVal = static_cast<const Zeta::AST::BoolLitExp*>(rightLit)->value;
+                    switch(binaryExp->op){
+                        case Zeta::AST::BinaryExp::Op::Eq:
+                            return makeBool(leftVal == rightVal);
+                        case Zeta::AST::BinaryExp::Op::Neq:
+                            return makeBool(leftVal != rightVal);
+                        default:
+                            break;
+                    }
+                }
+
+                if(leftLit->type == Zeta::AST::LiteralExp::LiteralType::Null && rightLit->type == Zeta::AST::LiteralExp::LiteralType::Null){
+                    switch(binaryExp->op){
+                        case Zeta::AST::BinaryExp::Op::Eq:
+                            return makeBool(true);
+                        case Zeta::AST::BinaryExp::Op::Neq:
+                            return makeBool(false);
+                        default:
+                            break;
+                    }
+                }
+                REPORT_SEMANTIC_ERROR(binaryExp->line, binaryExp->column, "Unsupported operand types for constant expression");
+                return std::move(exp);
+            }
+            return std::move(exp);
+        }
+        case Zeta::AST::Exp::ExpType::Unary: {
+            auto* unaryExp = static_cast<Zeta::AST::UnaryExp*>(exp.get());
+            if(unaryExp->operand->type == Zeta::AST::Exp::ExpType::Literal){
+                auto* literalExp = static_cast<Zeta::AST::LiteralExp*>(unaryExp->operand.get());
+                switch(unaryExp->op){
+                    case Zeta::AST::UnaryExp::Op::Neg:
+                        if(literalExp->type == Zeta::AST::LiteralExp::LiteralType::Int){
+                            return makeInt(-static_cast<const Zeta::AST::IntLitExp*>(literalExp)->value);
+                        }
+                        if(literalExp->type == Zeta::AST::LiteralExp::LiteralType::Float){
+                            return makeFloat(-static_cast<const Zeta::AST::FloatLitExp*>(literalExp)->value);
+                        }
+                        break;
+                    case Zeta::AST::UnaryExp::Op::Not:
+                        return makeBool(!boolean(literalExp));
+                    case Zeta::AST::UnaryExp::Op::BitNot:
+                        if(literalExp->type == Zeta::AST::LiteralExp::LiteralType::Int){
+                            return makeInt(~static_cast<const Zeta::AST::IntLitExp*>(literalExp)->value);
+                        }
+                        break;
+                    default:
+                        break;
+                }
+                REPORT_SEMANTIC_ERROR(unaryExp->line, unaryExp->column, "Unsupported operand type for constant expression");
+                return std::move(exp);
+            }
+            return std::move(exp);
+        }
+        case Zeta::AST::Exp::ExpType::Array: {
+            auto* arrayExp = static_cast<Zeta::AST::ArrayExp*>(exp.get());
+            bool allLiteral = true;
+            for(const auto& elem : arrayExp->elements){
+                if(elem->type != Zeta::AST::Exp::ExpType::Literal){
+                    allLiteral = false;
+                    break;
+                }
+            }
+            if(allLiteral){
+                auto out = std::make_unique<Zeta::AST::ArrayLitExp>();
+                for(auto& elem : arrayExp->elements){
+                    out->elements.push_back(std::unique_ptr<Zeta::AST::LiteralExp>(static_cast<Zeta::AST::LiteralExp*>(elem.release())));
+                }
+                return std::move(out);
+            }
+            return std::move(exp);
+        }
+        case Zeta::AST::Exp::ExpType::Map: {
+            auto* mapExp = static_cast<Zeta::AST::MapExp*>(exp.get());
+            bool allLiteral = true;
+            for(const auto& entry : mapExp->entries){
+                if(entry.second->type != Zeta::AST::Exp::ExpType::Literal){
+                    allLiteral = false;
+                    break;
+                }
+            }
+            if(allLiteral){
+                auto out = std::make_unique<Zeta::AST::MapLitExp>();
+                for(auto& entry : mapExp->entries){
+                    out->entries.emplace_back(std::move(entry.first), std::unique_ptr<Zeta::AST::LiteralExp>(static_cast<Zeta::AST::LiteralExp*>(entry.second.release())));
+                }
+                return std::move(out);
+            }
+            return std::move(exp);
+        }
+        default: return std::move(exp);
+    }
+}
+

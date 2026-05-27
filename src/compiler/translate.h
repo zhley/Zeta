@@ -79,8 +79,7 @@ private:
     // State
     Module* module = nullptr;
     std::unordered_map<std::string, std::string> aliasToModule; 
-    std::unique_ptr<CompileValue> value;
-    bool isConstExpr = false;
+    
     Proto* curProto = nullptr;
     bool inMethod = false;
     ScopeManager curScopeMgr;
@@ -154,6 +153,8 @@ private:
             it->relocations.push_back({curProto->index, pos});
         }
     }
+
+    std::unique_ptr<CompileValue> getValue(const AST::LiteralExp* exp);
 };
 
 } // namespace Zeta

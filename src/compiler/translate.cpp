@@ -96,13 +96,15 @@ void Translator::visit(AST::VarDec& varDec) {
         if(module->globalSyms.find(varDec.name) != module->globalSyms.end()){
             REPORT_SEMANTIC_ERROR(varDec.line, varDec.column, "Duplicate global variable '%s'", varDec.name.c_str());
         }
+        std::unique_ptr<CompileValue> value = nullptr;
         if(varDec.init){
-            varDec.init->accept(*this);
-            if(!isConstExpr){
+            if(varDec.init->type == AST::Exp::ExpType::Literal){
+                value = getValue(static_cast<AST::LiteralExp*>(varDec.init.get()));
+            }else{
                 REPORT_SEMANTIC_ERROR(varDec.line, varDec.column, "Initializer for global variable '%s' must be a constant expression", varDec.name.c_str());
             }
         }
-        module->globalSyms[varDec.name] = {varDec.isMutable, (varDec.init && isConstExpr) ? std::move(value) : nullptr};
+        module->globalSyms[varDec.name] = {varDec.isMutable, std::move(value)};
     } else {
         int index = curScopeMgr.declare(varDec.name, varDec.isMutable);
         if(index == -1){
@@ -148,16 +150,18 @@ void Translator::visit(AST::ClassDec& classDec) {
     for(auto& member : classDec.members){
         if(member->type == AST::Dec::DecType::Var){
             auto* varDec = static_cast<AST::VarDec*>(member.get());
+            std::unique_ptr<CompileValue> value = nullptr;
             if(varDec->init){
-                varDec->init->accept(*this);
-                if(!isConstExpr){
-                    REPORT_SEMANTIC_ERROR(varDec->line, varDec->column, "Initializer for instance member '%s' must be a constant expression", varDec->name.c_str());
+                if(varDec->init->type == AST::Exp::ExpType::Literal){
+                    value = getValue(static_cast<AST::LiteralExp*>(varDec->init.get()));
+                }else{
+                    REPORT_SEMANTIC_ERROR(varDec->line, varDec->column, "Initializer for instance variable '%s' in class '%s' must be a constant expression", varDec->name.c_str(), classDec.name.c_str());
                 }
             }
             if(compileClass->fields.find(varDec->name) != compileClass->fields.end()){
                 REPORT_SEMANTIC_ERROR(varDec->line, varDec->column, "Duplicate instance member '%s' in class '%s'", varDec->name.c_str(), classDec.name.c_str());
             }
-            compileClass->fields[varDec->name] = varDec->init && isConstExpr ? std::move(value) : nullptr;
+            compileClass->fields[varDec->name] = std::move(value);
         } else if(member->type == AST::Dec::DecType::Func){
             auto* funcDec = static_cast<AST::FuncDec*>(member.get());
             module->protos.push_back(std::make_unique<Proto>());
@@ -553,41 +557,99 @@ void Translator::visit(AST::ThisExp& thisExp) {
 }
 
 void Translator::visit(AST::IntLitExp& intLitExp) {
-    isConstExpr = true;
-    value = std::make_unique<CompileValue>(intLitExp.value);
+    pushOpcode(Opcode::LoadConst);
+    push4B(makeConstIdx(CompileValue(intLitExp.value)));
 }
 
 void Translator::visit(AST::FloatLitExp& floatLitExp) {
-    isConstExpr = true;
-    value = std::make_unique<CompileValue>(floatLitExp.value);
+    pushOpcode(Opcode::LoadConst);
+    push4B(makeConstIdx(CompileValue(floatLitExp.value)));
 }
 
 void Translator::visit(AST::StrLitExp& strLitExp) {
-    isConstExpr = true;
-    value = std::make_unique<CompileValue>(strLitExp.value);
+    pushOpcode(Opcode::LoadConst);
+    push4B(makeConstIdx(CompileValue(strLitExp.value)));
 }
 
 void Translator::visit(AST::BoolLitExp& boolLitExp) {
-    isConstExpr = true;
-    value = std::make_unique<CompileValue>(boolLitExp.value);
+    pushOpcode(Opcode::LoadConst);
+    push4B(makeConstIdx(CompileValue(boolLitExp.value)));
 }
 
 void Translator::visit(AST::NullLitExp& nullLitExp) {
-    isConstExpr = true;
-    value = std::make_unique<CompileValue>();
+    pushOpcode(Opcode::LoadConst);
+    push4B(makeConstIdx(CompileValue()));
 }
 
 void Translator::visit(AST::ArrayLitExp& arrayLitExp) {
-    isConstExpr = true;
-    auto arr = new std::vector<CompileValue>();
     for(auto& elem : arrayLitExp.elements){
         elem->accept(*this);
-        if(!isConstExpr){
-            REPORT_SEMANTIC_ERROR(elem->line, elem->column, "Array literal elements must be constant expressions");
-        }
-        arr->push_back(*value);
     }
-    value = std::make_unique<CompileValue>(arr);
+    pushOpcode(Opcode::LoadConst);
+    push4B(makeConstIdx(CompileValue((int64_t)arrayLitExp.elements.size())));
+    callBuiltin(Builtin::NewArray);
+}
+
+void Translator::visit(AST::MapLitExp& mapLitExp) {
+    for(auto& pair : mapLitExp.entries){
+        pushOpcode(Opcode::LoadConst);
+        push4B(makeConstIdx(CompileValue(pair.first)));
+        pair.second->accept(*this);
+    }
+    pushOpcode(Opcode::LoadConst);
+    push4B(makeConstIdx(CompileValue((int64_t)mapLitExp.entries.size())));
+    callBuiltin(Builtin::NewMap);
+}
+
+void Translator::visit(AST::FuncLitExp& funcLitExp) {
+    Proto* parentProto = curProto;
+    module->protos.push_back(std::make_unique<Proto>());
+    curProto = module->protos.back().get();
+    curProto->index = module->protos.size() - 1;
+    curProto->arity = funcLitExp.params.size();
+    curScopeMgr.enterScope();
+    for(auto& paramName : funcLitExp.params){
+        if(curScopeMgr.declare(paramName, true) == -1){
+            REPORT_SEMANTIC_ERROR(funcLitExp.line, funcLitExp.column, "Duplicate parameter name '%s' in function literal", paramName.c_str());
+        }
+    }
+    funcLitExp.body->accept(*this);
+    curScopeMgr.exitScope();
+    curProto->localCount = curScopeMgr.getMaxIndex() + 1;
+    pushOpcode(Opcode::LoadConst);
+    push4B(makeConstIdx(CompileValue(new CompileFunction{curProto->index})));
+}
+
+std::unique_ptr<CompileValue> Translator::getValue(const AST::LiteralExp* exp) {
+    switch(exp->type) {
+        case AST::LiteralExp::LiteralType::Int: return std::make_unique<CompileValue>(static_cast<const AST::IntLitExp*>(exp)->value);
+        case AST::LiteralExp::LiteralType::Float: return std::make_unique<CompileValue>(static_cast<const AST::FloatLitExp*>(exp)->value);
+        case AST::LiteralExp::LiteralType::Str: return std::make_unique<CompileValue>(static_cast<const AST::StrLitExp*>(exp)->value);
+        case AST::LiteralExp::LiteralType::Bool: return std::make_unique<CompileValue>(static_cast<const AST::BoolLitExp*>(exp)->value);
+        case AST::LiteralExp::LiteralType::Null: return std::make_unique<CompileValue>();
+        case AST::LiteralExp::LiteralType::Array: {
+            auto arrExp = static_cast<const AST::ArrayLitExp*>(exp);
+            std::vector<CompileValue>* arr = new std::vector<CompileValue>();
+            for(auto& elem : arrExp->elements){
+                auto elemVal = getValue(elem.get());
+                arr->emplace_back(std::move(*elemVal));
+            }
+            return std::make_unique<CompileValue>(arr);
+        }
+        case AST::LiteralExp::LiteralType::Map: {
+            auto mapExp = static_cast<const AST::MapLitExp*>(exp);
+            std::vector<std::pair<std::string, CompileValue>>* m = new std::vector<std::pair<std::string, CompileValue>>();
+            for(auto& pair : mapExp->entries){
+                auto val = getValue(pair.second.get());
+                m->emplace_back(pair.first, std::move(*val));
+            }
+            return std::make_unique<CompileValue>(m);
+        }
+        case AST::LiteralExp::LiteralType::Func: {
+            // TODO: 要处理状态保存等问题
+        }
+        default: return nullptr;
+    }
 }
 
 } // namespace Zeta

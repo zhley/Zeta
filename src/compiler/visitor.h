@@ -28,6 +28,8 @@ namespace AST {
     class AssignExp;
     class IdentifierExp;
     class ThisExp;
+    class ArrayExp;
+    class MapExp;
     class LiteralExp;
     class IntLitExp;
     class FloatLitExp;
@@ -63,6 +65,8 @@ public:
     virtual void visit(AST::AssignExp& assignExp) = 0;
     virtual void visit(AST::IdentifierExp& identifierExp) = 0;
     virtual void visit(AST::ThisExp& thisExp) = 0;
+    virtual void visit(AST::ArrayExp& arrayExp) = 0;
+    virtual void visit(AST::MapExp& mapExp) = 0;
     virtual void visit(AST::IntLitExp& intLitExp) = 0;
     virtual void visit(AST::FloatLitExp& floatLitExp) = 0;
     virtual void visit(AST::StrLitExp& strLitExp) = 0;

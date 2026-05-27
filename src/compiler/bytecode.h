@@ -99,7 +99,7 @@ struct CompileValue{
         bool boolValue;
         std::string* strValue;
         std::vector<CompileValue>* arrayValue;
-        std::unordered_map<std::string, CompileValue>* mapValue;
+        std::vector<std::pair<std::string, CompileValue>>* mapValue;
         CompileFunction* funcValue;
         CompileClass* classValue;
     };
@@ -110,7 +110,7 @@ struct CompileValue{
     CompileValue(bool b) : type(Type::Bool), boolValue(b) {}
     CompileValue(const std::string& s) : type(Type::String), strValue(new std::string(s)) {}
     CompileValue(std::vector<CompileValue>* arr) : type(Type::Array), arrayValue(arr) {}
-    CompileValue(std::unordered_map<std::string, CompileValue>* m) : type(Type::Map), mapValue(m) {}
+    CompileValue(std::vector<std::pair<std::string, CompileValue>>* m) : type(Type::Map), mapValue(m) {}
     CompileValue(CompileFunction* f) : type(Type::Function), funcValue(f) {}
     CompileValue(CompileClass* c) : type(Type::Class), classValue(c) {}
     ~CompileValue() {
@@ -131,7 +131,7 @@ struct CompileValue{
             case Type::Bool:        boolValue = other.boolValue; break;
             case Type::String:      strValue = new std::string(*other.strValue); break;
             case Type::Array:       arrayValue = new std::vector<CompileValue>(*other.arrayValue); break;
-            case Type::Map:         mapValue = new std::unordered_map<std::string, CompileValue>(*other.mapValue); break;
+            case Type::Map:         mapValue = new std::vector<std::pair<std::string, CompileValue>>(*other.mapValue); break;
             case Type::Function:    funcValue = new CompileFunction(*other.funcValue); break;
             case Type::Class:       classValue = new CompileClass(*other.classValue); break;
             default: break;

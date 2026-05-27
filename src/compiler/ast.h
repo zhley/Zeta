@@ -2,6 +2,7 @@
 
 #include "visitor.h"
 #include <memory>
+#include <utility>
 #include <vector>
 #include <string>
 
@@ -154,7 +155,9 @@ public:
         Assign,
         Identifier,
         Literal,
-        This
+        This,
+        Array,
+        Map
     } type;
 };
 
@@ -251,6 +254,22 @@ public:
     ThisExp() { type = ExpType::This; }
 };
 
+class ArrayExp: public Exp {
+public:
+    ACCEPT
+    std::vector<std::unique_ptr<Exp>> elements;
+
+    ArrayExp() { type = ExpType::Array; }
+};
+
+class MapExp: public Exp {
+public:
+    ACCEPT
+    std::vector<std::pair<std::string, std::unique_ptr<Exp>>> entries;
+
+    MapExp() { type = ExpType::Map; }
+};
+
 class LiteralExp: public Exp {
 public:
     enum class LiteralType {
@@ -300,7 +319,7 @@ public:
 class ArrayLitExp: public LiteralExp {
 public:
     ACCEPT
-    std::vector<std::unique_ptr<Exp>> elements;
+    std::vector<std::unique_ptr<LiteralExp>> elements;
 
     ArrayLitExp() { Exp::type = ExpType::Literal; type = LiteralType::Array; }
 };
@@ -308,7 +327,7 @@ public:
 class MapLitExp: public LiteralExp {
 public:
     ACCEPT
-    std::vector<std::pair<std::string, std::unique_ptr<Exp>>> entries;
+    std::vector<std::pair<std::string, std::unique_ptr<LiteralExp>>> entries;
 
     MapLitExp() { Exp::type = ExpType::Literal; type = LiteralType::Map; }
 };
