@@ -4,7 +4,6 @@
 
 #include <cstdint>
 #include <memory>
-#include <regex>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -67,6 +66,8 @@ enum class Opcode : uint8_t {
 enum class Builtin : uint8_t {
     GetIter,
     IterNext,
+    NewArray,   // count, elem1, elem2, ..., elemN -> array
+    NewMap,     // count, key1, value1, key2, value2, ..., keyN, valueN -> map
 };
 
 struct CompileFunction {
@@ -85,6 +86,7 @@ struct CompileValue{
         Null = 0x00,
         Int,
         Float,
+        Bool,
         String,
         Array,
         Map,
@@ -94,6 +96,7 @@ struct CompileValue{
     union {
         int64_t intValue;
         double floatValue;
+        bool boolValue;
         std::string* strValue;
         std::vector<CompileValue>* arrayValue;
         std::unordered_map<std::string, CompileValue>* mapValue;
@@ -104,6 +107,7 @@ struct CompileValue{
     CompileValue() : type(Type::Null) {}
     CompileValue(int64_t i) : type(Type::Int), intValue(i) {}
     CompileValue(double f) : type(Type::Float), floatValue(f) {}
+    CompileValue(bool b) : type(Type::Bool), boolValue(b) {}
     CompileValue(const std::string& s) : type(Type::String), strValue(new std::string(s)) {}
     CompileValue(std::vector<CompileValue>* arr) : type(Type::Array), arrayValue(arr) {}
     CompileValue(std::unordered_map<std::string, CompileValue>* m) : type(Type::Map), mapValue(m) {}
@@ -124,6 +128,7 @@ struct CompileValue{
         switch (type) {
             case Type::Int:         intValue = other.intValue; break;
             case Type::Float:       floatValue = other.floatValue; break;
+            case Type::Bool:        boolValue = other.boolValue; break;
             case Type::String:      strValue = new std::string(*other.strValue); break;
             case Type::Array:       arrayValue = new std::vector<CompileValue>(*other.arrayValue); break;
             case Type::Map:         mapValue = new std::unordered_map<std::string, CompileValue>(*other.mapValue); break;
@@ -142,6 +147,7 @@ struct CompileValue{
         switch (type) {
             case Type::Int:         intValue = other.intValue; break;
             case Type::Float:       floatValue = other.floatValue; break;
+            case Type::Bool:        boolValue = other.boolValue; break;
             case Type::String:      strValue = other.strValue; other.strValue = nullptr; break;
             case Type::Array:       arrayValue = other.arrayValue; other.arrayValue = nullptr; break;
             case Type::Map:         mapValue = other.mapValue; other.mapValue = nullptr; break;
@@ -162,6 +168,7 @@ struct CompileValue{
             case Type::Null:        return true;
             case Type::Int:         return intValue == other.intValue;
             case Type::Float:       return floatValue == other.floatValue;
+            case Type::Bool:        return boolValue == other.boolValue;
             case Type::String:      return *strValue == *other.strValue;
             case Type::Array:       return *arrayValue == *other.arrayValue;
             case Type::Map:         return *mapValue == *other.mapValue;
@@ -208,10 +215,5 @@ struct Module{
     std::vector<ExtSymbol> externalSyms;
     std::vector<std::unique_ptr<Proto>> protos;
 };
-
-// Helper function to create a unique symbol name for static class members. "ClassName.FieldName"
-inline std::string makeGlobalSymbol(const std::string& className, const std::string& fieldName) {
-    return className + "." + fieldName;
-}
 
 } // namespace Zeta

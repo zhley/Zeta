@@ -72,7 +72,6 @@ CONTINUE    continue
 CLASS       class
 EXTENDS     extends
 THIS        this
-STATIC      static
 IMPORT      import
 AS          as
 
@@ -96,7 +95,6 @@ COMMMENT    (\/\/.*)|(\/\*([^*]|\*+[^\/])*\*\/)
 {CLASS}     { return Zeta::Parser::make_CLASS(); }
 {EXTENDS}   { return Zeta::Parser::make_EXTENDS(); }
 {THIS}      { return Zeta::Parser::make_THIS(); }
-{STATIC}    { return Zeta::Parser::make_STATIC(); }
 {IMPORT}    { return Zeta::Parser::make_IMPORT(); }
 {AS}        { return Zeta::Parser::make_AS(); }
 

@@ -59,6 +59,13 @@ const ScopeManager::Scope::Sym* ScopeManager::resolve(const std::string& name) c
     return nullptr; // Not found
 }
 
+void ScopeManager::reset(){
+    scopes.clear();
+    savedNextIndices.clear();
+    nextIndex = 0;
+    maxIndex = 0;
+}
+
 std::unique_ptr<Module> Translator::translate(AST::Program* program) {
     module = new Module();
     program->accept(*this);
@@ -66,7 +73,6 @@ std::unique_ptr<Module> Translator::translate(AST::Program* program) {
 }
 
 void Translator::visit(AST::Program& program) {
-    inGlobalScope = true;
     for (auto& import : program.imports) {
         import->accept(*this);
     }
@@ -86,7 +92,7 @@ void Translator::visit(AST::Import& import) {
 }
 
 void Translator::visit(AST::VarDec& varDec) {
-    if(inGlobalScope){
+    if(curScopeMgr.empty()){
         if(module->globalSyms.find(varDec.name) != module->globalSyms.end()){
             REPORT_SEMANTIC_ERROR(varDec.line, varDec.column, "Duplicate global variable '%s'", varDec.name.c_str());
         }
@@ -98,7 +104,7 @@ void Translator::visit(AST::VarDec& varDec) {
         }
         module->globalSyms[varDec.name] = {varDec.isMutable, (varDec.init && isConstExpr) ? std::move(value) : nullptr};
     } else {
-        int index = curScopeMgr->declare(varDec.name, varDec.isMutable);
+        int index = curScopeMgr.declare(varDec.name, varDec.isMutable);
         if(index == -1){
             REPORT_SEMANTIC_ERROR(varDec.line, varDec.column, "Duplicate local variable '%s'", varDec.name.c_str());
         }
@@ -118,19 +124,17 @@ void Translator::visit(AST::FuncDec& funcDec) {
     curProto = module->protos.back().get();
     curProto->index = module->protos.size() - 1;
     curProto->arity = funcDec.params.size();
-    ScopeManager scopeManager;
-    curScopeMgr = &scopeManager;
-    scopeManager.enterScope();
+    curScopeMgr.reset();
+    curScopeMgr.enterScope();
     for(size_t i = 0; i < funcDec.params.size(); ++i){
         const std::string& paramName = funcDec.params[i];
-        if(scopeManager.declare(paramName, true) == -1){
+        if(curScopeMgr.declare(paramName, true) == -1){
             REPORT_SEMANTIC_ERROR(funcDec.line, funcDec.column, "Duplicate parameter name '%s' in function '%s'", paramName.c_str(), funcDec.name.c_str());
         }
     }
     funcDec.body->accept(*this);
-    scopeManager.exitScope();
-    curProto->localCount = scopeManager.getMaxIndex() + 1;
-    curScopeMgr = nullptr;
+    curScopeMgr.exitScope();
+    curProto->localCount = curScopeMgr.getMaxIndex() + 1;
     module->globalSyms[funcDec.name] = {false, std::make_unique<CompileValue>(new CompileFunction{curProto->index})};
 }
 
@@ -141,88 +145,45 @@ void Translator::visit(AST::ClassDec& classDec) {
     CompileClass* compileClass = new CompileClass();
     compileClass->name = classDec.name;
     compileClass->base = classDec.base;
-    for(auto& [isStatic, member] : classDec.members){
-        if(isStatic){
-            if(member->type == AST::Dec::DecType::Var){
-                auto* varDec = static_cast<AST::VarDec*>(member.get());
-                if(varDec->init){
-                    varDec->init->accept(*this);
-                    if(!isConstExpr){
-                        REPORT_SEMANTIC_ERROR(varDec->line, varDec->column, "Initializer for static member '%s' must be a constant expression", varDec->name.c_str());
-                    }
+    for(auto& member : classDec.members){
+        if(member->type == AST::Dec::DecType::Var){
+            auto* varDec = static_cast<AST::VarDec*>(member.get());
+            if(varDec->init){
+                varDec->init->accept(*this);
+                if(!isConstExpr){
+                    REPORT_SEMANTIC_ERROR(varDec->line, varDec->column, "Initializer for instance member '%s' must be a constant expression", varDec->name.c_str());
                 }
-                std::string globalName = makeGlobalSymbol(classDec.name, varDec->name);
-                if(module->globalSyms.find(globalName) != module->globalSyms.end()){
-                    REPORT_SEMANTIC_ERROR(varDec->line, varDec->column, "Duplicate static member '%s' in class '%s'", varDec->name.c_str(), classDec.name.c_str());
-                }
-                module->globalSyms[globalName] = {varDec->isMutable, (varDec->init && isConstExpr) ? std::move(value) : nullptr};
-            } else if(member->type == AST::Dec::DecType::Func){
-                auto* funcDec = static_cast<AST::FuncDec*>(member.get());
-                module->protos.push_back(std::make_unique<Proto>());
-                Proto* proto = module->protos.back().get();
-                proto->index = module->protos.size() - 1;
-                proto->arity = funcDec->params.size();
-                ScopeManager scopeManager;
-                curScopeMgr = &scopeManager;
-                scopeManager.enterScope();
-                for(size_t i = 0; i < funcDec->params.size(); ++i){
-                    const std::string& paramName = funcDec->params[i];
-                    if(scopeManager.declare(paramName, true) == -1){
-                        REPORT_SEMANTIC_ERROR(funcDec->line, funcDec->column, "Duplicate parameter name '%s' in static method '%s' of class '%s'", paramName.c_str(), funcDec->name.c_str(), classDec.name.c_str());
-                    }
-                }
-                funcDec->body->accept(*this);
-                scopeManager.exitScope();
-                proto->localCount = scopeManager.getMaxIndex() + 1;
-                curScopeMgr = nullptr;
-                std::string globalName = makeGlobalSymbol(classDec.name, funcDec->name);
-                if(module->globalSyms.find(globalName) != module->globalSyms.end()){
-                    REPORT_SEMANTIC_ERROR(funcDec->line, funcDec->column, "Duplicate static member '%s' in class '%s'", funcDec->name.c_str(), classDec.name.c_str());
-                }
-                module->globalSyms[globalName] = {false, std::make_unique<CompileValue>(new CompileFunction{proto->index})};
-            } else {
-                REPORT_SEMANTIC_ERROR(member->line, member->column, "Invalid static member in class '%s'", classDec.name.c_str());
             }
+            if(compileClass->fields.find(varDec->name) != compileClass->fields.end()){
+                REPORT_SEMANTIC_ERROR(varDec->line, varDec->column, "Duplicate instance member '%s' in class '%s'", varDec->name.c_str(), classDec.name.c_str());
+            }
+            compileClass->fields[varDec->name] = varDec->init && isConstExpr ? std::move(value) : nullptr;
+        } else if(member->type == AST::Dec::DecType::Func){
+            auto* funcDec = static_cast<AST::FuncDec*>(member.get());
+            module->protos.push_back(std::make_unique<Proto>());
+            curProto = module->protos.back().get();
+            curProto->index = module->protos.size() - 1;
+            curProto->arity = funcDec->params.size() + 1;
+            inMethod = true;
+            curScopeMgr.reset();
+            curScopeMgr.enterScope();
+            curScopeMgr.declare("this", false);
+            for(size_t i = 0; i < funcDec->params.size(); ++i){
+                const std::string& paramName = funcDec->params[i];
+                if(curScopeMgr.declare(paramName, true) == -1){
+                    REPORT_SEMANTIC_ERROR(funcDec->line, funcDec->column, "Duplicate parameter name '%s' in method '%s' of class '%s'", paramName.c_str(), funcDec->name.c_str(), classDec.name.c_str());
+                }
+            }
+            funcDec->body->accept(*this);
+            curScopeMgr.exitScope();
+            curProto->localCount = curScopeMgr.getMaxIndex() + 1;
+            inMethod = false;
+            if(compileClass->methods.find(funcDec->name) != compileClass->methods.end()){
+                REPORT_SEMANTIC_ERROR(funcDec->line, funcDec->column, "Duplicate instance member '%s' in class '%s'", funcDec->name.c_str(), classDec.name.c_str());
+            }
+            compileClass->methods[funcDec->name] = CompileFunction{curProto->index};
         } else {
-            if(member->type == AST::Dec::DecType::Var){
-                auto* varDec = static_cast<AST::VarDec*>(member.get());
-                if(varDec->init){
-                    varDec->init->accept(*this);
-                    if(!isConstExpr){
-                        REPORT_SEMANTIC_ERROR(varDec->line, varDec->column, "Initializer for instance member '%s' must be a constant expression", varDec->name.c_str());
-                    }
-                }
-                if(compileClass->fields.find(varDec->name) != compileClass->fields.end()){
-                    REPORT_SEMANTIC_ERROR(varDec->line, varDec->column, "Duplicate instance member '%s' in class '%s'", varDec->name.c_str(), classDec.name.c_str());
-                }
-                compileClass->fields[varDec->name] = varDec->init && isConstExpr ? std::move(value) : nullptr;
-            } else if(member->type == AST::Dec::DecType::Func){
-                auto* funcDec = static_cast<AST::FuncDec*>(member.get());
-                module->protos.push_back(std::make_unique<Proto>());
-                curProto = module->protos.back().get();
-                curProto->index = module->protos.size() - 1;
-                curProto->arity = funcDec->params.size() + 1;
-                ScopeManager scopeManager;
-                curScopeMgr = &scopeManager;
-                scopeManager.enterScope();
-                scopeManager.declare("this", false);
-                for(size_t i = 0; i < funcDec->params.size(); ++i){
-                    const std::string& paramName = funcDec->params[i];
-                    if(scopeManager.declare(paramName, true) == -1){
-                        REPORT_SEMANTIC_ERROR(funcDec->line, funcDec->column, "Duplicate parameter name '%s' in method '%s' of class '%s'", paramName.c_str(), funcDec->name.c_str(), classDec.name.c_str());
-                    }
-                }
-                funcDec->body->accept(*this);
-                scopeManager.exitScope();
-                curProto->localCount = scopeManager.getMaxIndex() + 1;
-                curScopeMgr = nullptr;
-                if(compileClass->methods.find(funcDec->name) != compileClass->methods.end()){
-                    REPORT_SEMANTIC_ERROR(funcDec->line, funcDec->column, "Duplicate instance member '%s' in class '%s'", funcDec->name.c_str(), classDec.name.c_str());
-                }
-                compileClass->methods[funcDec->name] = CompileFunction{curProto->index};
-            } else {
-                REPORT_SEMANTIC_ERROR(member->line, member->column, "Invalid instance member in class '%s'", classDec.name.c_str());
-            }
+            REPORT_SEMANTIC_ERROR(member->line, member->column, "Invalid instance member in class '%s'", classDec.name.c_str());
         }
     }
     module->globalSyms[classDec.name] = {false, std::make_unique<CompileValue>(compileClass)};
@@ -234,11 +195,11 @@ void Translator::visit(AST::BlockStmt& blockStmt) {
             stmt->accept(*this);
         }
     } else {
-        curScopeMgr->enterScope();
+        curScopeMgr.enterScope();
         for(auto& stmt : blockStmt.stmts){
             stmt->accept(*this);
         }
-        curScopeMgr->exitScope();
+        curScopeMgr.exitScope();
     }
 }
 
@@ -293,10 +254,10 @@ void Translator::visit(AST::WhileStmt& whileStmt) {
 void Translator::visit(AST::ForStmt& forStmt) {
     breakPosStack.push({});
     continuePosStack.push({});
-    curScopeMgr->enterScope();
-    uint32_t valSlot = curScopeMgr->declare(forStmt.valVarName, true);
+    curScopeMgr.enterScope();
+    uint32_t valSlot = curScopeMgr.declare(forStmt.valVarName, true);
     if(!forStmt.idxVarName.empty()){
-        uint32_t idxSlot = curScopeMgr->declare(forStmt.idxVarName, true);
+        uint32_t idxSlot = curScopeMgr.declare(forStmt.idxVarName, true);
         if(idxSlot == -1){
             REPORT_SEMANTIC_ERROR(forStmt.line, forStmt.column, "Duplicate index variable '%s' in for loop", forStmt.idxVarName.c_str());
         }
@@ -357,7 +318,7 @@ void Translator::visit(AST::ForStmt& forStmt) {
         breakPosStack.pop();
         continuePosStack.pop();
     }
-    curScopeMgr->exitScope();
+    curScopeMgr.exitScope();
 }
 
 void Translator::visit(AST::ReturnStmt& returnStmt) {
@@ -457,19 +418,22 @@ void Translator::visit(AST::UnaryExp& unaryExp) {
 
 void Translator::visit(AST::CallExp& callExp) {
     if(callExp.caller){
-        if(!nameSpace.empty()){
+        std::string moduleName;
+        if(callExp.caller->type == AST::Exp::ExpType::Identifier){
+            auto* idExp = static_cast<AST::IdentifierExp*>(callExp.caller.get());
+            auto it = aliasToModule.find(idExp->name);
+            if(it != aliasToModule.end()){
+                moduleName = it->second;
+            }
+        }
+        if(!moduleName.empty()){
             for(auto& arg : callExp.args){
                 arg->accept(*this);
             }
-            callExp.caller->accept(*this);
-            // global function
             pushOpcode(Opcode::LoadGlobal);
             uint32_t pos = skip4B();
             pushOpcode(Opcode::Call);
-            // static method or global function
-            std::string funcName = nameSpace.className.empty() ? callExp.funcName : makeGlobalSymbol(nameSpace.className, callExp.funcName);
-            std::string moduleName = nameSpace.moduleAlias.empty() ? "" : aliasToModule[nameSpace.moduleAlias];
-            recordGlobalSym(funcName, moduleName, pos);
+            recordGlobalSym(callExp.funcName, moduleName, pos);
         }else{
             // method call
             for(auto& arg : callExp.args){
@@ -493,17 +457,137 @@ void Translator::visit(AST::CallExp& callExp) {
 }
 
 void Translator::visit(AST::MemberAccessExp& memberAccessExp) {
-    memberAccessExp.object->accept(*this);
-    if(nameSpace.empty()){
-        pushOpcode(Opcode::GetField);
-        uint32_t nameIdx = makeConstIdx(CompileValue(memberAccessExp.member));
-        push4B(nameIdx);
-    } else {
-        pushOpcode(Opcode::GetField);
-        uint32_t pos = skip4B();
-        std::string className = nameSpace.className.empty() ? memberAccessExp.member : makeGlobalSymbol(nameSpace.className, memberAccessExp.member);
-        recordGlobalSym(className, nameSpace.moduleAlias.empty() ? "" : aliasToModule[nameSpace.moduleAlias], pos);
+    std::string moduleName;
+    if(memberAccessExp.object->type == AST::Exp::ExpType::Identifier){
+        auto* idExp = static_cast<AST::IdentifierExp*>(memberAccessExp.object.get());
+        auto it = aliasToModule.find(idExp->name);
+        if(it != aliasToModule.end()){
+            moduleName = it->second;
+        }
     }
+    if(!moduleName.empty()){
+        pushOpcode(Opcode::LoadGlobal);
+        uint32_t pos = skip4B();
+        recordGlobalSym(memberAccessExp.member, moduleName, pos);
+    } else {
+        memberAccessExp.object->accept(*this);
+        uint32_t memberIdx = makeConstIdx(CompileValue(memberAccessExp.member));
+        pushOpcode(Opcode::GetField);
+        push4B(memberIdx);
+    }
+}
+
+void Translator::visit(AST::IndexAccessExp& indexAccessExp) {
+    indexAccessExp.object->accept(*this);
+    indexAccessExp.index->accept(*this);
+    pushOpcode(Opcode::IndexGet);
+}
+
+void Translator::visit(AST::AssignExp& assignExp) {
+    if(assignExp.target->type == AST::Exp::ExpType::Identifier){
+        auto* idExp = static_cast<AST::IdentifierExp*>(assignExp.target.get());
+        assignExp.value->accept(*this);
+        auto* varSym = curScopeMgr.resolve(idExp->name);
+        if(varSym){
+            if(!varSym->isMutable){
+                REPORT_SEMANTIC_ERROR(assignExp.line, assignExp.column, "Cannot assign to immutable variable '%s'", idExp->name.c_str());
+            }
+            pushOpcode(Opcode::StoreVar);
+            push4B(varSym->index);
+        }else{
+            pushOpcode(Opcode::StoreGlobal);
+            uint32_t pos = skip4B();
+            recordGlobalSym(idExp->name, "", pos);
+        }
+    } else if(assignExp.target->type == AST::Exp::ExpType::MemberAccess){
+        auto* memberAccess = static_cast<AST::MemberAccessExp*>(assignExp.target.get());
+        std::string moduleName;
+        if(memberAccess->object->type == AST::Exp::ExpType::Identifier){
+            auto* idExp = static_cast<AST::IdentifierExp*>(memberAccess->object.get());
+            auto it = aliasToModule.find(idExp->name);
+            if(it != aliasToModule.end()){
+                moduleName = it->second;
+            }
+        }
+        if(!moduleName.empty()){
+            assignExp.value->accept(*this);
+            pushOpcode(Opcode::StoreGlobal);
+            uint32_t pos = skip4B();
+            recordGlobalSym(memberAccess->member, moduleName, pos);
+        } else {
+            memberAccess->object->accept(*this);
+            assignExp.value->accept(*this);
+            uint32_t memberIdx = makeConstIdx(CompileValue(memberAccess->member));
+            pushOpcode(Opcode::SetField);
+            push4B(memberIdx);
+        }
+    } else if(assignExp.target->type == AST::Exp::ExpType::IndexAccess){
+        auto* indexAccess = static_cast<AST::IndexAccessExp*>(assignExp.target.get());
+        indexAccess->object->accept(*this);
+        indexAccess->index->accept(*this);
+        assignExp.value->accept(*this);
+        pushOpcode(Opcode::IndexSet);
+    } else {
+        REPORT_SEMANTIC_ERROR(assignExp.line, assignExp.column, "Invalid assignment target");
+    }
+}
+
+void Translator::visit(AST::IdentifierExp& identifierExp) {
+    auto* varSym = curScopeMgr.resolve(identifierExp.name);
+    if(varSym){
+        pushOpcode(Opcode::LoadVar);
+        push4B(varSym->index);
+    }else{
+        pushOpcode(Opcode::LoadGlobal);
+        uint32_t pos = skip4B();
+        recordGlobalSym(identifierExp.name, "", pos);
+    }
+}
+
+void Translator::visit(AST::ThisExp& thisExp) {
+    pushOpcode(Opcode::LoadVar);
+    push4B(0); // "this" is always at slot 0
+    if(!inMethod){
+        REPORT_SEMANTIC_ERROR(thisExp.line, thisExp.column, "'this' can only be used in methods");
+    }
+}
+
+void Translator::visit(AST::IntLitExp& intLitExp) {
+    isConstExpr = true;
+    value = std::make_unique<CompileValue>(intLitExp.value);
+}
+
+void Translator::visit(AST::FloatLitExp& floatLitExp) {
+    isConstExpr = true;
+    value = std::make_unique<CompileValue>(floatLitExp.value);
+}
+
+void Translator::visit(AST::StrLitExp& strLitExp) {
+    isConstExpr = true;
+    value = std::make_unique<CompileValue>(strLitExp.value);
+}
+
+void Translator::visit(AST::BoolLitExp& boolLitExp) {
+    isConstExpr = true;
+    value = std::make_unique<CompileValue>(boolLitExp.value);
+}
+
+void Translator::visit(AST::NullLitExp& nullLitExp) {
+    isConstExpr = true;
+    value = std::make_unique<CompileValue>();
+}
+
+void Translator::visit(AST::ArrayLitExp& arrayLitExp) {
+    isConstExpr = true;
+    auto arr = new std::vector<CompileValue>();
+    for(auto& elem : arrayLitExp.elements){
+        elem->accept(*this);
+        if(!isConstExpr){
+            REPORT_SEMANTIC_ERROR(elem->line, elem->column, "Array literal elements must be constant expressions");
+        }
+        arr->push_back(*value);
+    }
+    value = std::make_unique<CompileValue>(arr);
 }
 
 } // namespace Zeta

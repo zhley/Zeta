@@ -69,7 +69,7 @@ public:
     ACCEPT
     std::string name;
     std::string base;
-    std::vector<std::pair<bool, std::unique_ptr<Dec>>> members; // true: static
+    std::vector<std::unique_ptr<Dec>> members;
 
     ClassDec() { type = DecType::Class; }
 };
@@ -164,6 +164,8 @@ public:
     std::unique_ptr<Exp> cond;
     std::unique_ptr<Exp> thenBranch;
     std::unique_ptr<Exp> elseBranch;
+
+    ConditionalExp() { type = ExpType::Conditional; }
 };
 
 class BinaryExp: public Exp {
@@ -177,6 +179,8 @@ public:
     } op;
     std::unique_ptr<Exp> left;
     std::unique_ptr<Exp> right;
+
+    BinaryExp() { type = ExpType::Binary; }
 };
 
 class UnaryExp: public Exp {
@@ -186,6 +190,8 @@ public:
         Neg, Not, BitNot
     } op;
     std::unique_ptr<Exp> operand;
+
+    UnaryExp() { type = ExpType::Unary; }
 };
 
 class CallExp: public Exp {
@@ -194,6 +200,8 @@ public:
     std::unique_ptr<Exp> caller; // empty for normal function call
     std::string funcName;
     std::vector<std::unique_ptr<Exp>> args;
+
+    CallExp() { type = ExpType::Call; }
 };
 
 class MemberAccessExp: public Exp {
@@ -201,6 +209,8 @@ public:
     ACCEPT
     std::unique_ptr<Exp> object;
     std::string member;
+
+    MemberAccessExp() { type = ExpType::MemberAccess; }
 };
 
 class IndexAccessExp: public Exp {
@@ -208,6 +218,8 @@ public:
     ACCEPT
     std::unique_ptr<Exp> object;
     std::unique_ptr<Exp> index;
+
+    IndexAccessExp() { type = ExpType::IndexAccess; }
 };
 
 class AssignExp: public Exp {
@@ -220,17 +232,23 @@ public:
     } op;
     std::unique_ptr<Exp> target;
     std::unique_ptr<Exp> value;
+
+    AssignExp() { type = ExpType::Assign; }
 };
 
 class IdentifierExp: public Exp {
 public:
     ACCEPT
     std::string name;
+
+    IdentifierExp() { type = ExpType::Identifier; }
 };
 
 class ThisExp: public Exp {
 public:
     ACCEPT
+
+    ThisExp() { type = ExpType::This; }
 };
 
 class LiteralExp: public Exp {
@@ -244,41 +262,55 @@ class IntLitExp: public LiteralExp {
 public:
     ACCEPT
     int64_t value;
+
+    IntLitExp() { Exp::type = ExpType::Literal; type = LiteralType::Int; }
 };
 
 class FloatLitExp: public LiteralExp {
 public:
     ACCEPT
     double value;
+
+    FloatLitExp() { Exp::type = ExpType::Literal; type = LiteralType::Float; }
 };
 
 class StrLitExp: public LiteralExp {
 public:
     ACCEPT
     std::string value;
+
+    StrLitExp() { Exp::type = ExpType::Literal; type = LiteralType::Str; }
 };
 
 class BoolLitExp: public LiteralExp {
 public:
     ACCEPT
     bool value;
+
+    BoolLitExp() { Exp::type = ExpType::Literal; type = LiteralType::Bool; }
 };
 
 class NullLitExp: public LiteralExp {
 public:
     ACCEPT
+
+    NullLitExp() { Exp::type = ExpType::Literal; type = LiteralType::Null; }
 };
 
 class ArrayLitExp: public LiteralExp {
 public:
     ACCEPT
     std::vector<std::unique_ptr<Exp>> elements;
+
+    ArrayLitExp() { Exp::type = ExpType::Literal; type = LiteralType::Array; }
 };
 
 class MapLitExp: public LiteralExp {
 public:
     ACCEPT
     std::vector<std::pair<std::string, std::unique_ptr<Exp>>> entries;
+
+    MapLitExp() { Exp::type = ExpType::Literal; type = LiteralType::Map; }
 };
 
 class FuncLitExp: public LiteralExp {
@@ -286,6 +318,8 @@ public:
     ACCEPT
     std::vector<std::string> params;
     std::unique_ptr<BlockStmt> body;
+
+    FuncLitExp() { Exp::type = ExpType::Literal; type = LiteralType::Func; }
 };
 
 } // namespace AST

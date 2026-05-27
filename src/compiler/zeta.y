@@ -52,7 +52,7 @@
 %token <AssignOp> ASSIGN
 %token <std::string> ID STR
 %token NULL_
-%token VAR LET FN RETURN IF ELSE WHILE FOR BREAK CONTINUE CLASS EXTENDS THIS STATIC IMPORT AS
+%token VAR LET FN RETURN IF ELSE WHILE FOR BREAK CONTINUE CLASS EXTENDS THIS IMPORT AS
 %token AND OR LSHIFT RSHIFT SEMI DOT COMMA COLON QMARK LP RP LB RB LC RC PLUS MINUS STAR DIV MOD NOT BITAND BITOR BITXOR BITNOT
 
 %right ASSIGN 
@@ -130,10 +130,8 @@ ClassDec: CLASS ID LC ClassBody RC { auto c = std::make_unique<ClassDec>(); c->n
     | CLASS ID EXTENDS ID LC ClassBody RC { auto c = std::make_unique<ClassDec>(); c->name = std::move($2); c->base = std::move($4); c->members = std::move($6); $$ = std::move(c); }
     | error LC ClassBody RC { $$ = nullptr; }
     ;
-ClassBody: ClassBody VarDec SEMI { for(auto& d: $2) $1.push_back(std::make_pair(false, std::unique_ptr<Dec>(std::move(d)))); $$ = std::move($1); }
-    | ClassBody FuncDec { $1.push_back(std::make_pair(false, std::unique_ptr<Dec>(std::move($2)))); $$ = std::move($1); }
-    | ClassBody STATIC VarDec SEMI { for(auto& d: $3) $1.push_back(std::make_pair(true, std::unique_ptr<Dec>(std::move(d)))); $$ = std::move($1); }
-    | ClassBody STATIC FuncDec { $1.push_back(std::make_pair(true, std::unique_ptr<Dec>(std::move($3)))); $$ = std::move($1); }
+ClassBody: ClassBody VarDec SEMI { for(auto& d: $2) $1.push_back(std::unique_ptr<Dec>(std::move(d))); $$ = std::move($1); }
+    | ClassBody FuncDec { $1.push_back(std::unique_ptr<Dec>(std::move($2))); $$ = std::move($1); }
     | { $$ = Zeta::ParserTypes::ClassMemberList{}; }
     ;
 

@@ -8,6 +8,7 @@
 #include <stack>
 #include <unordered_map>
 #include <vector>
+#include <algorithm>
 
 namespace Zeta {
 
@@ -26,7 +27,9 @@ public:
     void exitScope();
     uint32_t declare(const std::string& name, bool isMutable);
     const Scope::Sym* resolve(const std::string& name) const;
-
+    void reset();
+    
+    bool empty(){ return scopes.empty(); }
     uint32_t getMaxIndex() const { return maxIndex; }
 
 private:
@@ -76,22 +79,14 @@ private:
     // State
     Module* module = nullptr;
     std::unordered_map<std::string, std::string> aliasToModule; 
-    bool inGlobalScope = true;
     std::unique_ptr<CompileValue> value;
     bool isConstExpr = false;
     Proto* curProto = nullptr;
-    ScopeManager* curScopeMgr = nullptr;
+    bool inMethod = false;
+    ScopeManager curScopeMgr;
 
     std::stack<std::vector<uint32_t>> breakPosStack;
     std::stack<std::vector<uint32_t>> continuePosStack;
-
-    struct NameSpace{
-        std::string moduleAlias;
-        std::string className;
-
-        bool empty() const { return moduleAlias.empty() && className.empty(); }
-    };
-    NameSpace nameSpace;
 
     uint32_t pushOpcode(Opcode opcode) {
         uint32_t offset = curProto->bytecode.size();
