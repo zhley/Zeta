@@ -23,7 +23,6 @@
         using ImportList = std::vector<std::unique_ptr<Zeta::AST::Import>>;
         using DecList = std::vector<std::unique_ptr<Zeta::AST::Dec>>;
         using VarDecList = std::vector<std::unique_ptr<Zeta::AST::VarDec>>;
-        using ClassMemberList = std::vector<std::pair<bool, std::unique_ptr<Zeta::AST::Dec>>>;
         using StmtList = std::vector<std::unique_ptr<Zeta::AST::Stmt>>;
         using ExpList = std::vector<std::unique_ptr<Zeta::AST::Exp>>;
         using MapEntryList = std::vector<std::pair<std::string, std::unique_ptr<Zeta::AST::Exp>>>;
@@ -79,7 +78,7 @@
 %type <Zeta::ParserTypes::ParamList> ParamList
 %type <std::string> Param
 %type <std::unique_ptr<Zeta::AST::ClassDec>> ClassDec
-%type <Zeta::ParserTypes::ClassMemberList> ClassBody
+%type <Zeta::ParserTypes::DecList> ClassBody
 %type <Zeta::ParserTypes::StmtList> StmtList
 %type <std::unique_ptr<Zeta::AST::Stmt>> Stmt
 %type <std::unique_ptr<Zeta::AST::BlockStmt>> BlockStmt
@@ -133,7 +132,7 @@ ClassDec: CLASS ID LC ClassBody RC { auto c = std::make_unique<ClassDec>(); c->n
     ;
 ClassBody: ClassBody VarDec SEMI { for(auto& d: $2) $1.push_back(std::unique_ptr<Dec>(std::move(d))); $$ = std::move($1); }
     | ClassBody FuncDec { $1.push_back(std::unique_ptr<Dec>(std::move($2))); $$ = std::move($1); }
-    | { $$ = Zeta::ParserTypes::ClassMemberList{}; }
+    | { $$ = Zeta::ParserTypes::DecList{}; }
     ;
 
 StmtList: StmtList Stmt { $1.push_back(std::move($2)); $$ = std::move($1); }
@@ -158,24 +157,24 @@ Stmt: VarDec SEMI { auto s = std::make_unique<VarDecStmt>(); s->varDecs = std::m
     | error RC { $$ = nullptr; }
     ;
 
-Exp: Exp QMARK Exp COLON Exp { auto e = std::make_unique<ConditionalExp>(); e->cond = std::move($1); e->thenBranch = std::move($3); e->elseBranch = std::move($5); e = tryExpFold(std::move(e)); $$ = std::move(e); }
+Exp: Exp QMARK Exp COLON Exp { auto e = std::make_unique<ConditionalExp>(); e->cond = std::move($1); e->thenBranch = std::move($3); e->elseBranch = std::move($5); $$ = tryExpFold(std::move(e)); }
     | Exp ASSIGN Exp { auto e = std::make_unique<AssignExp>(); e->op = toAssignOp($2); e->target = std::move($1); e->value = std::move($3); $$ = std::move(e); }
-    | Exp RELOP Exp { auto e = std::make_unique<BinaryExp>(); e->op = relopToBinaryOp($2); e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
-    | Exp AND Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::And; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
-    | Exp OR Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Or; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
-    | Exp LSHIFT Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Shl; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
-    | Exp RSHIFT Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Shr; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
-    | Exp PLUS Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Add; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
-    | Exp MINUS Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Sub; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
-    | Exp STAR Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Mul; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
-    | Exp DIV Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Div; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
-    | Exp MOD Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Mod; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
-    | Exp BITAND Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::BitAnd; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
-    | Exp BITOR Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::BitOr; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
-    | Exp BITXOR Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::BitXor; e->left = std::move($1); e->right = std::move($3); e = tryExpFold(std::move(e)); $$ = std::move(e); }
-    | MINUS Exp %prec MINUS_S { auto e = std::make_unique<UnaryExp>(); e->op = UnaryExp::Op::Neg; e->operand = std::move($2); e = tryExpFold(std::move(e)); $$ = std::move(e); }
-    | NOT Exp { auto e = std::make_unique<UnaryExp>(); e->op = UnaryExp::Op::Not; e->operand = std::move($2); e = tryExpFold(std::move(e)); $$ = std::move(e); }
-    | BITNOT Exp { auto e = std::make_unique<UnaryExp>(); e->op = UnaryExp::Op::BitNot; e->operand = std::move($2); e = tryExpFold(std::move(e)); $$ = std::move(e); }
+    | Exp RELOP Exp { auto e = std::make_unique<BinaryExp>(); e->op = relopToBinaryOp($2); e->left = std::move($1); e->right = std::move($3); $$ = tryExpFold(std::move(e)); }
+    | Exp AND Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::And; e->left = std::move($1); e->right = std::move($3); $$ = tryExpFold(std::move(e)); }
+    | Exp OR Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Or; e->left = std::move($1); e->right = std::move($3); $$ = tryExpFold(std::move(e)); }
+    | Exp LSHIFT Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Shl; e->left = std::move($1); e->right = std::move($3); $$ = tryExpFold(std::move(e)); }
+    | Exp RSHIFT Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Shr; e->left = std::move($1); e->right = std::move($3); $$ = tryExpFold(std::move(e)); }
+    | Exp PLUS Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Add; e->left = std::move($1); e->right = std::move($3); $$ = tryExpFold(std::move(e)); }
+    | Exp MINUS Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Sub; e->left = std::move($1); e->right = std::move($3); $$ = tryExpFold(std::move(e)); }
+    | Exp STAR Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Mul; e->left = std::move($1); e->right = std::move($3); $$ = tryExpFold(std::move(e)); }
+    | Exp DIV Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Div; e->left = std::move($1); e->right = std::move($3); $$ = tryExpFold(std::move(e)); }
+    | Exp MOD Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Mod; e->left = std::move($1); e->right = std::move($3); $$ = tryExpFold(std::move(e)); }
+    | Exp BITAND Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::BitAnd; e->left = std::move($1); e->right = std::move($3); $$ = tryExpFold(std::move(e)); }
+    | Exp BITOR Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::BitOr; e->left = std::move($1); e->right = std::move($3); $$ = tryExpFold(std::move(e)); }
+    | Exp BITXOR Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::BitXor; e->left = std::move($1); e->right = std::move($3); $$ = tryExpFold(std::move(e)); }
+    | MINUS Exp %prec MINUS_S { auto e = std::make_unique<UnaryExp>(); e->op = UnaryExp::Op::Neg; e->operand = std::move($2); $$ = tryExpFold(std::move(e)); }
+    | NOT Exp { auto e = std::make_unique<UnaryExp>(); e->op = UnaryExp::Op::Not; e->operand = std::move($2); $$ = tryExpFold(std::move(e)); }
+    | BITNOT Exp { auto e = std::make_unique<UnaryExp>(); e->op = UnaryExp::Op::BitNot; e->operand = std::move($2); $$ = tryExpFold(std::move(e)); }
     | LP Exp RP { $$ = std::move($2); }
     | Exp DOT ID LP ArgList RP { auto e = std::make_unique<CallExp>(); e->caller = std::move($1); e->funcName = std::move($3); e->args = std::move($5); $$ = std::move(e); }
     | Exp DOT ID LP RP { auto e = std::make_unique<CallExp>(); e->caller = std::move($1); e->funcName = std::move($3); $$ = std::move(e); }

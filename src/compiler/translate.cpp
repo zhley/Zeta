@@ -102,7 +102,7 @@ void Translator::visit(AST::VarDec& varDec) {
                 REPORT_SEMANTIC_ERROR(varDec.line, varDec.column, "Initializer for global variable '%s' must be a constant expression", varDec.name.c_str());
             }
         }
-        module->globalSyms[varDec.name] = {varDec.isMutable, std::move(value)};
+        module->globalSyms[varDec.name] = {varDec.isMutable, std::move(*value)};
     } else {
         int index = curFunc->scopeMgr.declare(varDec.name, varDec.isMutable);
         if(index == -1){
@@ -121,7 +121,7 @@ void Translator::visit(AST::FuncDec& funcDec) {
         REPORT_SEMANTIC_ERROR(funcDec.line, funcDec.column, "Duplicate global function '%s'", funcDec.name.c_str());
     }
     uint32_t protoIdx = compileFunctionProto(funcDec.params, funcDec.body.get(), false);
-    module->globalSyms[funcDec.name] = {false, std::make_unique<CompileValue>(new CompileFunction{protoIdx})};
+    module->globalSyms[funcDec.name] = {false, CompileValue(new CompileFunction{protoIdx})};
 }
 
 void Translator::visit(AST::ClassDec& classDec) {
@@ -145,7 +145,7 @@ void Translator::visit(AST::ClassDec& classDec) {
             if(compileClass->fields.find(varDec->name) != compileClass->fields.end()){
                 REPORT_SEMANTIC_ERROR(varDec->line, varDec->column, "Duplicate instance member '%s' in class '%s'", varDec->name.c_str(), classDec.name.c_str());
             }
-            compileClass->fields[varDec->name] = std::move(value);
+            compileClass->fields[varDec->name] = std::move(*value);
         } else if(member->type == AST::Dec::DecType::Func){
             auto* funcDec = static_cast<AST::FuncDec*>(member.get());
             uint32_t protoIdx = compileFunctionProto(funcDec->params, funcDec->body.get(), true);
@@ -157,7 +157,7 @@ void Translator::visit(AST::ClassDec& classDec) {
             REPORT_SEMANTIC_ERROR(member->line, member->column, "Invalid instance member in class '%s'", classDec.name.c_str());
         }
     }
-    module->globalSyms[classDec.name] = {false, std::make_unique<CompileValue>(compileClass)};
+    module->globalSyms[classDec.name] = {false, CompileValue(compileClass)};
 }
 
 void Translator::visit(AST::BlockStmt& blockStmt) {

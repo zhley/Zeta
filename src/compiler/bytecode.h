@@ -76,7 +76,7 @@ struct CompileFunction {
 struct CompileClass {
     std::string name;
     std::string base;
-    std::unordered_map<std::string, std::unique_ptr<CompileValue>> fields;
+    std::unordered_map<std::string, CompileValue> fields;
     std::unordered_map<std::string, CompileFunction> methods;
 };
 
@@ -181,7 +181,7 @@ struct CompileValue{
 struct Proto {
     uint32_t index;
     std::vector<uint8_t> bytecode;
-    std::vector<std::unique_ptr<CompileValue>> constants;
+    std::vector<CompileValue> constants;
     int arity = 0;
     int localCount = 0;
     int maxStackSize = 0;
@@ -193,8 +193,8 @@ struct Pos{
 };
 
 struct Symbol{
-    bool isMutable; // for non-external
-    std::unique_ptr<CompileValue> initValue; // for non-external
+    bool isMutable;
+    CompileValue initValue;
     std::vector<Pos> relocations;
 };
 

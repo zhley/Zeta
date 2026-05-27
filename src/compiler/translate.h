@@ -126,13 +126,13 @@ private:
     }
 
     // const
-    uint32_t makeConstIdx(const CompileValue& val) {
+    uint32_t makeConstIdx(CompileValue val) {
         for(size_t i = 0; i < curFunc->proto->constants.size(); ++i){
-            if(*curFunc->proto->constants[i] == val){
+            if(curFunc->proto->constants[i] == val){
                 return i;
             }
         }
-        curFunc->proto->constants.push_back(std::make_unique<CompileValue>(val));
+        curFunc->proto->constants.emplace_back(std::move(val));
         return curFunc->proto->constants.size() - 1;
     }
 
