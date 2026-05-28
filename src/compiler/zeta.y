@@ -1,6 +1,6 @@
 %code requires {
     #include "compiler/ast.h"
-    #include "error.h"
+    #include "compiler/error.h"
 
     #include <memory>
     #include <string>
@@ -45,6 +45,7 @@
 %define api.value.type variant
 %define api.token.constructor
 %define parse.error verbose
+%parse-param { std::unique_ptr<Zeta::AST::Program>& root }
 %token <int64_t> INT
 %token <double> FLOAT
 %token <bool> BOOL
@@ -88,7 +89,7 @@
 %type <std::pair<std::string, std::unique_ptr<Zeta::AST::Exp>>> MapElem
 
 %%
-Program: ImportList DecList { auto p = std::make_unique<Program>(); p->imports = std::move($1); p->decs = std::move($2); $$ = std::move(p); }
+Program: ImportList DecList { auto p = std::make_unique<Program>(); p->imports = std::move($1); p->decs = std::move($2); $$ = std::move(p); root = std::move($$); }
     ;
 
 ImportList: ImportList Import { $1.push_back(std::move($2)); $$ = std::move($1); }
