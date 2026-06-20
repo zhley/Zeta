@@ -10,10 +10,13 @@
 #include <vector>
 
 // TODO: 需要做优化
+// TODO: 计算最大操作数栈深度. 需要做数据流分析, 可以顺便把优化做了
 
 // NOTE: 模块别名和全局符号名可能冲突, 行为: 优先模块别名
 
 // TODO: 构造函数特殊处理, 将其变成返回一个实例的全局函数; 放到运行期处理: 遇到函数调用, 发现栈顶是类, 则调用构造函数.
+
+// TODO: 加入警告
 
 namespace Zeta {
 
@@ -86,7 +89,11 @@ void Translator::visit(AST::Import& import) {
         }
         aliasToModule[import.alias] = import.path;
     }
-    module->imports.push_back(import.path);
+    if(std::find(module->imports.begin(), module->imports.end(), import.path) != module->imports.end()){
+        REPORT_SEMANTIC_ERROR(import.line, import.column, "Redundant import '%s'", import.path.c_str());
+    } else {
+        module->imports.push_back(import.path);
+    }
 }
 
 void Translator::visit(AST::VarDec& varDec) {

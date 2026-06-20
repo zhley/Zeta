@@ -4,6 +4,7 @@
 #include "visitor.h"
 
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <stack>
 #include <unordered_map>

@@ -1,13 +1,14 @@
 #pragma once
 
 #include "utils/utils.h"
+
 #include <cstdint>
 #include <cstring>
 #include <unordered_map>
+#include <vector>
 
 namespace Zeta {
 
-struct Proto;
 struct Object;
 
 struct Value{
@@ -29,6 +30,14 @@ struct Value{
     Value(double f) : type(Type::Float), floatValue(f) {}
     Value(bool b) : type(Type::Bool), intValue(b ? 1 : 0) {}
     Value(Object* obj) : type(Type::Object), ptrValue(obj) {}
+};
+
+struct Routine{
+    std::vector<uint8_t> bytecode;
+    std::vector<Value> constants;
+    uint32_t arity;
+    uint32_t localCount;
+    uint32_t maxStackSize;
 };
 
 struct Object{
@@ -82,10 +91,10 @@ struct Map : public Object {
 };
 
 struct Function : public Object {
-    Proto* proto;
+    Routine* routine;
 
-    Function() : Object(Type::Function), proto(nullptr) {}
-    Function(Proto* p) : Object(Type::Function), proto(p) {}
+    Function() : Object(Type::Function), routine(nullptr) {}
+    Function(Routine* r) : Object(Type::Function), routine(r) {}
 };
 
 struct Class : public Object {

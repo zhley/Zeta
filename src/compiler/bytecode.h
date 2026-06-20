@@ -1,7 +1,5 @@
 #pragma once
 
-#include "vm/value.h"
-
 #include <cstdint>
 #include <memory>
 #include <string>
