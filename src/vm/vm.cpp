@@ -172,12 +172,25 @@ std::filesystem::path VM::searchModuleFile(const std::filesystem::path& basePath
     return {};
 }
 
+String* VM::internString(const std::string& str) {
+    auto it = stringTable.find(str);
+    if(it != stringTable.end()) {
+        return it->second.get();
+    }
+    auto interned = std::make_unique<String>(str.c_str(), str.size());
+    String* internedPtr = interned.get();
+    stringTable[str] = std::move(interned);
+    return internedPtr;
+}
+
 Value VM::makeValue(const CompileValue& compileValue, uint32_t moduleProtoBaseIndex) {
     switch (compileValue.type) {
         case CompileValue::Type::Null: return Value();
         case CompileValue::Type::Int: return Value(compileValue.intValue);
         case CompileValue::Type::Float: return Value(compileValue.floatValue);
         case CompileValue::Type::Bool: return Value(compileValue.boolValue);
+        case CompileValue::Type::String: return Value(internString(*(compileValue.strValue)));
+        
         // TODO: ...
         default: assert(false);
     }

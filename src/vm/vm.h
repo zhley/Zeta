@@ -2,6 +2,7 @@
 
 #include "value.h"
 #include "compiler/bytecode.h"
+#include "gc.h"
 
 #include <unordered_map>
 #include <vector>
@@ -65,7 +66,8 @@ private:
     // memory
     Stack stack;
     std::vector<Value> global;
-    // TODO: Heap
+    std::unique_ptr<GC> gc; // manage heap memory
+    std::unordered_map<std::string, std::unique_ptr<String>> stringTable; // for string interning.
 
     std::vector<StackFrame> stackFrames;
     std::unordered_map<std::string, ModuleInfo> loadedModules; // module path -> module info
@@ -73,12 +75,14 @@ private:
 
     void importModule(const std::filesystem::path& path);
     std::filesystem::path searchModuleFile(const std::filesystem::path& basePath, const std::string& moduleName);
+    
+    String* internString(const std::string& str);
+    
+    Value makeValue(const CompileValue& compileValue, uint32_t moduleProtoBaseIndex);
 
     static void defaultErrorHandler(const Error& error) {
-        fprintf(stdout, "%s: %s\n", error.type == Error::RuntimeError ? "Runtime Error" : "VM Error", error.message.c_str());
+        printf("%s: %s\n", error.type == Error::RuntimeError ? "Runtime Error" : "VM Error", error.message.c_str());
     }
-
-    static Value makeValue(const CompileValue& compileValue, uint32_t moduleProtoBaseIndex);
 };
 
 }

@@ -3,6 +3,7 @@
 #include "utils/utils.h"
 
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <unordered_map>
 #include <vector>
@@ -40,15 +41,20 @@ struct Routine{
     uint32_t maxStackSize;
 };
 
-struct Object{
+struct Object {
     enum class Type : uint8_t {
+        Block, // 8 bytes head + (size - 8) bytes data
         String,
         Array,
         Map,
         Function,
         Class,
         Instance
-    } type;
+    };
+    // head (8 bytes)
+    Type type;
+    int8_t age;
+    int32_t size;
 
     Object(Type t) : type(t) {}
 };
@@ -60,10 +66,13 @@ struct String : public Object {
     uint32_t hash;
 
     String(const char* str, uint32_t len) : Object(Type::String), length(len) {
-        data = new char[len + 1];
+        data = static_cast<char*>(std::malloc(len + 1));
         std::memcpy(data, str, len);
         data[len] = '\0';
         hash = Utils::hashString(data, len);
+    }
+    ~String() {
+        std::free(data);
     }
 };
 
