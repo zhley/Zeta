@@ -53,10 +53,25 @@ struct Object {
     };
     // head (8 bytes)
     Type type;
-    int8_t age;
-    int32_t size;
+    uint8_t age;
+    struct {
+        uint64_t forward: 62;
+        bool marked : 1;
+        bool remembered : 1; // valid for young objects, indicates whether the field corresponding to the object in the old generation is in the remembered set
+    } gcWord; // for GC
 
     Object(Type t) : type(t) {}
+    int getSize() const;
+
+    template<typename F>
+    void trace(F&& f);
+};
+
+struct Block : public Object {
+    int64_t size;
+
+    Block(int64_t size) : Object(Type::Block), size(size) {}
+    void* getData() { return static_cast<void*>(this + 1); }
 };
 
 // immutable string
@@ -119,5 +134,24 @@ struct Instance : public Object {
     Class* cls;
     StringMap<Value> fields;
 };
+
+inline int Object::getSize() const {
+    switch (type) {
+        case Object::Type::Block:       return static_cast<const Block*>(this)->size;
+        case Object::Type::String:      return sizeof(String);
+        case Object::Type::Array:       return sizeof(Array);
+        case Object::Type::Map:         return sizeof(Map);
+        case Object::Type::Function:    return sizeof(Function);
+        case Object::Type::Class:       return sizeof(Class);
+        case Object::Type::Instance:    return sizeof(Instance);
+    }
+}
+
+template<typename F>
+inline void Object::trace(F&& f) {
+    switch (type) {
+        // TODO
+    }
+}
 
 }

@@ -20,6 +20,8 @@ namespace Zeta {
 
 class VM {
 public:
+    friend class GC;
+
     struct Config{
         // KiB
         int initStackSize;

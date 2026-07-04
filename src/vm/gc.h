@@ -23,7 +23,13 @@ class VM;
 老年代:
     采用标记-压缩式算法.
 
-8 字节对齐
+堆区 8 字节对齐
+
+堆区结构:
++------------------------+----------------+----------------+--------------------+
+|         eden           |     from(to)   |     to(from)   |        old         |
++------------------------+----------------+----------------+--------------------+
+
 */
 class GC {
 public:
@@ -33,17 +39,18 @@ public:
     template<typename T, typename... Args>
     T* allocate(Args&&... args) {
         static_assert(std::is_base_of_v<Object, T>);
+        static_assert(!std::is_same_v<T, Block>, "Use allocateBlock() to allocate Block");
         Object* obj = allocateImpl(sizeof(T));
         obj->age = 0;
-        obj->size = sizeof(T);
         return new (obj) T(std::forward<Args>(args)...);
     }
 
-    Object* allocateBlock(int size);
+    Block* allocateBlock(int size);
+    void writeBarrier(Object* src, Object** field, Object* value); // must be called when src->field = value.
 
 private:
     VM* vm;
-    int maxHeapSize;
+    int maxHeapSize; // byte; -1 for unlimited
 
     int heapSize;
     void* heap;
@@ -63,7 +70,18 @@ private:
     void* curEdenPtr;
     void* curOldPtr;
 
+    std::vector<Object**> rememberedSet; // the location of the field in old generation that points to young generation
+
+    bool isYoung(Object* obj);
+    bool isOld(Object* obj);
+    bool inEden(Object* obj);
+    bool inFrom(Object* obj);
+    bool inTo(Object* obj);
+
     Object* allocateImpl(int size);
+    void minorGC();
+    void majorGC();
+    
 };
 
 }
