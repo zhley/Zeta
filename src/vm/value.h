@@ -55,8 +55,9 @@ struct Object {
     Type type;
     uint8_t age;
     struct {
-        uint64_t forward: 62;
+        uint64_t forward: 63;
         bool marked : 1;
+        // TODO: 这个, 不需要了
         bool remembered : 1; // valid for young objects, indicates whether the field corresponding to the object in the old generation is in the remembered set
     } gcWord; // for GC
 
@@ -137,7 +138,7 @@ struct Instance : public Object {
 
 inline int Object::getSize() const {
     switch (type) {
-        case Object::Type::Block:       return static_cast<const Block*>(this)->size;
+        case Object::Type::Block:       return static_cast<const Block*>(this)->size + sizeof(Block);
         case Object::Type::String:      return sizeof(String);
         case Object::Type::Array:       return sizeof(Array);
         case Object::Type::Map:         return sizeof(Map);
