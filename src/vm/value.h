@@ -2,6 +2,7 @@
 
 #include "utils/utils.h"
 
+#include <cassert>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -152,7 +153,7 @@ struct Map : public Object {
 
     template<typename F>
     void forEach(F&& f) const {
-        static_assert(std::is_invocable_v<F, const Value&> || std::is_invocable_v<F, Value>); // TODO: 改用 C++20, 用 requires 约束
+        static_assert(std::is_invocable_v<F, String*, const Value&> || std::is_invocable_v<F, String*, Value>); // TODO: 改用 C++20, 用 requires 约束
         Entry* entries = (Entry*)(data->getData());
         for(uint32_t i = 0; i < capacity; i++){
             if(entries[i].key != EMPTY && entries[i].key != DELETED){
@@ -209,15 +210,46 @@ template<typename F>
 inline void Object::trace(F&& f) {
     static_assert(std::is_invocable_v<F, Object**>); // TODO: 改用 C++20, 用 requires 约束
     switch (type) {
+        case Object::Type::Block: break; // actually, Block may contain references to other objects, but it does not know how to trace them, so they will be traced by the owner of the Block. (The owner of the Block is responsible for tracing the references in the Block.)
+        case Object::Type::String: break; // String has no references to other objects
         case Object::Type::Array: {
             Array* arr = static_cast<Array*>(this);
-            Value* entries = (Value*)(arr->data->getData());
             f(arr->data);
+            // equivalent to arr->data->trace(f)
+            Value* elem = (Value*)(arr->data->getData());
             for(uint32_t i = 0; i < arr->size; i++){
-                f(entries[i]);
+                if(elem->type == Value::Type::Object){
+                    f(&elem->ptrValue);
+                }
             }
             break;
         }
+        case Object::Type::Map: {
+            Map* map = static_cast<Map*>(this);
+            f(map->data);
+            // equivalent to map->data->trace(f)
+            map->forEach([&f](const String* key, const Value& value){
+                if(value.type == Value::Type::Object){
+                    f(&value.ptrValue);
+                }
+            });
+            break;
+        }
+        case Object::Type::Function: break;
+        case Object::Type::Class: {
+            Class* cls = static_cast<Class*>(this);
+            f(&cls->base);
+            f(&cls->fields);
+            f(&cls->methods);
+            break;
+        }
+        case Object::Type::Instance: {
+            Instance* instance = static_cast<Instance*>(this);
+            f(&instance->cls);
+            f(&instance->fields);
+            break;
+        }
+        default: assert(0);
     }
 }
 
