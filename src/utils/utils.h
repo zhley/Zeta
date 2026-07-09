@@ -17,5 +17,21 @@ inline uint32_t hashString(const char* str, uint32_t length) {
     return hash;
 }
 
+
+// Load and store a trivially copyable type T from/to a pointer, ensuring strict aliasing rules are respected.
+// template<typename T>
+// inline T loadPtr(const void* ptr) {
+//     static_assert(std::is_trivially_copyable<T>::value, "Type T must be trivially copyable");
+//     T data;
+//     std::memcpy(&data, ptr, sizeof(T));
+//     return data;
+// }
+
+// template<typename T>
+// inline void storePtr(void* ptr, T data) {
+//     static_assert(std::is_trivially_copyable<T>::value, "Type T must be trivially copyable");
+//     std::memcpy(ptr, &data, sizeof(T));
+// }
+
 }
 }

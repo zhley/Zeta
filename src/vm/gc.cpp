@@ -5,6 +5,8 @@
 
 #include <cassert>
 
+#pragma GCC optimize("no-strict-aliasing")
+
 namespace Zeta {
 
 #define ALIGN8(size) (((size) + 7) & ~7)

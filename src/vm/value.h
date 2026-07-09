@@ -5,12 +5,13 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <unordered_map>
 #include <vector>
 
 namespace Zeta {
 
 struct Object;
+struct String;
+struct GC;
 
 struct Value{
     enum class Type : uint8_t {
@@ -18,12 +19,15 @@ struct Value{
         Int,
         Float,
         Bool,
+        String, // interned string
         Object
     } type = Type::Null;
     union {
         int64_t intValue;
         double floatValue;
         Object* ptrValue;
+        String* strValue;
+        uint64_t val;
     };
 
     Value() : type(Type::Null) {}
@@ -31,6 +35,8 @@ struct Value{
     Value(double f) : type(Type::Float), floatValue(f) {}
     Value(bool b) : type(Type::Bool), intValue(b ? 1 : 0) {}
     Value(Object* obj) : type(Type::Object), ptrValue(obj) {}
+    Value(String* str) : type(Type::String), strValue(str) {}
+    Value(const Value& other) : type(other.type), val(other.val) {}
 };
 
 struct Routine{
@@ -41,6 +47,7 @@ struct Routine{
     uint32_t maxStackSize;
 };
 
+// allocated on heap, managed by GC
 struct Object {
     enum class Type : uint8_t {
         Block, // 8 bytes head + (size - 8) bytes data
@@ -51,14 +58,15 @@ struct Object {
         Class,
         Instance
     };
+
+    static GC* gc;
+
     // head (8 bytes)
     Type type;
     uint8_t age;
     struct {
         uint64_t forward: 63;
         bool marked : 1;
-        // TODO: 这个, 不需要了
-        bool remembered : 1; // valid for young objects, indicates whether the field corresponding to the object in the old generation is in the remembered set
     } gcWord; // for GC
 
     Object(Type t) : type(t) {}
@@ -68,11 +76,17 @@ struct Object {
     void trace(F&& f);
 };
 
+// Block can only be allocated by GC::allocateBlock().
 struct Block : public Object {
-    int64_t size;
+    friend class GC;
 
+    int64_t size; // size of the valid data, exclude the size of the Block instance itself.
+
+    void* getData() { return static_cast<void*>(this + 1); } // 8 bytes alignment
+    
+private:
+    Block() = delete;
     Block(int64_t size) : Object(Type::Block), size(size) {}
-    void* getData() { return static_cast<void*>(this + 1); }
 };
 
 // immutable string
@@ -93,26 +107,69 @@ struct String : public Object {
 };
 
 struct Array : public Object {
-    Value* elements;
-    uint32_t length;
-};
+    uint32_t size;
+    uint32_t capacity;
+    Block* data;
 
-struct StringHash {
-    size_t operator()(const String* str) const {
-        return str->hash;
+    Array();
+    Array(uint32_t size);
+
+    void add(const Value& value);
+    void set(uint32_t index, const Value& value);
+    Value get(uint32_t index) const;
+
+    // function f should not modify the array because write barrier must be called when elements are modified.
+    template<typename F>
+    void forEach(F&& f) const {
+        static_assert(std::is_invocable_v<F, const Value&> || std::is_invocable_v<F, Value>); // TODO: 改用 C++20, 用 requires 约束
+        Value* entries = (Value*)(data->getData());
+        for(uint32_t i = 0; i < size; i++){
+            f(entries[i]);
+        }
     }
 };
-struct StringEqual {
-    bool operator()(const String* a, const String* b) const {
+
+struct Map : public Object {
+    struct Entry {
+        String* key;
+        Value value;
+    };
+    
+    Block* data;
+    uint32_t capacity;
+    uint32_t size;
+    uint32_t deletedCnt;
+
+    inline static String* const EMPTY = nullptr;
+    inline static String* const DELETED = reinterpret_cast<String*>(0x1);
+
+    Map();
+    Map(uint32_t capacity);
+    void set(String* key, const Value& value);
+    Value get(String* key) const;
+    bool contains(String* key) const;
+    bool remove(String* key);
+
+    template<typename F>
+    void forEach(F&& f) const {
+        static_assert(std::is_invocable_v<F, const Value&> || std::is_invocable_v<F, Value>); // TODO: 改用 C++20, 用 requires 约束
+        Entry* entries = (Entry*)(data->getData());
+        for(uint32_t i = 0; i < capacity; i++){
+            if(entries[i].key != EMPTY && entries[i].key != DELETED){
+                f(entries[i].key, entries[i].value);
+            }
+        }
+    }
+
+    static uint32_t hash(const String* str) {
+        return str->hash;
+    }
+    static bool equal(const String* a, const String* b) {
         // String interning ensures that the second path is generally not triggered
         return a == b || (a->length == b->length && std::memcmp(a->data, b->data, a->length) == 0); 
     }
-};
-template <typename T>
-using StringMap = std::unordered_map<String*, T, StringHash, StringEqual>;
-
-struct Map : public Object {
-    StringMap<Value> entries;
+private:
+    void rehash(uint32_t newCapacity);
 };
 
 struct Function : public Object {
@@ -125,15 +182,15 @@ struct Function : public Object {
 struct Class : public Object {
     String* name;
     Class* base;
-    StringMap<Value> fields; // field name -> default value
-    StringMap<Value> methods;
-
+    Map* fields; // field name -> default value
+    Map* methods;
+      
     Class() : Object(Type::Class), name(nullptr), base(nullptr) {}
 };
 
 struct Instance : public Object {
     Class* cls;
-    StringMap<Value> fields;
+    Map* fields; // field name -> value
 };
 
 inline int Object::getSize() const {
@@ -150,8 +207,17 @@ inline int Object::getSize() const {
 
 template<typename F>
 inline void Object::trace(F&& f) {
+    static_assert(std::is_invocable_v<F, Object**>); // TODO: 改用 C++20, 用 requires 约束
     switch (type) {
-        // TODO
+        case Object::Type::Array: {
+            Array* arr = static_cast<Array*>(this);
+            Value* entries = (Value*)(arr->data->getData());
+            f(arr->data);
+            for(uint32_t i = 0; i < arr->size; i++){
+                f(entries[i]);
+            }
+            break;
+        }
     }
 }
 

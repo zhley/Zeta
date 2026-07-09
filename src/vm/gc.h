@@ -10,8 +10,7 @@ class VM;
 
 //=== Hash set for rememberedSet ===
 class PointerHashSet {
-#define EMPTY nullptr
-#define DELETED (reinterpret_cast<Object**>(0x1))
+
 public:
     explicit PointerHashSet(size_t size) : size(0), deletedCount(0) {
         capacity = 1;
@@ -108,7 +107,10 @@ private:
     size_t size;
     size_t deletedCount;
 
-    static size_t hash(Object** ptr) {
+    inline static Object** const EMPTY = nullptr;
+    inline static Object** const DELETED = reinterpret_cast<Object**>(0x1);
+
+    static size_t hash(void* ptr) {
         return reinterpret_cast<size_t>(ptr) >> 3; // 8-byte alignment
     }
 
@@ -133,9 +135,6 @@ private:
             }
         }
     }
-
-#undef EMPTY
-#undef DELETED
 };
 
 //=== GC ===
@@ -164,7 +163,7 @@ private:
 #define ZETA_GC_EDEN_SCALE 8
 #define ZETA_GC_SURVIVOR_SCALE 2
 #define ZETA_GC_AGE_THRESHOLD 10
-#define ZETA_GC_BIG_OBJECT 256
+#define ZETA_GC_BIG_OBJECT 512
 
 class GC {
 public:
@@ -178,7 +177,6 @@ public:
         Object* obj = allocateImpl(sizeof(T));
         obj->age = 0;
         obj->gcWord.marked = false;
-        obj->gcWord.remembered = false;
         obj->gcWord.forward = 0;
         return new (obj) T(std::forward<Args>(args)...);
     }

@@ -2,10 +2,12 @@
 
 #include "compiler/bytecode.h"
 #include "compiler/compiler.h"
+#include "vm/value.h"
 
 #include <cassert>
 #include <cstdlib>
 #include <filesystem>
+#include <memory>
 #include <system_error>
 
 // NOTE: VM 不会校验编译模块的合法性, 假设所有输入的模块都是合法的, 任何不合预期的模块输入都使用断言终止
@@ -26,6 +28,8 @@ VM::VM(Config config, ErrorHandler handler) : config(config), errorHandler(handl
             errorHandler({Error::Type::VMError, "Invalid module search path: " + path + " <" + ec.message() + ">"});
         }
     }
+    gc = std::make_unique<GC>(this);
+    Object::gc = gc.get();
 }
 
 VM::~VM() {
