@@ -29,7 +29,6 @@ VM::VM(Config config, ErrorHandler handler) : config(config), errorHandler(handl
         }
     }
     gc = std::make_unique<GC>(this);
-    Object::gc = gc.get();
 }
 
 VM::~VM() {

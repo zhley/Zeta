@@ -60,8 +60,6 @@ struct Object {
         Instance
     };
 
-    static GC* gc;
-
     // head (8 bytes)
     Type type;
     uint8_t age;
@@ -91,6 +89,7 @@ private:
 };
 
 // immutable string
+// TODO: 这个是VM直接管理的字符串, GC管理的字符串要改实现
 struct String : public Object {
     char* data;
     uint32_t length;
@@ -111,9 +110,10 @@ struct Array : public Object {
     uint32_t size;
     uint32_t capacity;
     Block* data;
+    GC* gc;
 
-    Array();
-    Array(uint32_t size);
+    Array(GC* gc);
+    Array(GC* gc, uint32_t size);
 
     void add(const Value& value);
     void set(uint32_t index, const Value& value);
@@ -140,12 +140,13 @@ struct Map : public Object {
     uint32_t capacity;
     uint32_t size;
     uint32_t deletedCnt;
+    GC* gc;
 
     inline static String* const EMPTY = nullptr;
     inline static String* const DELETED = reinterpret_cast<String*>(0x1);
 
-    Map();
-    Map(uint32_t capacity);
+    Map(GC* gc);
+    Map(GC* gc, uint32_t capacity);
     void set(String* key, const Value& value);
     Value get(String* key) const;
     bool contains(String* key) const;
@@ -204,6 +205,7 @@ inline int Object::getSize() const {
         case Object::Type::Class:       return sizeof(Class);
         case Object::Type::Instance:    return sizeof(Instance);
     }
+    return 0;
 }
 
 template<typename F>
@@ -214,7 +216,7 @@ inline void Object::trace(F&& f) {
         case Object::Type::String: break; // String has no references to other objects
         case Object::Type::Array: {
             Array* arr = static_cast<Array*>(this);
-            f(arr->data);
+            f((Object**)(&(arr->data)));
             // equivalent to arr->data->trace(f)
             Value* elem = (Value*)(arr->data->getData());
             for(uint32_t i = 0; i < arr->size; i++){
@@ -226,9 +228,9 @@ inline void Object::trace(F&& f) {
         }
         case Object::Type::Map: {
             Map* map = static_cast<Map*>(this);
-            f(map->data);
+            f((Object**)(&(map->data)));
             // equivalent to map->data->trace(f)
-            map->forEach([&f](const String* key, const Value& value){
+            map->forEach([&f](const String* key, Value value){
                 if(value.type == Value::Type::Object){
                     f(&value.ptrValue);
                 }
@@ -238,15 +240,15 @@ inline void Object::trace(F&& f) {
         case Object::Type::Function: break;
         case Object::Type::Class: {
             Class* cls = static_cast<Class*>(this);
-            f(&cls->base);
-            f(&cls->fields);
-            f(&cls->methods);
+            f((Object**)(&(cls->base)));
+            f((Object**)(&(cls->fields)));
+            f((Object**)(&(cls->methods)));
             break;
         }
         case Object::Type::Instance: {
             Instance* instance = static_cast<Instance*>(this);
-            f(&instance->cls);
-            f(&instance->fields);
+            f((Object**)(&(instance->cls)));
+            f((Object**)(&(instance->fields)));
             break;
         }
         default: assert(0);

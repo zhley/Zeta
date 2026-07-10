@@ -1,22 +1,23 @@
 #include "value.h"
 
 #include "gc.h"
+
 #include <cassert>
 #include <cstring>
 
 namespace Zeta {
 
 // Array
-Array::Array() : Object(Object::Type::Array), size(0), capacity(8){
-    Block* blk = Object::gc->allocateBlock(capacity * sizeof(Value));
-    Object::gc->writeBarrier(this, (Object**)(&data), blk);
+Array::Array(GC* gc) : Object(Object::Type::Array), size(0), capacity(8), gc(gc){
+    Block* blk = gc->allocateBlock(capacity * sizeof(Value));
+    gc->writeBarrier(this, (Object**)(&data), blk);
 }
 
-Array::Array(uint32_t size) : Object(Object::Type::Array), size(size){
+Array::Array(GC* gc, uint32_t size) : Object(Object::Type::Array), size(size), gc(gc){
     capacity = 1;
     while(capacity < size) capacity <<= 1;
-    Block* blk = Object::gc->allocateBlock(capacity * sizeof(Value));
-    Object::gc->writeBarrier(this, (Object**)(&data), blk);
+    Block* blk = gc->allocateBlock(capacity * sizeof(Value));
+    gc->writeBarrier(this, (Object**)(&data), blk);
     Value* ptr = (Value*)(data->getData());
     for(uint32_t i = 0; i < size; i++){
         new (ptr + i) Value();
@@ -26,21 +27,21 @@ Array::Array(uint32_t size) : Object(Object::Type::Array), size(size){
 void Array::add(const Value& value){
     if(size == capacity){
         capacity <<= 1;
-        Block* newData = Object::gc->allocateBlock(capacity * sizeof(Value));
+        Block* newData = gc->allocateBlock(capacity * sizeof(Value));
         for(int i = 0; i < size; i++){
-            Object::gc->writeBarrier(newData, (Value*)(newData->getData()) + i, ((Value*)(data->getData()))[i]);
+            gc->writeBarrier(newData, (Value*)(newData->getData()) + i, ((Value*)(data->getData()))[i]);
         }
-        Object::gc->writeBarrier(this, (Object**)(&data), newData);
+        gc->writeBarrier(this, (Object**)(&data), newData);
     }
     Value* ptr = (Value*)(data->getData());
-    Object::gc->writeBarrier(data, ptr + size, value);
+    gc->writeBarrier(data, ptr + size, value);
     size++;
 }
 
 void Array::set(uint32_t index, const Value& value){
     assert(index < size); // caller should check the index first
     Value* ptr = (Value*)(data->getData());
-    Object::gc->writeBarrier(data, ptr + index, value);
+    gc->writeBarrier(data, ptr + index, value);
 }
 
 Value Array::get(uint32_t index) const{
@@ -50,17 +51,17 @@ Value Array::get(uint32_t index) const{
 }
 
 // Map
-Map::Map() : Object(Object::Type::Map), capacity(8), size(0), deletedCnt(0){
-    Block* blk = Object::gc->allocateBlock(capacity * sizeof(Entry));
-    Object::gc->writeBarrier(this, (Object**)(&data), blk);
+Map::Map(GC* gc) : Object(Object::Type::Map), capacity(8), size(0), deletedCnt(0), gc(gc){
+    Block* blk = gc->allocateBlock(capacity * sizeof(Entry));
+    gc->writeBarrier(this, (Object**)(&data), blk);
     std::memset(data->getData(), 0, data->size);
 } 
 
-Map::Map(uint32_t minCapacity) : Object(Object::Type::Map), capacity(minCapacity), size(0), deletedCnt(0){
+Map::Map(GC* gc, uint32_t minCapacity) : Object(Object::Type::Map), capacity(minCapacity), size(0), deletedCnt(0), gc(gc){
     capacity = 1;
     while(capacity < minCapacity) capacity <<= 1;
-    Block* blk = Object::gc->allocateBlock(capacity * sizeof(Entry));
-    Object::gc->writeBarrier(this, (Object**)(&data), blk);
+    Block* blk = gc->allocateBlock(capacity * sizeof(Entry));
+    gc->writeBarrier(this, (Object**)(&data), blk);
     std::memset(data->getData(), 0, data->size);
 }
 
@@ -73,7 +74,7 @@ void Map::set(String* key, const Value& value){
     Entry* entries = (Entry*)(data->getData());
     while(entries[idx].key != EMPTY){
         if(entries[idx].key == key){
-            Object::gc->writeBarrier(data, &entries[idx].value, value);
+            gc->writeBarrier(data, &entries[idx].value, value);
             return;
         }
         if(firstDeleted == capacity && entries[idx].key == DELETED){
@@ -86,7 +87,7 @@ void Map::set(String* key, const Value& value){
         deletedCnt--;
     }
     entries[idx].key = key;
-    Object::gc->writeBarrier(data, &entries[idx].value, value);
+    gc->writeBarrier(data, &entries[idx].value, value);
     size++;
 }
 
@@ -135,9 +136,9 @@ void Map::rehash(uint32_t newCapacity){
     uint32_t oldCapacity = capacity;
 
     capacity = newCapacity;
-    Block* newData = Object::gc->allocateBlock(capacity * sizeof(Entry));
+    Block* newData = gc->allocateBlock(capacity * sizeof(Entry));
     std::memset(newData->getData(), 0, newData->size);
-    Object::gc->writeBarrier(this, (Object**)(&data), newData);
+    gc->writeBarrier(this, (Object**)(&data), newData);
     Entry* entries = (Entry*)(data->getData());
     size = 0;
     deletedCnt = 0;
@@ -149,7 +150,7 @@ void Map::rehash(uint32_t newCapacity){
                 idx = (idx + 1) & (capacity - 1);
             }
             entries[idx].key = oldEntries[i].key;
-            Object::gc->writeBarrier(data, &entries[idx].value, oldEntries[i].value);
+            gc->writeBarrier(data, &entries[idx].value, oldEntries[i].value);
             size++;
         }
     }
