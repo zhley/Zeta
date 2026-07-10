@@ -85,12 +85,12 @@ void Translator::visit(AST::Program& program) {
 void Translator::visit(AST::Import& import) {
     if(!import.alias.empty()){
         if(aliasToModule.find(import.alias) != aliasToModule.end()){
-            REPORT_SEMANTIC_ERROR(import.line, import.column, "Duplicate alias '%s'", import.alias.c_str());
+            REPORT_SEMANTIC_ERROR(import.line, import.column, "Duplicate alias '{}'", import.alias);
         }
         aliasToModule[import.alias] = import.path;
     }
     if(std::find(module->imports.begin(), module->imports.end(), import.path) != module->imports.end()){
-        REPORT_SEMANTIC_ERROR(import.line, import.column, "Redundant import '%s'", import.path.c_str());
+        REPORT_SEMANTIC_ERROR(import.line, import.column, "Redundant import '{}'", import.path);
     } else {
         module->imports.push_back(import.path);
     }
@@ -99,21 +99,21 @@ void Translator::visit(AST::Import& import) {
 void Translator::visit(AST::VarDec& varDec) {
     if(curFunc->scopeMgr.empty()){
         if(module->globalSyms.find(varDec.name) != module->globalSyms.end()){
-            REPORT_SEMANTIC_ERROR(varDec.line, varDec.column, "Duplicate global variable '%s'", varDec.name.c_str());
+            REPORT_SEMANTIC_ERROR(varDec.line, varDec.column, "Duplicate global variable '{}'", varDec.name);
         }
         std::unique_ptr<CompileValue> value = nullptr;
         if(varDec.init){
             if(varDec.init->type == AST::Exp::ExpType::Literal){
                 value = getValue(static_cast<AST::LiteralExp*>(varDec.init.get()));
             }else{
-                REPORT_SEMANTIC_ERROR(varDec.line, varDec.column, "Initializer for global variable '%s' must be a constant expression", varDec.name.c_str());
+                REPORT_SEMANTIC_ERROR(varDec.line, varDec.column, "Initializer for global variable '{}' must be a constant expression", varDec.name);
             }
         }
         module->globalSyms[varDec.name] = {varDec.isMutable, std::move(*value)};
     } else {
         int index = curFunc->scopeMgr.declare(varDec.name, varDec.isMutable);
         if(index == -1){
-            REPORT_SEMANTIC_ERROR(varDec.line, varDec.column, "Duplicate local variable '%s'", varDec.name.c_str());
+            REPORT_SEMANTIC_ERROR(varDec.line, varDec.column, "Duplicate local variable '{}'", varDec.name);
         }
         if(varDec.init){
             varDec.init->accept(*this);
@@ -125,7 +125,7 @@ void Translator::visit(AST::VarDec& varDec) {
 
 void Translator::visit(AST::FuncDec& funcDec) {
     if(module->globalSyms.find(funcDec.name) != module->globalSyms.end()){
-        REPORT_SEMANTIC_ERROR(funcDec.line, funcDec.column, "Duplicate global function '%s'", funcDec.name.c_str());
+        REPORT_SEMANTIC_ERROR(funcDec.line, funcDec.column, "Duplicate global function '{}'", funcDec.name);
     }
     uint32_t protoIdx = compileFunctionProto(funcDec.params, funcDec.body.get(), false);
     module->globalSyms[funcDec.name] = {false, CompileValue(new CompileFunction{protoIdx})};
@@ -133,7 +133,7 @@ void Translator::visit(AST::FuncDec& funcDec) {
 
 void Translator::visit(AST::ClassDec& classDec) {
     if(module->globalSyms.find(classDec.name) != module->globalSyms.end()){
-        REPORT_SEMANTIC_ERROR(classDec.line, classDec.column, "Duplicate global class '%s'", classDec.name.c_str());
+        REPORT_SEMANTIC_ERROR(classDec.line, classDec.column, "Duplicate global class '{}'", classDec.name);
     }
     CompileClass* compileClass = new CompileClass();
     compileClass->name = classDec.name;
@@ -146,22 +146,22 @@ void Translator::visit(AST::ClassDec& classDec) {
                 if(varDec->init->type == AST::Exp::ExpType::Literal){
                     value = getValue(static_cast<AST::LiteralExp*>(varDec->init.get()));
                 }else{
-                    REPORT_SEMANTIC_ERROR(varDec->line, varDec->column, "Initializer for instance variable '%s' in class '%s' must be a constant expression", varDec->name.c_str(), classDec.name.c_str());
+                    REPORT_SEMANTIC_ERROR(varDec->line, varDec->column, "Initializer for instance variable '{}' in class '{}' must be a constant expression", varDec->name, classDec.name);
                 }
             }
             if(compileClass->fields.find(varDec->name) != compileClass->fields.end()){
-                REPORT_SEMANTIC_ERROR(varDec->line, varDec->column, "Duplicate instance member '%s' in class '%s'", varDec->name.c_str(), classDec.name.c_str());
+                REPORT_SEMANTIC_ERROR(varDec->line, varDec->column, "Duplicate instance member '{}' in class '{}'", varDec->name, classDec.name);
             }
             compileClass->fields[varDec->name] = std::move(*value);
         } else if(member->type == AST::Dec::DecType::Func){
             auto* funcDec = static_cast<AST::FuncDec*>(member.get());
             uint32_t protoIdx = compileFunctionProto(funcDec->params, funcDec->body.get(), true);
             if(compileClass->methods.find(funcDec->name) != compileClass->methods.end()){
-                REPORT_SEMANTIC_ERROR(funcDec->line, funcDec->column, "Duplicate instance member '%s' in class '%s'", funcDec->name.c_str(), classDec.name.c_str());
+                REPORT_SEMANTIC_ERROR(funcDec->line, funcDec->column, "Duplicate instance member '{}' in class '{}'", funcDec->name, classDec.name);
             }
             compileClass->methods[funcDec->name] = CompileFunction{protoIdx};
         } else {
-            REPORT_SEMANTIC_ERROR(member->line, member->column, "Invalid instance member in class '%s'", classDec.name.c_str());
+            REPORT_SEMANTIC_ERROR(member->line, member->column, "Invalid instance member in class '{}'", classDec.name);
         }
     }
     module->globalSyms[classDec.name] = {false, CompileValue(compileClass)};
@@ -237,7 +237,7 @@ void Translator::visit(AST::ForStmt& forStmt) {
     if(!forStmt.idxVarName.empty()){
         uint32_t idxSlot = curFunc->scopeMgr.declare(forStmt.idxVarName, true);
         if(idxSlot == -1){
-            REPORT_SEMANTIC_ERROR(forStmt.line, forStmt.column, "Duplicate index variable '%s' in for loop", forStmt.idxVarName.c_str());
+            REPORT_SEMANTIC_ERROR(forStmt.line, forStmt.column, "Duplicate index variable '{}' in for loop", forStmt.idxVarName);
         }
         forStmt.iterable->accept(*this); // NOTE: iterable 已经是可迭代对象
         uint32_t loopStart = getLabel();
@@ -493,7 +493,7 @@ void Translator::visit(AST::AssignExp& assignExp) {
         auto* varSym = curFunc->scopeMgr.resolve(idExp->name);
         if(varSym){
             if(!varSym->isMutable){
-                REPORT_SEMANTIC_ERROR(assignExp.line, assignExp.column, "Cannot assign to immutable variable '%s'", idExp->name.c_str());
+                REPORT_SEMANTIC_ERROR(assignExp.line, assignExp.column, "Cannot assign to immutable variable '{}'", idExp->name);
             }
             pushOpcode(Opcode::StoreVar);
             push4B(varSym->index);
@@ -672,7 +672,7 @@ uint32_t Translator::compileFunctionProto(const std::vector<std::string>& params
     }
     for(auto& paramName : params){
         if(curFunc->scopeMgr.declare(paramName, true) == -1){
-            REPORT_SEMANTIC_ERROR(body->line, body->column, "Duplicate parameter name '%s' in function literal", paramName.c_str());
+            REPORT_SEMANTIC_ERROR(body->line, body->column, "Duplicate parameter name '{}' in function literal", paramName);
         }
     }
     body->accept(*this);

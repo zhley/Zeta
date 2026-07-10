@@ -1,5 +1,8 @@
 #pragma once
 
+#include <format>
+#include <string>
+
 namespace Zeta {
 
 enum class LogLevel {
@@ -13,7 +16,7 @@ class Logger {
 public:
     static Logger& getInstance();
     void setLevel(LogLevel level);
-    void log(LogLevel level, const char* format, ...);
+    void log(LogLevel level, const std::string& msg);
 
 private:
     Logger();
@@ -27,7 +30,7 @@ private:
 
 } // namespace Zeta
 
-#define ZETA_DEBUG(...) Zeta::Logger::getInstance().log(Zeta::LogLevel::DEBUG, __VA_ARGS__)
-#define ZETA_INFO(...)  Zeta::Logger::getInstance().log(Zeta::LogLevel::INFO,  __VA_ARGS__)
-#define ZETA_WARN(...)  Zeta::Logger::getInstance().log(Zeta::LogLevel::WARN,  __VA_ARGS__)
-#define ZETA_ERROR(...) Zeta::Logger::getInstance().log(Zeta::LogLevel::ERROR, __VA_ARGS__)
+#define ZETA_DEBUG(msg, ...) Zeta::Logger::getInstance().log(Zeta::LogLevel::DEBUG, std::format(msg, ##__VA_ARGS__))
+#define ZETA_INFO(msg, ...)  Zeta::Logger::getInstance().log(Zeta::LogLevel::INFO,  std::format(msg, ##__VA_ARGS__))
+#define ZETA_WARN(msg, ...)  Zeta::Logger::getInstance().log(Zeta::LogLevel::WARN,  std::format(msg, ##__VA_ARGS__))
+#define ZETA_ERROR(msg, ...) Zeta::Logger::getInstance().log(Zeta::LogLevel::ERROR, std::format(msg, ##__VA_ARGS__))

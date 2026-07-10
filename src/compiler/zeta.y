@@ -222,7 +222,7 @@ FuncLit: FN LP ParamList RP BlockStmt { auto f = std::make_unique<FuncLitExp>();
 %%
 
 void Zeta::Parser::error(const std::string& msg) {
-    REPORT_SYNTAX_ERROR(yylineno, yycolumn, msg.c_str());
+    REPORT_SYNTAX_ERROR(yylineno, yycolumn, "{}", msg);
 }
 
 Zeta::AST::AssignExp::Op toAssignOp(AssignOp assignOp) {

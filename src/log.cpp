@@ -1,7 +1,6 @@
 #include "log.h"
 
-#include <cstdarg>
-#include <cstdio>
+#include <iostream>
 
 
 #define COLOR_RESET   "\033[0m"
@@ -43,23 +42,11 @@ const char* Logger::getLevelString(LogLevel level) const {
     }
 }
 
-void Logger::log(LogLevel level, const char* format, ...) {
+void Logger::log(LogLevel level, const std::string& msg) {
     if (level < currentLevel) {
         return;
     }
-
-    fprintf(stderr, "%s[%s]%s ",
-            getLevelColor(level),
-            getLevelString(level),
-            COLOR_RESET);
-
-    va_list args;
-    va_start(args, format);
-    vfprintf(stderr, format, args);
-    va_end(args);
-
-    fprintf(stderr, "\n");
-    fflush(stderr);
+    std::cout << std::format("{}[{}]{} {}\n", getLevelColor(level), getLevelString(level), COLOR_RESET, msg);
 }
 
 } // namespace Zeta

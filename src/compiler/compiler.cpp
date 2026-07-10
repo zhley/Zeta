@@ -12,7 +12,7 @@ namespace Zeta {
 std::unique_ptr<Module> compileModule(const std::string& path, std::string* outError){
     FILE* file = fopen(path.c_str(), "r");
     if(!file){
-        REPORT_SYSTEM_ERROR("Failed to open file '%s'", path.c_str());
+        REPORT_SYSTEM_ERROR("Failed to open file '{}'", path);
         goto ERROR;
     } else {
         yyrestart(file);

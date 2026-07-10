@@ -171,9 +171,8 @@ public:
     ~GC();
 
     template<typename T, typename... Args>
+    requires (std::is_base_of_v<Object, T> && !std::is_same_v<T, Block>)
     T* allocate(Args&&... args) {
-        static_assert(std::is_base_of_v<Object, T>);
-        static_assert(!std::is_same_v<T, Block>, "Use allocateBlock() to allocate Block");
         Object* obj = allocateImpl(sizeof(T));
         obj->age = 0;
         obj->gcWord.marked = false;

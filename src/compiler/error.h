@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <format>
 
 namespace Zeta {
 
@@ -38,11 +39,27 @@ private:
     std::vector<CompileError> errors;
 };
 
-std::string formatString(const char* format, ...);
-
 }
 
-#define REPORT_LEXICAL_ERROR(line, column, msg, ...) Zeta::CompileErrorCollector::get().addError(Zeta::CompileError(Zeta::CompileError::Type::Lexical, line, column, Zeta::formatString(msg, ##__VA_ARGS__)))
-#define REPORT_SYNTAX_ERROR(line, column, msg, ...) Zeta::CompileErrorCollector::get().addError(Zeta::CompileError(Zeta::CompileError::Type::Syntax, line, column, Zeta::formatString(msg, ##__VA_ARGS__)))
-#define REPORT_SEMANTIC_ERROR(line, column, msg, ...) Zeta::CompileErrorCollector::get().addError(Zeta::CompileError(Zeta::CompileError::Type::Semantic, line, column, Zeta::formatString(msg, ##__VA_ARGS__)))
-#define REPORT_SYSTEM_ERROR(msg, ...) Zeta::CompileErrorCollector::get().addError(Zeta::CompileError(Zeta::CompileError::Type::System, 0, 0, Zeta::formatString(msg, ##__VA_ARGS__)))
+template <>
+struct std::formatter<Zeta::CompileError> {
+    constexpr auto parse(std::format_parse_context& ctx) {
+        return ctx.begin(); 
+    }
+    template <typename FormatContext>
+    auto format(const Zeta::CompileError& error, FormatContext& ctx) const {
+        std::string typeStr;
+        switch (error.type) {
+            case Zeta::CompileError::Type::Lexical: typeStr = "Lexical"; break;
+            case Zeta::CompileError::Type::Syntax: typeStr = "Syntax"; break;
+            case Zeta::CompileError::Type::Semantic: typeStr = "Semantic"; break;
+            case Zeta::CompileError::Type::System: typeStr = "System"; break;
+        }
+        return std::format_to(ctx.out(), "[{} Error] Line {}, Column {}: {}", typeStr, error.line, error.column, error.message);
+    }
+};
+
+#define REPORT_LEXICAL_ERROR(line, column, msg, ...) Zeta::CompileErrorCollector::get().addError(Zeta::CompileError(Zeta::CompileError::Type::Lexical, line, column, std::format(msg, ##__VA_ARGS__)))
+#define REPORT_SYNTAX_ERROR(line, column, msg, ...) Zeta::CompileErrorCollector::get().addError(Zeta::CompileError(Zeta::CompileError::Type::Syntax, line, column, std::format(msg, ##__VA_ARGS__)))
+#define REPORT_SEMANTIC_ERROR(line, column, msg, ...) Zeta::CompileErrorCollector::get().addError(Zeta::CompileError(Zeta::CompileError::Type::Semantic, line, column, std::format(msg, ##__VA_ARGS__)))
+#define REPORT_SYSTEM_ERROR(msg, ...) Zeta::CompileErrorCollector::get().addError(Zeta::CompileError(Zeta::CompileError::Type::System, 0, 0, std::format(msg, ##__VA_ARGS__)))

@@ -193,8 +193,10 @@ Value VM::makeValue(const CompileValue& compileValue, uint32_t moduleProtoBaseIn
         case CompileValue::Type::Float: return Value(compileValue.floatValue);
         case CompileValue::Type::Bool: return Value(compileValue.boolValue);
         case CompileValue::Type::String: return Value(internString(*(compileValue.strValue)));
-        
-        // TODO: ...
+        case CompileValue::Type::Array: 
+        case CompileValue::Type::Map:
+        case CompileValue::Type::Function:
+        case CompileValue::Type::Class:
         default: assert(false);
     }
     return Value();

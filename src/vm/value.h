@@ -72,6 +72,7 @@ struct Object {
     int getSize() const;
 
     template<typename F>
+    requires std::is_invocable_v<F, Object**>
     void trace(F&& f);
 };
 
@@ -121,8 +122,8 @@ struct Array : public Object {
 
     // function f should not modify the array because write barrier must be called when elements are modified.
     template<typename F>
+    requires std::is_invocable_v<F, const Value&> || std::is_invocable_v<F, Value>
     void forEach(F&& f) const {
-        static_assert(std::is_invocable_v<F, const Value&> || std::is_invocable_v<F, Value>); // TODO: 改用 C++20, 用 requires 约束
         Value* entries = (Value*)(data->getData());
         for(uint32_t i = 0; i < size; i++){
             f(entries[i]);
@@ -153,8 +154,8 @@ struct Map : public Object {
     bool remove(String* key);
 
     template<typename F>
+    requires std::is_invocable_v<F, String*, const Value&> || std::is_invocable_v<F, String*, Value>
     void forEach(F&& f) const {
-        static_assert(std::is_invocable_v<F, String*, const Value&> || std::is_invocable_v<F, String*, Value>); // TODO: 改用 C++20, 用 requires 约束
         Entry* entries = (Entry*)(data->getData());
         for(uint32_t i = 0; i < capacity; i++){
             if(entries[i].key != EMPTY && entries[i].key != DELETED){
@@ -209,8 +210,8 @@ inline int Object::getSize() const {
 }
 
 template<typename F>
+requires std::is_invocable_v<F, Object**>
 inline void Object::trace(F&& f) {
-    static_assert(std::is_invocable_v<F, Object**>); // TODO: 改用 C++20, 用 requires 约束
     switch (type) {
         case Object::Type::Block: break; // actually, Block may contain references to other objects, but it does not know how to trace them, so they will be traced by the owner of the Block. (The owner of the Block is responsible for tracing the references in the Block.)
         case Object::Type::String: break; // String has no references to other objects

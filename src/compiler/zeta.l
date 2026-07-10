@@ -134,7 +134,7 @@ COMMMENT    (\/\/.*)|(\/\*([^*]|\*+[^\/])*\*\/)
 
 {ID}        { return Zeta::Parser::make_ID(std::string(yytext)); }
 
-.           { REPORT_LEXICAL_ERROR(yylineno, yycolumn, "Misterious character: %s", yytext); return Zeta::Parser::make_YYUNDEF(); }
+.           { REPORT_LEXICAL_ERROR(yylineno, yycolumn, "Misterious character: '{}'", yytext); return Zeta::Parser::make_YYUNDEF(); }
 
 %%
 
