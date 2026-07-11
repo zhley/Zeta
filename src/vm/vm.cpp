@@ -9,6 +9,7 @@
 #include <filesystem>
 #include <memory>
 #include <system_error>
+#include <format>
 
 // NOTE: VM 不会校验编译模块的合法性, 假设所有输入的模块都是合法的, 任何不合预期的模块输入都使用断言终止
 
@@ -25,7 +26,7 @@ VM::VM(Config config, ErrorHandler handler) : config(config), errorHandler(handl
         std::error_code ec;
         std::filesystem::path p = std::filesystem::canonical(path, ec);
         if(ec) {
-            errorHandler({Error::Type::VMError, "Invalid module search path: " + path + " <" + ec.message() + ">"});
+            errorHandler({Error::Type::VMError, std::format("Invalid module search path: \"{}\" <{}>", path, ec.message())});
         }
     }
     gc = std::make_unique<GC>(this);
@@ -54,13 +55,20 @@ void VM::loadModule(const std::string& filePath) {
     std::error_code ec;
     std::filesystem::path path = std::filesystem::canonical(filePath, ec);
     if(ec) {
-        errorHandler({Error::Type::VMError, "Invalid module file path: " + filePath + " <" + ec.message() + ">"});
+        errorHandler({Error::Type::VMError, std::format("Invalid module file path: \"{}\" <{}>", filePath, ec.message())});
         return;
     } else if(!std::filesystem::is_regular_file(path)) {
-        errorHandler({Error::Type::VMError, filePath + " is not a regular file"});
+        errorHandler({Error::Type::VMError, std::format("\"{}\" is not a regular file", filePath)});
         return;
     }
     importModule(path);
+    // base class patching
+    // for(const auto& patch : baseClassPatches) {
+    //     uint32_t idx = loadedModules[patch.moduleName].symbolMap[patch.className];
+    //     Value& classVal = global[idx];
+    //     assert(classVal.type == Value::Type::Object && classVal.ptrValue->type == Object::Type::Class);
+    //     Class* cls = static_cast<Class*>(classVal.ptrValue);
+    // }
 }
 
 void VM::importModule(const std::filesystem::path& path) {
@@ -76,11 +84,69 @@ void VM::importModule(const std::filesystem::path& path) {
     }
     ModuleInfo& moduleInfo = loadedModules[pathStr];
     moduleInfo.protoBaseIndex = routines.size();
+
+    struct BaseClassPatch{
+        std::string className;
+        std::pair<std::string, std::string> baseClassNames;
+    };
+    std::vector<BaseClassPatch> baseClassPatches;
+
+    auto makeValue = [this, &moduleInfo, &baseClassPatches](auto&& self, const CompileValue& compileValue) {
+        switch (compileValue.type) {
+            case CompileValue::Type::Null: return Value();
+            case CompileValue::Type::Int: return Value(compileValue.intValue);
+            case CompileValue::Type::Float: return Value(compileValue.floatValue);
+            case CompileValue::Type::Bool: return Value(compileValue.boolValue);
+            case CompileValue::Type::String: return Value(internString(*(compileValue.strValue)));
+            case CompileValue::Type::Array: {
+                Array* arr = gc->allocate<Array>(gc.get(), compileValue.arrayValue->size());
+                for(int i = 0; i < compileValue.arrayValue->size(); i++) {
+                    arr->set(i, self(self, (*compileValue.arrayValue)[i]));
+                }
+                return Value(arr);
+            }
+            case CompileValue::Type::Map: {
+                Map* map = gc->allocate<Map>(gc.get(), compileValue.mapValue->size());
+                for(const auto& [key, val] : *compileValue.mapValue) {
+                    map->set(internString(key), self(self, val));
+                }
+                return Value(map);
+            }
+            case CompileValue::Type::Function: {
+                uint32_t routineIndex = moduleInfo.protoBaseIndex + compileValue.funcValue->protoIndex;
+                assert(routineIndex < routines.size());
+                Function* func = gc->allocate<Function>();
+                func->routine = routines[routineIndex].get();
+                return Value(func);
+            }
+            case CompileValue::Type::Class: {
+                Class* cls = gc->allocate<Class>();
+                cls->name = internString(compileValue.classValue->name);
+                if(!compileValue.classValue->base.second.empty()){
+                    baseClassPatches.push_back({compileValue.classValue->name, compileValue.classValue->base});
+                }
+                for(const auto& [fieldName, fieldVal] : compileValue.classValue->fields) {
+                    cls->fields->set(internString(fieldName), self(self, fieldVal));
+                }
+                for(const auto& [methodName, methodVal] : compileValue.classValue->methods) {
+                    uint32_t routineIndex = moduleInfo.protoBaseIndex + methodVal.protoIndex;
+                    assert(routineIndex < routines.size());
+                    Function* func = gc->allocate<Function>();
+                    func->routine = routines[routineIndex].get();
+                    cls->methods->set(internString(methodName), Value(func));
+                }
+                return Value(cls);
+            }
+            default: assert(false);
+        }
+        return Value();
+    };
+
     for(auto& proto : module->protos) {
         auto routine = std::make_unique<Routine>();
         routine->bytecode = std::move(proto->bytecode);
         for(const auto& constVal : proto->constants) {
-            routine->constants.push_back(makeValue(constVal, moduleInfo.protoBaseIndex));
+            routine->constants.push_back(makeValue(makeValue, constVal));
         }
         routine->arity = proto->arity;
         routine->localCount = proto->localCount;
@@ -89,7 +155,7 @@ void VM::importModule(const std::filesystem::path& path) {
     }
     for(const auto& [symName, sym] : module->globalSyms) {
         uint32_t index = global.size();
-        global.push_back(makeValue(sym.initValue, moduleInfo.protoBaseIndex));
+        global.push_back(makeValue(makeValue, sym.initValue));
         moduleInfo.symbolMap[symName] = index;
         for(const auto& pos : sym.relocations) {
             uint32_t routineIndex = moduleInfo.getRoutineIndex(pos.protoIndex);
@@ -102,7 +168,7 @@ void VM::importModule(const std::filesystem::path& path) {
     for(const auto& import : module->imports) {
         std::filesystem::path importPath = searchModuleFile(path, import);
         if(importPath.empty()) {
-            errorHandler({Error::Type::VMError, "Failed to find imported module: " + import + " imported by " + pathStr});
+            errorHandler({Error::Type::VMError, std::format("Failed to find imported module: \"{}\" imported by \"{}\"", import, pathStr)});
             return;
         }
         nameToPath.push_back({import, importPath.string()});
@@ -122,7 +188,7 @@ void VM::importModule(const std::filesystem::path& path) {
                 }
             }
             if(!found) {
-                errorHandler({Error::Type::VMError, "Failed to resolve external symbol: " + extSym.name + " in module " + pathStr});
+                errorHandler({Error::Type::VMError, std::format("Failed to resolve external symbol: \"{}\" in module \"{}\"", extSym.name, pathStr)});
                 return;
             }
         } else {
@@ -133,7 +199,7 @@ void VM::importModule(const std::filesystem::path& path) {
             const auto& symMap = loadedModules[it->second].symbolMap;
             auto symIt = symMap.find(extSym.name);
             if(symIt == symMap.end()) {
-                errorHandler({Error::Type::VMError, "Failed to resolve external symbol: " + extSym.name + " in module " + pathStr + " , module " + extSym.moduleName + " does not define the symbol"});
+                errorHandler({Error::Type::VMError, std::format("Failed to resolve external symbol: \"{}\" in module \"{}\", module \"{}\" does not define the symbol", extSym.name, pathStr, extSym.moduleName)});
                 return;
             }
             index = symIt->second;
@@ -144,6 +210,45 @@ void VM::importModule(const std::filesystem::path& path) {
             assert(routineIndex < routines.size() && offset + 4 <= routines[routineIndex]->bytecode.size());
             std::memcpy(routines[routineIndex]->bytecode.data() + offset, &index, 4);
         }
+    }  
+    // base class patch
+    for(const auto& patch : baseClassPatches) {
+        uint32_t idx = moduleInfo.symbolMap[patch.className];
+        Value& classVal = global[idx];
+        assert(classVal.type == Value::Type::Object && classVal.ptrValue->type == Object::Type::Class);
+        Class* cls = static_cast<Class*>(classVal.ptrValue);
+        uint32_t baseIdx;
+        if(patch.baseClassNames.first.empty()) {
+            bool found = false;
+            for(const auto& [import, importPath] : nameToPath) {
+                const auto& symMap = loadedModules[importPath].symbolMap;
+                auto symIt = symMap.find(patch.baseClassNames.second);
+                if(symIt != symMap.end()) {
+                    baseIdx = symIt->second;
+                    found = true;
+                    break;
+                }
+            }
+            if(!found) {
+                errorHandler({Error::Type::VMError, std::format("Failed to resolve base class: \"{}\" for class \"{}\" in module \"{}\"", patch.baseClassNames.second, patch.className, pathStr)});
+                return;
+            }
+        } else {
+            auto it = std::find_if(nameToPath.begin(), nameToPath.end(), [&patch](const std::pair<std::string, std::string>& p) {
+                return p.first == patch.baseClassNames.first;
+            });
+            assert(it != nameToPath.end());
+            const auto& symMap = loadedModules[it->second].symbolMap;
+            auto symIt = symMap.find(patch.baseClassNames.second);
+            if(symIt == symMap.end()) {
+                errorHandler({Error::Type::VMError, std::format("Failed to resolve base class: \"{}\" for class \"{}\" in module \"{}\", module \"{}\" does not define the class", patch.baseClassNames.second, patch.className, pathStr, patch.baseClassNames.first)});
+                return;
+            }
+            baseIdx = symIt->second;
+        }
+        Value& baseVal = global[baseIdx];
+        assert(baseVal.type == Value::Type::Object && baseVal.ptrValue->type == Object::Type::Class);
+        cls->base = static_cast<Class*>(baseVal.ptrValue);
     }
 }
 
@@ -184,22 +289,6 @@ String* VM::internString(const std::string& str) {
     String* internedPtr = interned.get();
     stringTable[str] = std::move(interned);
     return internedPtr;
-}
-
-Value VM::makeValue(const CompileValue& compileValue, uint32_t moduleProtoBaseIndex) {
-    switch (compileValue.type) {
-        case CompileValue::Type::Null: return Value();
-        case CompileValue::Type::Int: return Value(compileValue.intValue);
-        case CompileValue::Type::Float: return Value(compileValue.floatValue);
-        case CompileValue::Type::Bool: return Value(compileValue.boolValue);
-        case CompileValue::Type::String: return Value(internString(*(compileValue.strValue)));
-        case CompileValue::Type::Array: 
-        case CompileValue::Type::Map:
-        case CompileValue::Type::Function:
-        case CompileValue::Type::Class:
-        default: assert(false);
-    }
-    return Value();
 }
 
 }

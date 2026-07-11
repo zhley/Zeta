@@ -73,7 +73,7 @@ struct CompileFunction {
 
 struct CompileClass {
     std::string name;
-    std::string base;
+    std::pair<std::string, std::string> base; // <module_name, class_name>
     std::unordered_map<std::string, CompileValue> fields;
     std::unordered_map<std::string, CompileFunction> methods;
 };

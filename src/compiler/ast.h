@@ -69,7 +69,7 @@ class ClassDec: public Dec {
 public:
     ACCEPT
     std::string name;
-    std::string base;
+    std::pair<std::string, std::string> base;
     std::vector<std::unique_ptr<Dec>> members;
 
     ClassDec() { type = DecType::Class; }

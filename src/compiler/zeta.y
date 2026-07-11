@@ -128,7 +128,8 @@ Param: ID { $$ = std::move($1); }
     ;
 
 ClassDec: CLASS ID LC ClassBody RC { auto c = std::make_unique<ClassDec>(); c->name = std::move($2); c->members = std::move($4); $$ = std::move(c); }
-    | CLASS ID EXTENDS ID LC ClassBody RC { auto c = std::make_unique<ClassDec>(); c->name = std::move($2); c->base = std::move($4); c->members = std::move($6); $$ = std::move(c); }
+    | CLASS ID EXTENDS ID LC ClassBody RC { auto c = std::make_unique<ClassDec>(); c->name = std::move($2); c->base = std::make_pair(std::string(), std::move($4)); c->members = std::move($6); $$ = std::move(c); }
+    | CLASS ID EXTENDS ID DOT ID LC ClassBody RC { auto c = std::make_unique<ClassDec>(); c->name = std::move($2); c->base = std::make_pair(std::move($4), std::move($6)); c->members = std::move($8); $$ = std::move(c); }
     | error LC ClassBody RC { $$ = nullptr; }
     ;
 ClassBody: ClassBody VarDec SEMI { for(auto& d: $2) $1.push_back(std::unique_ptr<Dec>(std::move(d))); $$ = std::move($1); }

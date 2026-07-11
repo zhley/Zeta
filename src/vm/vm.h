@@ -4,12 +4,14 @@
 #include "compiler/bytecode.h"
 #include "gc.h"
 
+#include <iostream>
 #include <unordered_map>
 #include <vector>
 #include <memory>
 #include <string>
 #include <functional>
 #include <filesystem>
+#include <format>
 
 #define ZETA_DEFAULT_INIT_STACK_SIZE 1024
 #define ZETA_DEFAULT_INIT_HEAP_SIZE 1024
@@ -79,11 +81,9 @@ private:
     std::filesystem::path searchModuleFile(const std::filesystem::path& basePath, const std::string& moduleName);
     
     String* internString(const std::string& str);
-    
-    Value makeValue(const CompileValue& compileValue, uint32_t moduleProtoBaseIndex);
 
     static void defaultErrorHandler(const Error& error) {
-        printf("%s: %s\n", error.type == Error::RuntimeError ? "Runtime Error" : "VM Error", error.message.c_str());
+        std::cout << std::format("{}: {}\n", error.type == Error::RuntimeError ? "Runtime Error" : "VM Error", error.message);
     }
 };
 

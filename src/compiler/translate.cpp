@@ -137,7 +137,14 @@ void Translator::visit(AST::ClassDec& classDec) {
     }
     CompileClass* compileClass = new CompileClass();
     compileClass->name = classDec.name;
-    compileClass->base = classDec.base;
+    compileClass->base.second = classDec.base.second;
+    if(!classDec.base.first.empty()){
+        auto it = aliasToModule.find(classDec.base.first);
+        if(it == aliasToModule.end()){
+            REPORT_SEMANTIC_ERROR(classDec.line, classDec.column, "Unknown module alias '{}'", classDec.base.first);
+        }
+        compileClass->base.first = it->second;
+    }
     for(auto& member : classDec.members){
         if(member->type == AST::Dec::DecType::Var){
             auto* varDec = static_cast<AST::VarDec*>(member.get());
