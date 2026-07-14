@@ -176,7 +176,7 @@ bool GC::growHeap(int minSize) {
         }
     }
     for(auto& frame: vm->stackFrames) {
-        for(int i = 0; i < frame.proto->localCount + frame.proto->maxStackSize; ++i) {
+        for(int i = 0; i < frame.routine->localCount + frame.routine->maxStackSize; ++i) {
             Value& v = frame.base[i];
             if(v.type == Value::Type::Object && inHeap(v.ptrValue)) {
                 assert(isOld(v.ptrValue));
@@ -220,7 +220,7 @@ void GC::minorGC() {
         }
     }
     for(auto& frame: vm->stackFrames) {
-        for(int i = 0; i < frame.proto->localCount + frame.proto->maxStackSize; ++i) {
+        for(int i = 0; i < frame.routine->localCount + frame.routine->maxStackSize; ++i) {
             Value& v = frame.base[i];
             if(v.type == Value::Type::Object && isYoung(v.ptrValue)) {
                 roots.push_back(&v.ptrValue);
@@ -340,7 +340,7 @@ void GC::fullGC(){
         }
     }
     for(auto& frame : vm->stackFrames){
-        for(int i = 0; i < frame.proto->localCount + frame.proto->maxStackSize; ++i){
+        for(int i = 0; i < frame.routine->localCount + frame.routine->maxStackSize; ++i){
             Value& v = frame.base[i];
             if (v.type == Value::Type::Object) {
                 roots.push_back(&v.ptrValue);

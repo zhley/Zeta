@@ -63,8 +63,8 @@ enum class Opcode : uint8_t {
 enum class Builtin : uint8_t {
     GetIter,
     IterNext,
-    NewArray,   // count, elem1, elem2, ..., elemN -> array
-    NewMap,     // count, key1, value1, key2, value2, ..., keyN, valueN -> map
+    NewArray,   // elem1, elem2, ..., elemN, count -> array
+    NewMap,     // key1, value1, key2, value2, ..., keyN, valueN, count -> map
 };
 
 struct CompileFunction {

@@ -14,7 +14,9 @@
 
 // NOTE: 模块别名和全局符号名可能冲突, 行为: 优先模块别名
 
-// TODO: 构造函数特殊处理, 将其变成返回一个实例的全局函数; 放到运行期处理: 遇到函数调用, 发现栈顶是类, 则调用构造函数.
+// TODO: 构造函数就是将类名作为函数名进行调用, 返回一个实例; 放到运行期处理: 遇到函数调用, 发现栈顶是类, 则调用方法表中的构造函数.
+// 函数都会返回一个值, 没有返回值的函数自动返回 Null. 构造函数显式返回this, 否则构造出的实例可能保存不下来, 编译器暂时不做检查.
+// 为运行期实现的方便, 每个函数生成的字节码最后一个指令一定是Ret指令, 栈顶为Null, 保证函数返回
 
 // TODO: 加入警告
 
@@ -683,6 +685,9 @@ uint32_t Translator::compileFunctionProto(const std::vector<std::string>& params
         }
     }
     body->accept(*this);
+    pushOpcode(Opcode::LoadConst);
+    push4B(makeConstIdx(CompileValue()));
+    pushOpcode(Opcode::Ret);
     curFunc->scopeMgr.exitScope();
     curFunc->proto->localCount = curFunc->scopeMgr.getMaxIndex() + 1;
     uint32_t protoIdx = curFunc->proto->index;

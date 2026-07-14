@@ -91,16 +91,16 @@ void Map::set(String* key, const Value& value){
     size++;
 }
 
-Value Map::get(String* key) const{
+std::optional<Value> Map::get(String* key) const{
     uint32_t idx = hash(key) & (capacity - 1);
     Entry* entries = (Entry*)(data->getData());
     while(entries[idx].key != EMPTY){
         if(entries[idx].key == key){
-            return entries[idx].value;
+            return std::optional<Value>(entries[idx].value);
         }
         idx = (idx + 1) & (capacity - 1);
     }
-    return Value();
+    return std::nullopt;
 }
 
 bool Map::contains(String* key) const {
@@ -154,6 +154,23 @@ void Map::rehash(uint32_t newCapacity){
             size++;
         }
     }
+}
+
+// Class
+Class::Class(GC* gc, String* name, Class* base, Map* fields, Map* methods) : Object(Object::Type::Class), name(name) {
+    gc->writeBarrier(this, (Object**)(&this->base), base);
+    gc->writeBarrier(this, (Object**)(&this->fields), fields);
+    gc->writeBarrier(this, (Object**)(&this->methods), methods);
+}
+
+// Instance
+Instance::Instance(GC* gc, Class* cls) : Object(Object::Type::Instance) {
+    gc->writeBarrier(this, (Object**)(&this->cls), cls);
+    Map* fields = gc->allocate<Map>(gc, cls->fields->size);
+    cls->fields->forEach([&fields](String* key, const Value& value){
+        fields->set(key, value);
+    });
+    gc->writeBarrier(this, (Object**)(&this->fields), fields);
 }
 
 }

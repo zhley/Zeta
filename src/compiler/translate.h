@@ -116,7 +116,6 @@ private:
         return curFunc->proto->bytecode.size() - 4;
     }
 
-    // TODO: 最终字节码最后需要追加一个空操作保证标签不越界
     uint32_t getLabel() {
         return curFunc->proto->bytecode.size();
     }

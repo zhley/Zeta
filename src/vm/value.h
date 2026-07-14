@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <optional>
 #include <vector>
 
 namespace Zeta {
@@ -25,6 +26,7 @@ struct Value{
     } type = Type::Null;
     union {
         int64_t intValue;
+        bool boolValue;
         double floatValue;
         Object* ptrValue;
         String* strValue;
@@ -34,7 +36,7 @@ struct Value{
     Value() : type(Type::Null) {}
     Value(int64_t i) : type(Type::Int), intValue(i) {}
     Value(double f) : type(Type::Float), floatValue(f) {}
-    Value(bool b) : type(Type::Bool), intValue(b ? 1 : 0) {}
+    Value(bool b) : type(Type::Bool), boolValue(b) {}
     Value(Object* obj) : type(Type::Object), ptrValue(obj) {}
     Value(String* str) : type(Type::String), strValue(str) {}
     Value(const Value& other) : type(other.type), val(other.val) {}
@@ -90,7 +92,8 @@ private:
 };
 
 // immutable string
-// TODO: 这个是VM直接管理的字符串, GC管理的字符串要改实现
+// TODO: 这个是VM直接管理的字符串, GC管理的字符串要改实现. 目前 String* 都是VM直接管理的常量字符串
+// TODO: 实现对象级字符串后, VM::execute()的一些指令逻辑要改
 struct String : public Object {
     char* data;
     uint32_t length;
@@ -149,7 +152,7 @@ struct Map : public Object {
     Map(GC* gc);
     Map(GC* gc, uint32_t capacity);
     void set(String* key, const Value& value);
-    Value get(String* key) const;
+    std::optional<Value> get(String* key) const;
     bool contains(String* key) const;
     bool remove(String* key);
 
@@ -188,12 +191,14 @@ struct Class : public Object {
     Map* fields; // field name -> default value
     Map* methods;
       
-    Class() : Object(Type::Class), name(nullptr), base(nullptr) {}
+    Class(GC* gc, String* name, Class* base, Map* fields, Map* methods);
 };
 
 struct Instance : public Object {
     Class* cls;
     Map* fields; // field name -> value
+
+    Instance(GC* gc, Class* cls);
 };
 
 inline int Object::getSize() const {

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "value.h"
-#include "compiler/bytecode.h"
 #include "gc.h"
 
 #include <iostream>
@@ -38,8 +37,9 @@ public:
         int capacity;
     };
     struct StackFrame{
-        Proto* proto;
+        Routine* routine;
         Value* base; // [0]...[localCount-1]: local variables; [localCount]...[localCount+maxStackSize-1]: operand stack
+        Value* top;
         uint32_t ip;
     };
     struct Error{
@@ -63,6 +63,8 @@ public:
     void setErrorHandler(const ErrorHandler& handler) { errorHandler = handler; }
 
     void loadModule(const std::string& filePath);
+    Value callFunction(const std::string& moduleName, const std::string& funcName, int argc, Value* args);
+    Value callFunction(const std::string& funcName, int argc, Value* args); 
 
 private:
     Config config;
@@ -74,13 +76,19 @@ private:
     std::unordered_map<std::string, std::unique_ptr<String>> stringTable; // for string interning.
 
     std::vector<StackFrame> stackFrames;
+    std::vector<std::string> publicModules; // the list of modules that are explicitly loaded by the user, in order of loading
     std::unordered_map<std::string, ModuleInfo> loadedModules; // module path -> module info
     std::vector<std::unique_ptr<Routine>> routines; // [module1.protos[0], module1.protos[1], ..., module2.protos[0], ...]
 
     void importModule(const std::filesystem::path& path);
     std::filesystem::path searchModuleFile(const std::filesystem::path& basePath, const std::string& moduleName);
     
+    Value callFunction(Function* func, int argc, Value* args);
+    Value execute();
+
     String* internString(const std::string& str);
+    void pushFrame(const StackFrame& frame);
+    void popFrame();
 
     static void defaultErrorHandler(const Error& error) {
         std::cout << std::format("{}: {}\n", error.type == Error::RuntimeError ? "Runtime Error" : "VM Error", error.message);
