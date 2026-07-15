@@ -195,6 +195,78 @@ void Translator::visit(AST::BlockStmt& blockStmt) {
 
 void Translator::visit(AST::ExpStmt& expStmt) {
     expStmt.exp->accept(*this);
+    pushOpcode(Opcode::Pop);
+}
+
+void Translator::visit(AST::AssignStmt& assignStmt) { 
+    auto pushVal = [&](){
+        if(assignStmt.op == AST::AssignStmt::Op::Assign){
+            assignStmt.value->accept(*this);
+        }else{
+            assignStmt.target->accept(*this);
+            assignStmt.value->accept(*this);
+            switch (assignStmt.op) {
+                case AST::AssignStmt::Op::AddAssign: pushOpcode(Opcode::Add); break;
+                case AST::AssignStmt::Op::SubAssign: pushOpcode(Opcode::Sub); break;
+                case AST::AssignStmt::Op::MulAssign: pushOpcode(Opcode::Mul); break;
+                case AST::AssignStmt::Op::DivAssign: pushOpcode(Opcode::Div); break;
+                case AST::AssignStmt::Op::ModAssign: pushOpcode(Opcode::Mod); break;
+                case AST::AssignStmt::Op::BitAndAssign: pushOpcode(Opcode::BitAnd); break;
+                case AST::AssignStmt::Op::BitOrAssign: pushOpcode(Opcode::BitOr); break;
+                case AST::AssignStmt::Op::BitXorAssign: pushOpcode(Opcode::BitXor); break;
+                case AST::AssignStmt::Op::ShlAssign: pushOpcode(Opcode::Shl); break;
+                case AST::AssignStmt::Op::ShrAssign: pushOpcode(Opcode::Shr); break;
+                default: break;
+            }
+        }
+    };
+    
+    if(assignStmt.target->type == AST::Exp::ExpType::Identifier){
+        pushVal();
+        auto* idExp = static_cast<AST::IdentifierExp*>(assignStmt.target.get());
+        auto* varSym = curFunc->scopeMgr.resolve(idExp->name);
+        if(varSym){
+            if(!varSym->isMutable){
+                REPORT_SEMANTIC_ERROR(assignStmt.line, assignStmt.column, "Cannot assign to immutable variable '{}'", idExp->name);
+            }
+            pushOpcode(Opcode::StoreVar);
+            push4B(varSym->index);
+        }else{
+            pushOpcode(Opcode::StoreGlobal);
+            uint32_t pos = skip4B();
+            recordGlobalSym(idExp->name, "", pos);
+        }
+    } else if(assignStmt.target->type == AST::Exp::ExpType::MemberAccess){
+        auto* memberAccess = static_cast<AST::MemberAccessExp*>(assignStmt.target.get());
+        std::string moduleName;
+        if(memberAccess->object->type == AST::Exp::ExpType::Identifier){
+            auto* idExp = static_cast<AST::IdentifierExp*>(memberAccess->object.get());
+            auto it = aliasToModule.find(idExp->name);
+            if(it != aliasToModule.end()){
+                moduleName = it->second;
+            }
+        }
+        if(!moduleName.empty()){
+            pushVal();
+            pushOpcode(Opcode::StoreGlobal);
+            uint32_t pos = skip4B();
+            recordGlobalSym(memberAccess->member, moduleName, pos);
+        } else {
+            memberAccess->object->accept(*this);
+            pushVal();
+            uint32_t memberIdx = makeConstIdx(CompileValue(memberAccess->member));
+            pushOpcode(Opcode::SetField);
+            push4B(memberIdx);
+        }
+    } else if(assignStmt.target->type == AST::Exp::ExpType::IndexAccess){
+        auto* indexAccess = static_cast<AST::IndexAccessExp*>(assignStmt.target.get());
+        indexAccess->object->accept(*this);
+        indexAccess->index->accept(*this);
+        pushVal();
+        pushOpcode(Opcode::IndexSet);
+    } else {
+        REPORT_SEMANTIC_ERROR(assignStmt.line, assignStmt.column, "Invalid assignment target");
+    }
 }
 
 void Translator::visit(AST::VarDecStmt& varDecStmt) {
@@ -482,77 +554,6 @@ void Translator::visit(AST::IndexAccessExp& indexAccessExp) {
     indexAccessExp.object->accept(*this);
     indexAccessExp.index->accept(*this);
     pushOpcode(Opcode::IndexGet);
-}
-
-void Translator::visit(AST::AssignExp& assignExp) { 
-    auto pushVal = [&](){
-        if(assignExp.op == AST::AssignExp::Op::Assign){
-            assignExp.value->accept(*this);
-        }else{
-            assignExp.target->accept(*this);
-            assignExp.value->accept(*this);
-            switch (assignExp.op) {
-                case AST::AssignExp::Op::AddAssign: pushOpcode(Opcode::Add); break;
-                case AST::AssignExp::Op::SubAssign: pushOpcode(Opcode::Sub); break;
-                case AST::AssignExp::Op::MulAssign: pushOpcode(Opcode::Mul); break;
-                case AST::AssignExp::Op::DivAssign: pushOpcode(Opcode::Div); break;
-                case AST::AssignExp::Op::ModAssign: pushOpcode(Opcode::Mod); break;
-                case AST::AssignExp::Op::BitAndAssign: pushOpcode(Opcode::BitAnd); break;
-                case AST::AssignExp::Op::BitOrAssign: pushOpcode(Opcode::BitOr); break;
-                case AST::AssignExp::Op::BitXorAssign: pushOpcode(Opcode::BitXor); break;
-                case AST::AssignExp::Op::ShlAssign: pushOpcode(Opcode::Shl); break;
-                case AST::AssignExp::Op::ShrAssign: pushOpcode(Opcode::Shr); break;
-                default: break;
-            }
-        }
-    };
-    
-    if(assignExp.target->type == AST::Exp::ExpType::Identifier){
-        pushVal();
-        auto* idExp = static_cast<AST::IdentifierExp*>(assignExp.target.get());
-        auto* varSym = curFunc->scopeMgr.resolve(idExp->name);
-        if(varSym){
-            if(!varSym->isMutable){
-                REPORT_SEMANTIC_ERROR(assignExp.line, assignExp.column, "Cannot assign to immutable variable '{}'", idExp->name);
-            }
-            pushOpcode(Opcode::StoreVar);
-            push4B(varSym->index);
-        }else{
-            pushOpcode(Opcode::StoreGlobal);
-            uint32_t pos = skip4B();
-            recordGlobalSym(idExp->name, "", pos);
-        }
-    } else if(assignExp.target->type == AST::Exp::ExpType::MemberAccess){
-        auto* memberAccess = static_cast<AST::MemberAccessExp*>(assignExp.target.get());
-        std::string moduleName;
-        if(memberAccess->object->type == AST::Exp::ExpType::Identifier){
-            auto* idExp = static_cast<AST::IdentifierExp*>(memberAccess->object.get());
-            auto it = aliasToModule.find(idExp->name);
-            if(it != aliasToModule.end()){
-                moduleName = it->second;
-            }
-        }
-        if(!moduleName.empty()){
-            pushVal();
-            pushOpcode(Opcode::StoreGlobal);
-            uint32_t pos = skip4B();
-            recordGlobalSym(memberAccess->member, moduleName, pos);
-        } else {
-            memberAccess->object->accept(*this);
-            pushVal();
-            uint32_t memberIdx = makeConstIdx(CompileValue(memberAccess->member));
-            pushOpcode(Opcode::SetField);
-            push4B(memberIdx);
-        }
-    } else if(assignExp.target->type == AST::Exp::ExpType::IndexAccess){
-        auto* indexAccess = static_cast<AST::IndexAccessExp*>(assignExp.target.get());
-        indexAccess->object->accept(*this);
-        indexAccess->index->accept(*this);
-        pushVal();
-        pushOpcode(Opcode::IndexSet);
-    } else {
-        REPORT_SEMANTIC_ERROR(assignExp.line, assignExp.column, "Invalid assignment target");
-    }
 }
 
 void Translator::visit(AST::IdentifierExp& identifierExp) {

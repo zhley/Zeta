@@ -14,7 +14,7 @@
     extern int yylineno;
     extern int yycolumn;
 
-    Zeta::AST::AssignExp::Op toAssignOp(AssignOp assignOp);
+    Zeta::AST::AssignStmt::Op toAssignOp(AssignOp assignOp);
     Zeta::AST::BinaryExp::Op relopToBinaryOp(Relop relop);
     void yyerror(const char* msg);
     std::unique_ptr<Zeta::AST::Exp> tryExpFold(std::unique_ptr<Zeta::AST::Exp> exp);
@@ -144,6 +144,7 @@ BlockStmt: LC StmtList RC { auto b = std::make_unique<BlockStmt>(); b->stmts = s
     ;
 Stmt: VarDec SEMI { auto s = std::make_unique<VarDecStmt>(); s->varDecs = std::move($1); $$ = std::move(s); }
     | Exp SEMI { auto s = std::make_unique<ExpStmt>(); s->exp = std::move($1); $$ = std::move(s); }
+    | Exp ASSIGN Exp { auto s = std::make_unique<AssignStmt>(); s->op = toAssignOp($2); s->target = std::move($1); s->value = std::move($3); $$ = std::move(s); }
     | IF LP Exp RP Stmt %prec ELSE { auto s = std::make_unique<IfStmt>(); s->cond = std::move($3); s->thenBranch = std::move($5); $$ = std::move(s); }
     | IF LP Exp RP Stmt ELSE Stmt { auto s = std::make_unique<IfStmt>(); s->cond = std::move($3); s->thenBranch = std::move($5); s->elseBranch = std::move($7); $$ = std::move(s); }
     | WHILE LP Exp RP Stmt { auto s = std::make_unique<WhileStmt>(); s->cond = std::move($3); s->body = std::move($5); $$ = std::move(s); }
@@ -160,7 +161,6 @@ Stmt: VarDec SEMI { auto s = std::make_unique<VarDecStmt>(); s->varDecs = std::m
     ;
 
 Exp: Exp QMARK Exp COLON Exp { auto e = std::make_unique<ConditionalExp>(); e->cond = std::move($1); e->thenBranch = std::move($3); e->elseBranch = std::move($5); $$ = tryExpFold(std::move(e)); }
-    | Exp ASSIGN Exp { auto e = std::make_unique<AssignExp>(); e->op = toAssignOp($2); e->target = std::move($1); e->value = std::move($3); $$ = std::move(e); }
     | Exp RELOP Exp { auto e = std::make_unique<BinaryExp>(); e->op = relopToBinaryOp($2); e->left = std::move($1); e->right = std::move($3); $$ = tryExpFold(std::move(e)); }
     | Exp AND Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::And; e->left = std::move($1); e->right = std::move($3); $$ = tryExpFold(std::move(e)); }
     | Exp OR Exp { auto e = std::make_unique<BinaryExp>(); e->op = BinaryExp::Op::Or; e->left = std::move($1); e->right = std::move($3); $$ = tryExpFold(std::move(e)); }
@@ -226,20 +226,20 @@ void Zeta::Parser::error(const std::string& msg) {
     REPORT_SYNTAX_ERROR(yylineno, yycolumn, "{}", msg);
 }
 
-Zeta::AST::AssignExp::Op toAssignOp(AssignOp assignOp) {
+Zeta::AST::AssignStmt::Op toAssignOp(AssignOp assignOp) {
     switch(assignOp) {
-        case AS_ASSIGN: return Zeta::AST::AssignExp::Op::Assign;
-        case AS_PLUS: return Zeta::AST::AssignExp::Op::AddAssign;
-        case AS_MINUS: return Zeta::AST::AssignExp::Op::SubAssign;
-        case AS_STAR: return Zeta::AST::AssignExp::Op::MulAssign;
-        case AS_DIV: return Zeta::AST::AssignExp::Op::DivAssign;
-        case AS_MOD: return Zeta::AST::AssignExp::Op::ModAssign;
-        case AS_BITAND: return Zeta::AST::AssignExp::Op::BitAndAssign;
-        case AS_BITOR: return Zeta::AST::AssignExp::Op::BitOrAssign;
-        case AS_BITXOR: return Zeta::AST::AssignExp::Op::BitXorAssign;
-        case AS_LSHIFT: return Zeta::AST::AssignExp::Op::ShlAssign;
-        case AS_RSHIFT: return Zeta::AST::AssignExp::Op::ShrAssign;
-        default: assert(false); return Zeta::AST::AssignExp::Op::Assign; 
+        case AS_ASSIGN: return Zeta::AST::AssignStmt::Op::Assign;
+        case AS_PLUS: return Zeta::AST::AssignStmt::Op::AddAssign;
+        case AS_MINUS: return Zeta::AST::AssignStmt::Op::SubAssign;
+        case AS_STAR: return Zeta::AST::AssignStmt::Op::MulAssign;
+        case AS_DIV: return Zeta::AST::AssignStmt::Op::DivAssign;
+        case AS_MOD: return Zeta::AST::AssignStmt::Op::ModAssign;
+        case AS_BITAND: return Zeta::AST::AssignStmt::Op::BitAndAssign;
+        case AS_BITOR: return Zeta::AST::AssignStmt::Op::BitOrAssign;
+        case AS_BITXOR: return Zeta::AST::AssignStmt::Op::BitXorAssign;
+        case AS_LSHIFT: return Zeta::AST::AssignStmt::Op::ShlAssign;
+        case AS_RSHIFT: return Zeta::AST::AssignStmt::Op::ShrAssign;
+        default: assert(false); return Zeta::AST::AssignStmt::Op::Assign; 
     }
 }
 

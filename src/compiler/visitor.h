@@ -11,6 +11,7 @@ namespace AST {
     class Stmt;
     class BlockStmt;
     class ExpStmt;
+    class AssignStmt;
     class VarDecStmt;
     class IfStmt;
     class WhileStmt;
@@ -25,7 +26,6 @@ namespace AST {
     class CallExp;
     class MemberAccessExp;
     class IndexAccessExp;
-    class AssignExp;
     class IdentifierExp;
     class ThisExp;
     class ArrayExp;
@@ -49,6 +49,7 @@ public:
     virtual void visit(AST::ClassDec& classDec) = 0;
     virtual void visit(AST::BlockStmt& blockStmt) = 0;
     virtual void visit(AST::ExpStmt& expStmt) = 0;
+    virtual void visit(AST::AssignStmt& assignStmt) = 0;
     virtual void visit(AST::VarDecStmt& varDecStmt) = 0;
     virtual void visit(AST::IfStmt& ifStmt) = 0;
     virtual void visit(AST::WhileStmt& whileStmt) = 0;
@@ -62,7 +63,6 @@ public:
     virtual void visit(AST::CallExp& callExp) = 0;
     virtual void visit(AST::MemberAccessExp& memberAccessExp) = 0;
     virtual void visit(AST::IndexAccessExp& indexAccessExp) = 0;
-    virtual void visit(AST::AssignExp& assignExp) = 0;
     virtual void visit(AST::IdentifierExp& identifierExp) = 0;
     virtual void visit(AST::ThisExp& thisExp) = 0;
     virtual void visit(AST::ArrayExp& arrayExp) = 0;

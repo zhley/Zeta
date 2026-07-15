@@ -81,6 +81,7 @@ public:
     enum class StmtType {
         Block,
         Exp,
+        Assign,
         VarDec,
         If,
         While,
@@ -102,6 +103,18 @@ class ExpStmt: public Stmt {
 public:
     ACCEPT
     std::unique_ptr<Exp> exp;
+};
+
+class AssignStmt: public Stmt {
+public:
+    ACCEPT
+    enum class Op {
+        Assign, AddAssign, SubAssign, MulAssign, DivAssign, ModAssign,
+        BitAndAssign, BitOrAssign, BitXorAssign,
+        ShlAssign, ShrAssign
+    } op;
+    std::unique_ptr<Exp> target;
+    std::unique_ptr<Exp> value;
 };
 
 class VarDecStmt: public Stmt {
@@ -152,7 +165,6 @@ public:
         Call,
         MemberAccess,
         IndexAccess,
-        Assign,
         Identifier,
         Literal,
         This,
@@ -223,20 +235,6 @@ public:
     std::unique_ptr<Exp> index;
 
     IndexAccessExp() { type = ExpType::IndexAccess; }
-};
-
-class AssignExp: public Exp {
-public:
-    ACCEPT
-    enum class Op {
-        Assign, AddAssign, SubAssign, MulAssign, DivAssign, ModAssign,
-        BitAndAssign, BitOrAssign, BitXorAssign,
-        ShlAssign, ShrAssign
-    } op;
-    std::unique_ptr<Exp> target;
-    std::unique_ptr<Exp> value;
-
-    AssignExp() { type = ExpType::Assign; }
 };
 
 class IdentifierExp: public Exp {

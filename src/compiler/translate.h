@@ -51,6 +51,7 @@ public:
     void visit(AST::ClassDec& classDec) override;
     void visit(AST::BlockStmt& blockStmt) override;
     void visit(AST::ExpStmt& expStmt) override;
+    void visit(AST::AssignStmt& assignStmt) override;
     void visit(AST::VarDecStmt& varDecStmt) override;
     void visit(AST::IfStmt& ifStmt) override;
     void visit(AST::WhileStmt& whileStmt) override;
@@ -64,7 +65,6 @@ public:
     void visit(AST::CallExp& callExp) override;
     void visit(AST::MemberAccessExp& memberAccessExp) override;
     void visit(AST::IndexAccessExp& indexAccessExp) override;
-    void visit(AST::AssignExp& assignExp) override;
     void visit(AST::IdentifierExp& identifierExp) override;
     void visit(AST::ThisExp& thisExp) override;
     void visit(AST::ArrayExp& arrayExp) override;
