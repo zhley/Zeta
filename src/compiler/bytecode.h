@@ -12,6 +12,7 @@ struct CompileFunction;
 struct CompileClass;
 struct CompileValue;
 
+// TODO: 加入一些 push 常量的指令提高效率, 比如PushInt, PushFloat, PushNull
 enum class Opcode : uint8_t {
     Nop         = 0x00,
     // Mem
@@ -60,11 +61,12 @@ enum class Opcode : uint8_t {
     Halt        = 0xFF
 };
 
+// NOTE: 内置函数必须有编译期确定的操作数栈深度增量
 enum class Builtin : uint8_t {
     GetIter,
     IterNext,
-    NewArray,   // elem1, elem2, ..., elemN, count -> array
-    NewMap,     // key1, value1, key2, value2, ..., keyN, valueN, count -> map
+    NewArray, // pop array size, push array
+    NewMap, // pop map size, push map
 };
 
 struct CompileFunction {
@@ -182,7 +184,7 @@ struct Proto {
     std::vector<CompileValue> constants;
     int arity = 0;
     int localCount = 0;
-    int maxStackSize = 0;
+    int maxStackSize = 0; // max operand stack size
 };
 
 struct Pos{

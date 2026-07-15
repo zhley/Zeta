@@ -4,6 +4,7 @@
 #include "ast.h"
 #include "error.h"
 
+#include <cassert>
 #include <cstdint>
 #include <cstring>
 #include <memory>
@@ -19,6 +20,8 @@
 // 为运行期实现的方便, 每个函数生成的字节码最后一个指令一定是Ret指令, 栈顶为Null, 保证函数返回
 
 // TODO: 加入警告
+
+// TODO: 检查代码生成策略是否保证了栈平衡
 
 namespace Zeta {
 
@@ -482,26 +485,30 @@ void Translator::visit(AST::IndexAccessExp& indexAccessExp) {
 }
 
 void Translator::visit(AST::AssignExp& assignExp) { 
-    if(assignExp.op == AST::AssignExp::Op::Assign){
-        assignExp.value->accept(*this);
-    }else{
-        assignExp.target->accept(*this);
-        assignExp.value->accept(*this);
-        switch (assignExp.op) {
-            case AST::AssignExp::Op::AddAssign: pushOpcode(Opcode::Add); break;
-            case AST::AssignExp::Op::SubAssign: pushOpcode(Opcode::Sub); break;
-            case AST::AssignExp::Op::MulAssign: pushOpcode(Opcode::Mul); break;
-            case AST::AssignExp::Op::DivAssign: pushOpcode(Opcode::Div); break;
-            case AST::AssignExp::Op::ModAssign: pushOpcode(Opcode::Mod); break;
-            case AST::AssignExp::Op::BitAndAssign: pushOpcode(Opcode::BitAnd); break;
-            case AST::AssignExp::Op::BitOrAssign: pushOpcode(Opcode::BitOr); break;
-            case AST::AssignExp::Op::BitXorAssign: pushOpcode(Opcode::BitXor); break;
-            case AST::AssignExp::Op::ShlAssign: pushOpcode(Opcode::Shl); break;
-            case AST::AssignExp::Op::ShrAssign: pushOpcode(Opcode::Shr); break;
-            default: break;
+    auto pushVal = [&](){
+        if(assignExp.op == AST::AssignExp::Op::Assign){
+            assignExp.value->accept(*this);
+        }else{
+            assignExp.target->accept(*this);
+            assignExp.value->accept(*this);
+            switch (assignExp.op) {
+                case AST::AssignExp::Op::AddAssign: pushOpcode(Opcode::Add); break;
+                case AST::AssignExp::Op::SubAssign: pushOpcode(Opcode::Sub); break;
+                case AST::AssignExp::Op::MulAssign: pushOpcode(Opcode::Mul); break;
+                case AST::AssignExp::Op::DivAssign: pushOpcode(Opcode::Div); break;
+                case AST::AssignExp::Op::ModAssign: pushOpcode(Opcode::Mod); break;
+                case AST::AssignExp::Op::BitAndAssign: pushOpcode(Opcode::BitAnd); break;
+                case AST::AssignExp::Op::BitOrAssign: pushOpcode(Opcode::BitOr); break;
+                case AST::AssignExp::Op::BitXorAssign: pushOpcode(Opcode::BitXor); break;
+                case AST::AssignExp::Op::ShlAssign: pushOpcode(Opcode::Shl); break;
+                case AST::AssignExp::Op::ShrAssign: pushOpcode(Opcode::Shr); break;
+                default: break;
+            }
         }
-    }
+    };
+    
     if(assignExp.target->type == AST::Exp::ExpType::Identifier){
+        pushVal();
         auto* idExp = static_cast<AST::IdentifierExp*>(assignExp.target.get());
         auto* varSym = curFunc->scopeMgr.resolve(idExp->name);
         if(varSym){
@@ -526,11 +533,13 @@ void Translator::visit(AST::AssignExp& assignExp) {
             }
         }
         if(!moduleName.empty()){
+            pushVal();
             pushOpcode(Opcode::StoreGlobal);
             uint32_t pos = skip4B();
             recordGlobalSym(memberAccess->member, moduleName, pos);
         } else {
             memberAccess->object->accept(*this);
+            pushVal();
             uint32_t memberIdx = makeConstIdx(CompileValue(memberAccess->member));
             pushOpcode(Opcode::SetField);
             push4B(memberIdx);
@@ -539,6 +548,7 @@ void Translator::visit(AST::AssignExp& assignExp) {
         auto* indexAccess = static_cast<AST::IndexAccessExp*>(assignExp.target.get());
         indexAccess->object->accept(*this);
         indexAccess->index->accept(*this);
+        pushVal();
         pushOpcode(Opcode::IndexSet);
     } else {
         REPORT_SEMANTIC_ERROR(assignExp.line, assignExp.column, "Invalid assignment target");
@@ -566,23 +576,29 @@ void Translator::visit(AST::ThisExp& thisExp) {
 }
 
 void Translator::visit(AST::ArrayExp& arrayExp) {
-    for(auto& elem : arrayExp.elements){
-        elem->accept(*this);
-    }
     pushOpcode(Opcode::LoadConst);
     push4B(makeConstIdx(CompileValue((int64_t)arrayExp.elements.size())));
     callBuiltin(Builtin::NewArray);
+    for(int i = 0; i < arrayExp.elements.size(); ++i){
+        pushOpcode(Opcode::Dup);
+        pushOpcode(Opcode::LoadConst);
+        push4B(makeConstIdx(CompileValue((int64_t)i)));
+        arrayExp.elements[i]->accept(*this);
+        pushOpcode(Opcode::IndexSet);
+    }
 }
 
 void Translator::visit(AST::MapExp& mapExp) {
-    for(auto& pair : mapExp.entries){
-        pushOpcode(Opcode::LoadConst);
-        push4B(makeConstIdx(CompileValue(pair.first)));
-        pair.second->accept(*this);
-    }
     pushOpcode(Opcode::LoadConst);
     push4B(makeConstIdx(CompileValue((int64_t)mapExp.entries.size())));
     callBuiltin(Builtin::NewMap);
+    for(auto& pair : mapExp.entries){
+        pushOpcode(Opcode::Dup);
+        pushOpcode(Opcode::LoadConst);
+        push4B(makeConstIdx(CompileValue(pair.first)));
+        pair.second->accept(*this);
+        pushOpcode(Opcode::IndexSet);
+    }
 }
 
 void Translator::visit(AST::IntLitExp& intLitExp) {
@@ -694,9 +710,181 @@ uint32_t Translator::compileFunctionProto(const std::vector<std::string>& params
     pushOpcode(Opcode::Ret);
     curFunc->scopeMgr.exitScope();
     curFunc->proto->localCount = curFunc->scopeMgr.getMaxIndex() + 1;
+    curFunc->proto->maxStackSize = calcMaxStackSize(curFunc->proto->bytecode);
     uint32_t protoIdx = curFunc->proto->index;
     curFunc = std::move(savedFunc);
     return protoIdx;
+}
+
+int Translator::calcMaxStackSize(const std::vector<uint8_t>& bytecode) {
+    if (bytecode.empty()) return 0;
+
+    std::unordered_map<uint32_t, int> stackDepths;
+    std::vector<std::pair<uint32_t, int>> worklist;
+
+    auto addToWorklist = [&](uint32_t pc, int depth) {
+        auto it = stackDepths.find(pc);
+        if (it == stackDepths.end()) {
+            stackDepths[pc] = depth;
+            worklist.push_back({pc, depth});
+        } else {
+            assert(it->second == depth);
+        }
+    };
+
+    worklist.push_back({0, 0});
+    stackDepths[0] = 0;
+
+    int maxStack = 0;
+
+    while (!worklist.empty()) {
+        auto [pc, depth] = worklist.back();
+        worklist.pop_back();
+
+        if (depth > maxStack) maxStack = depth;
+        if (pc >= bytecode.size()) continue;
+
+        Opcode op = static_cast<Opcode>(bytecode[pc]);
+        int delta = 0;
+        uint32_t size = 1;
+        bool hasFallthrough = true;
+
+        switch (op) {
+            case Opcode::LoadConst:
+            case Opcode::LoadGlobal:
+            case Opcode::LoadVar:
+                delta = 1;
+                size = 5;
+                break;
+            case Opcode::StoreGlobal:
+            case Opcode::StoreVar:
+                delta = -1;
+                size = 5;
+                break;
+            case Opcode::Add:
+            case Opcode::Sub:
+            case Opcode::Mul:
+            case Opcode::Div:
+            case Opcode::Mod:
+            case Opcode::BitAnd:
+            case Opcode::BitOr:
+            case Opcode::BitXor:
+            case Opcode::Shl:
+            case Opcode::Shr:
+            case Opcode::Eq:
+            case Opcode::Neq:
+            case Opcode::Lt:
+            case Opcode::Gt:
+            case Opcode::Le:
+            case Opcode::Ge:
+                delta = -1;
+                size = 1;
+                break;
+            case Opcode::Neg:
+            case Opcode::Not:
+            case Opcode::BitNot:
+                delta = 0;
+                size = 1;
+                break;
+            case Opcode::Jump: {
+                delta = 0;
+                size = 5;
+                hasFallthrough = false;
+                uint32_t target;
+                std::memcpy(&target, &bytecode[pc + 1], 4);
+                addToWorklist(target, depth);
+                break;
+            }
+            case Opcode::JumpIfFalse:
+            case Opcode::JumpIfTrue: {
+                delta = -1;
+                size = 5;
+                uint32_t target;
+                std::memcpy(&target, &bytecode[pc + 1], 4);
+                int newDepth = depth + delta;
+                addToWorklist(pc + size, newDepth);
+                addToWorklist(target, newDepth);
+                hasFallthrough = false;
+                break;
+            }
+            case Opcode::Ret:
+                delta = -1;
+                size = 1;
+                hasFallthrough = false;
+                break;
+            case Opcode::Call: {
+                uint8_t argCount = bytecode[pc + 1];
+                delta = -static_cast<int>(argCount);
+                size = 2;
+                break;
+            }
+            case Opcode::GetField:
+                delta = 0;
+                size = 5;
+                break;
+            case Opcode::SetField:
+                delta = -2;
+                size = 5;
+                break;
+            case Opcode::CallMethod: {
+                uint8_t argCount = bytecode[pc + 1];
+                delta = -static_cast<int>(argCount);
+                size = 6;
+                break;
+            }
+            case Opcode::IndexGet:
+                delta = -1;
+                size = 1;
+                break;
+            case Opcode::IndexSet:
+                delta = -3;
+                size = 1;
+                break;
+            case Opcode::Pop:
+                delta = -1;
+                size = 1;
+                break;
+            case Opcode::Dup:
+                delta = 1;
+                size = 1;
+                break;
+            case Opcode::CallBuiltin: {
+                Builtin builtin = static_cast<Builtin>(bytecode[pc + 1]);
+                switch (builtin) {
+                    case Builtin::GetIter:
+                    case Builtin::IterNext:
+                        delta = 0; // pop 1, push 1
+                        break;
+                    case Builtin::NewArray:
+                    case Builtin::NewMap:
+                        delta = 0;
+                        break;
+                }
+                size = 2;
+                break;
+            }
+            case Opcode::Nop:
+                delta = 0;
+                size = 1;
+                break;
+            case Opcode::Halt:
+                delta = 0;
+                size = 1;
+                hasFallthrough = false;
+                break;
+            default:
+                delta = 0;
+                size = 1;
+                break;
+        }
+
+        if (hasFallthrough) {
+            int newDepth = depth + delta;
+            addToWorklist(pc + size, newDepth);
+        }
+    }
+
+    return maxStack;
 }
 
 } // namespace Zeta

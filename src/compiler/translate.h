@@ -167,6 +167,7 @@ private:
 
     std::unique_ptr<CompileValue> getValue(const AST::LiteralExp* exp);
     uint32_t compileFunctionProto(const std::vector<std::string>& params, AST::BlockStmt* body, bool isMethod = false);
+    int calcMaxStackSize(const std::vector<uint8_t>& bytecode);
 };
 
 } // namespace Zeta

@@ -790,6 +790,7 @@ Value VM::execute() {
                 PUSH(fieldValOpt.value());
             }
             case Opcode::SetField: {
+                Value fieldVal = POP();
                 Value objVal = POP();
                 if(objVal.type != Value::Type::Object || objVal.ptrValue->type != Object::Type::Instance) {
                     errorHandler({Error::Type::RuntimeError, "SetField: object must be a class instance"});
@@ -802,7 +803,6 @@ Value VM::execute() {
                 Value nameVal = curRoutine->constants[nameIndex];
                 assert(nameVal.type == Value::Type::String);
                 String* fieldName = nameVal.strValue;
-                Value fieldVal = POP();
                 instance->fields->set(fieldName, fieldVal);
             }
             case Opcode::CallMethod: {
@@ -885,9 +885,9 @@ Value VM::execute() {
                 break;
             }
             case Opcode::IndexSet: {
+                Value value = POP();
                 Value index = POP();
                 Value objVal = POP();
-                Value value = POP();
                 if(objVal.type != Value::Type::Object) {
                     errorHandler({Error::Type::RuntimeError, "IndexSet: object must be an array or map"});
                     return Value();
@@ -943,9 +943,6 @@ Value VM::execute() {
                         int64_t size = sizeVal.intValue;
                         assert(size >= 0);
                         Array* arr = gc->allocate<Array>(gc.get(), static_cast<uint32_t>(size));
-                        for(int i = size - 1; i >= 0; i--) {
-                            arr->set(i, POP());
-                        }
                         PUSH(Value(arr));
                         break;
                     }
@@ -955,12 +952,6 @@ Value VM::execute() {
                         int64_t size = sizeVal.intValue;
                         assert(size >= 0);
                         Map* map = gc->allocate<Map>(gc.get(), static_cast<uint32_t>(size));
-                        for(int i = size - 1; i >= 0; i--) {
-                            Value value = POP();
-                            Value keyVal = POP();
-                            assert(keyVal.type == Value::Type::String);
-                            map->set(keyVal.strValue, value);
-                        }
                         PUSH(Value(map));
                         break;
                     }

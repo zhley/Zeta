@@ -47,7 +47,7 @@ struct Routine{
     std::vector<Value> constants;
     uint32_t arity;
     uint32_t localCount;
-    uint32_t maxStackSize;
+    uint32_t maxStackSize; // max operand stack size
 };
 
 // allocated on heap, managed by GC
