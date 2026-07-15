@@ -334,7 +334,6 @@ Value VM::callFunction(Function* func, int argc, Value* args) {
     return execute();
 }
 
-// TODO: 目前编译期和运行期都没做函数参数个数检查, 这是个严重问题, 可能导致栈结构破坏. 由于编译期不知道外部函数信息, 将参数个数作为参数传递并在运行期检查会影响性能, 所以可以考虑在模块加载期完成这个检查.
 Value VM::execute() {
     StackFrame* curFrame = &stackFrames.back();
     Routine* curRoutine = curFrame->routine;
@@ -715,6 +714,8 @@ Value VM::execute() {
                 break;
             }
             case Opcode::Call: {
+                uint8_t argCount;
+                READ_BYTE(argCount);
                 Value callee = POP();
                 if(callee.type == Value::Type::Object && callee.ptrValue->type == Object::Type::Function) {
                     Function* func = static_cast<Function*>(callee.ptrValue);
@@ -725,6 +726,10 @@ Value VM::execute() {
                     newFrame.top = newFrame.base + routine->localCount;
                     newFrame.ip = 0;
                     pushFrame(newFrame);
+                    if(argCount != routine->arity) {
+                        errorHandler({Error::Type::RuntimeError, std::format("Function expects {} arguments, but {} were provided", routine->arity, argCount)});
+                        return Value();
+                    }
                     for(int i = routine->arity - 1; i >= 0; i--) {
                         newFrame.base[i] = POP();
                     }
@@ -745,6 +750,10 @@ Value VM::execute() {
                         newFrame.top = newFrame.base + routine->localCount;
                         newFrame.ip = 0;
                         pushFrame(newFrame);
+                        if(argCount != routine->arity - 1) {
+                            errorHandler({Error::Type::RuntimeError, std::format("Constructor expects {} arguments, but {} were provided", routine->arity - 1, argCount)});
+                            return Value();
+                        }
                         newFrame.base[0] = Value(instance); // push 'this' as the first argument
                         for(int i = routine->arity - 1; i >= 1; i--) {
                             newFrame.base[i] = POP();
@@ -797,6 +806,8 @@ Value VM::execute() {
                 instance->fields->set(fieldName, fieldVal);
             }
             case Opcode::CallMethod: {
+                uint8_t argCount;
+                READ_BYTE(argCount);
                 Value objVal = POP();
                 if(objVal.type != Value::Type::Object || objVal.ptrValue->type != Object::Type::Instance) {
                     errorHandler({Error::Type::RuntimeError, "CallMethod: object must be a class instance"});
@@ -824,6 +835,10 @@ Value VM::execute() {
                 newFrame.top = newFrame.base + routine->localCount;
                 newFrame.ip = 0;
                 pushFrame(newFrame);
+                if(argCount != routine->arity - 1) {
+                    errorHandler({Error::Type::RuntimeError, std::format("Method expects {} arguments, but {} were provided", routine->arity - 1, argCount)});
+                    return Value();
+                }
                 newFrame.base[0] = objVal; // push 'this' as the first argument
                 for(int i = routine->arity - 1; i >= 1; i--) {
                     newFrame.base[i] = POP();

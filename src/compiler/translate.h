@@ -99,6 +99,12 @@ private:
         return offset;
     }
 
+    uint32_t push1B(uint8_t value) {
+        uint32_t offset = curFunc->proto->bytecode.size();
+        curFunc->proto->bytecode.push_back(value);
+        return offset;
+    }
+
     uint32_t push4B(uint32_t value){
         curFunc->proto->bytecode.resize(curFunc->proto->bytecode.size() + 4);
         uint32_t offset = curFunc->proto->bytecode.size() - 4;

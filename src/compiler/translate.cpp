@@ -420,6 +420,7 @@ void Translator::visit(AST::CallExp& callExp) {
             pushOpcode(Opcode::LoadGlobal);
             uint32_t pos = skip4B();
             pushOpcode(Opcode::Call);
+            push1B(static_cast<uint8_t>(callExp.args.size()));
             recordGlobalSym(callExp.funcName, moduleName, pos);
         }else{
             // method call
@@ -429,6 +430,7 @@ void Translator::visit(AST::CallExp& callExp) {
             callExp.caller->accept(*this);
             uint32_t funcIdx = makeConstIdx(CompileValue(callExp.funcName));
             pushOpcode(Opcode::CallMethod);
+            push1B(static_cast<uint8_t>(callExp.args.size()));
             push4B(funcIdx);
         }
     } else {
@@ -441,10 +443,12 @@ void Translator::visit(AST::CallExp& callExp) {
             pushOpcode(Opcode::LoadVar);
             push4B(funcSym->index);
             pushOpcode(Opcode::Call);
+            push1B(static_cast<uint8_t>(callExp.args.size()));
         } else {
             pushOpcode(Opcode::LoadGlobal);
             uint32_t pos = skip4B();
             pushOpcode(Opcode::Call);
+            push1B(static_cast<uint8_t>(callExp.args.size()));
             recordGlobalSym(callExp.funcName, "", pos);
         }
     }
