@@ -63,11 +63,31 @@ enum class Opcode : uint8_t {
 
 // NOTE: 内置函数必须有编译期确定的操作数栈深度增量
 enum class Builtin : uint8_t {
-    GetIter,
-    IterNext,
-    NewArray, // pop array size, push array
-    NewMap, // pop map size, push map
+    GetIter     = 0x00,
+    IterNext    = 0x01,
+    NewArray    = 0x02,
+    NewMap      = 0x03,
+    Print       = 0x04,
+    Input       = 0x05,
+    Error       = 0x06,
 };
+
+struct BuiltinDesc {
+    Builtin id;
+    std::string funcName;
+    int stackDelta;
+};
+
+inline constexpr BuiltinDesc builtinTable[] = {
+    {Builtin::GetIter, "iter", 0},
+    {Builtin::IterNext, "next", 0},
+    {Builtin::NewArray, "array", 0},
+    {Builtin::NewMap, "map", 0},
+    {Builtin::Print, "print", -1},
+    {Builtin::Input, "input", 1},
+    {Builtin::Error, "error", 1},
+};
+inline constexpr int builtinTableSize = sizeof(builtinTable) / sizeof(BuiltinDesc);
 
 struct CompileFunction {
     uint32_t protoIndex;

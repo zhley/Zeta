@@ -16,13 +16,17 @@ struct String;
 struct GC;
 
 struct Value{
+    static const Value Null;
+    static const Value Error;
+
     enum class Type : uint8_t {
         Null = 0x00,
         Int,
         Float,
         Bool,
         String, // interned string
-        Object
+        Object,
+        Error // flag for error // TODO: 或许可以用来传递错误码
     } type = Type::Null;
     union {
         int64_t intValue;
@@ -33,13 +37,23 @@ struct Value{
         uint64_t val;
     };
 
-    Value() : type(Type::Null) {}
-    Value(int64_t i) : type(Type::Int), intValue(i) {}
-    Value(double f) : type(Type::Float), floatValue(f) {}
-    Value(bool b) : type(Type::Bool), boolValue(b) {}
-    Value(Object* obj) : type(Type::Object), ptrValue(obj) {}
-    Value(String* str) : type(Type::String), strValue(str) {}
+    explicit Value() : type(Type::Null) {}
+    explicit Value(int64_t i) : type(Type::Int), intValue(i) {}
+    explicit Value(double f) : type(Type::Float), floatValue(f) {}
+    explicit Value(bool b) : type(Type::Bool), boolValue(b) {}
+    explicit Value(Object* obj) : type(Type::Object), ptrValue(obj) {}
+    explicit Value(String* str) : type(Type::String), strValue(str) {}
+    Value(Type t, uint64_t v) : type(t), val(v) {}
     Value(const Value& other) : type(other.type), val(other.val) {}
+
+    // strict equality check
+    bool operator==(const Value& other) const {
+        return type == other.type && val == other.val;
+    }
+
+    bool operator!=(const Value& other) const {
+        return !(*this == other);
+    }
 };
 
 struct Routine{
@@ -59,7 +73,8 @@ struct Object {
         Map,
         Function,
         Class,
-        Instance
+        Instance, 
+        Iterator,
     };
 
     // head (8 bytes)
@@ -201,6 +216,36 @@ struct Instance : public Object {
     Instance(GC* gc, Class* cls);
 };
 
+struct Iterator : public Object {
+    Object* container; // array or map;
+    int index;
+
+    explicit Iterator(GC* gc, Object* container);
+
+    Value next() {
+        if(container->type == Object::Type::Array){
+            Array* arr = static_cast<Array*>(container);
+            if(index < arr->size){
+                return arr->get(index++);
+            } else {
+                return Value::Error;
+            }
+        } else if(container->type == Object::Type::Map){
+            Map* map = static_cast<Map*>(container);
+            while(index < map->capacity){
+                Map::Entry* entries = (Map::Entry*)(map->data->getData());
+                if(entries[index].key != Map::EMPTY && entries[index].key != Map::DELETED){
+                    return Value(entries[index++].key);
+                }
+                index++;
+            }
+            return Value::Error;
+        }
+        assert(false);
+        return Value::Error;
+    }
+};
+
 inline int Object::getSize() const {
     switch (type) {
         case Object::Type::Block:       return static_cast<const Block*>(this)->size + sizeof(Block);
@@ -210,6 +255,7 @@ inline int Object::getSize() const {
         case Object::Type::Function:    return sizeof(Function);
         case Object::Type::Class:       return sizeof(Class);
         case Object::Type::Instance:    return sizeof(Instance);
+        case Object::Type::Iterator:    return sizeof(Iterator);
     }
     return 0;
 }
@@ -257,7 +303,11 @@ inline void Object::trace(F&& f) {
             f((Object**)(&(instance->fields)));
             break;
         }
-        default: assert(0);
+        case Object::Type::Iterator: {
+            Iterator* iter = static_cast<Iterator*>(this);
+            f(&(iter->container));
+            break;
+        }
     }
 }
 

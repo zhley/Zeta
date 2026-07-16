@@ -141,7 +141,6 @@ public:
 class ForStmt: public Stmt {
 public:
     ACCEPT
-    std::string idxVarName; // optional
     std::string valVarName;
     std::unique_ptr<Exp> iterable;
     std::unique_ptr<Stmt> body;

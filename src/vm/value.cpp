@@ -7,6 +7,9 @@
 
 namespace Zeta {
 
+const Value Value::Null = Value(Value::Type::Null, 0);
+const Value Value::Error = Value(Value::Type::Error, 0);
+
 // Array
 Array::Array(GC* gc) : Object(Object::Type::Array), size(0), capacity(8), gc(gc){
     Block* blk = gc->allocateBlock(capacity * sizeof(Value));
@@ -171,6 +174,12 @@ Instance::Instance(GC* gc, Class* cls) : Object(Object::Type::Instance) {
         fields->set(key, value);
     });
     gc->writeBarrier(this, (Object**)(&this->fields), fields);
+}
+
+// Iterator
+Iterator::Iterator(GC* gc, Object* container) : Object(Type::Iterator), index(0) {
+    assert(container->type == Object::Type::Array || container->type == Object::Type::Map);
+    gc->writeBarrier(this, &this->container, container);
 }
 
 }

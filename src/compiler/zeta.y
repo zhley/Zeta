@@ -149,7 +149,6 @@ Stmt: VarDec SEMI { auto s = std::make_unique<VarDecStmt>(); s->varDecs = std::m
     | IF LP Exp RP Stmt ELSE Stmt { auto s = std::make_unique<IfStmt>(); s->cond = std::move($3); s->thenBranch = std::move($5); s->elseBranch = std::move($7); $$ = std::move(s); }
     | WHILE LP Exp RP Stmt { auto s = std::make_unique<WhileStmt>(); s->cond = std::move($3); s->body = std::move($5); $$ = std::move(s); }
     | FOR LP ID COLON Exp RP Stmt { auto s = std::make_unique<ForStmt>(); s->valVarName = std::move($3); s->iterable = std::move($5); s->body = std::move($7); $$ = std::move(s); }
-    | FOR LP ID COMMA ID COLON Exp RP Stmt { auto s = std::make_unique<ForStmt>(); s->idxVarName = std::move($3); s->valVarName = std::move($5); s->iterable = std::move($7); s->body = std::move($9); $$ = std::move(s); }
     | BREAK SEMI { auto s = std::make_unique<BreakStmt>(); $$ = std::move(s); }
     | CONTINUE SEMI { auto s = std::make_unique<ContinueStmt>(); $$ = std::move(s); }
     | RETURN SEMI { auto s = std::make_unique<ReturnStmt>(); $$ = std::move(s); }
@@ -277,6 +276,7 @@ bool boolean(const Zeta::AST::LiteralExp* exp){
 }
 
 std::unique_ptr<Zeta::AST::Exp> tryExpFold(std::unique_ptr<Zeta::AST::Exp> exp) {
+    if(!exp) return nullptr;
     auto makeInt = [](int64_t value) {
         auto out = std::make_unique<Zeta::AST::IntLitExp>();
         out->value = value;

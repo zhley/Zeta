@@ -129,6 +129,9 @@ void Translator::visit(AST::VarDec& varDec) {
 }
 
 void Translator::visit(AST::FuncDec& funcDec) {
+    if(findBuiltin(funcDec.name)){
+        REPORT_SEMANTIC_ERROR(funcDec.line, funcDec.column, "Function name '{}' conflicts with a built-in function", funcDec.name);
+    }
     if(module->globalSyms.find(funcDec.name) != module->globalSyms.end()){
         REPORT_SEMANTIC_ERROR(funcDec.line, funcDec.column, "Duplicate global function '{}'", funcDec.name);
     }
@@ -318,68 +321,34 @@ void Translator::visit(AST::ForStmt& forStmt) {
     curFunc->continuePosStack.push({});
     curFunc->scopeMgr.enterScope();
     uint32_t valSlot = curFunc->scopeMgr.declare(forStmt.valVarName, true);
-    if(!forStmt.idxVarName.empty()){
-        uint32_t idxSlot = curFunc->scopeMgr.declare(forStmt.idxVarName, true);
-        if(idxSlot == -1){
-            REPORT_SEMANTIC_ERROR(forStmt.line, forStmt.column, "Duplicate index variable '{}' in for loop", forStmt.idxVarName);
-        }
-        forStmt.iterable->accept(*this); // NOTE: iterable 已经是可迭代对象
-        uint32_t loopStart = getLabel();
-        pushOpcode(Opcode::Dup);
-        callBuiltin(Builtin::IterNext);
-        pushOpcode(Opcode::Dup);
-        pushOpcode(Opcode::JumpIfFalse);
-        uint32_t loopEndPos = skip4B();
-        pushOpcode(Opcode::Dup);
-        pushOpcode(Opcode::LoadConst);
-        push4B(makeConstIdx(CompileValue(0L)));
-        pushOpcode(Opcode::IndexGet);
-        pushOpcode(Opcode::StoreVar);
-        push4B(idxSlot);
-        pushOpcode(Opcode::LoadConst);
-        push4B(makeConstIdx(CompileValue(1L)));
-        pushOpcode(Opcode::IndexGet);
-        pushOpcode(Opcode::StoreVar);
-        push4B(valSlot);
-        forStmt.body->accept(*this);
-        pushOpcode(Opcode::Jump);
-        push4B(loopStart);
-        uint32_t loopEnd = getLabel();
-        pushOpcode(Opcode::Pop);
-        set4B(loopEndPos, loopEnd);
-        for(uint32_t breakPos : curFunc->breakPosStack.top()){
-            set4B(breakPos, loopEnd);
-        }
-        for(uint32_t continuePos : curFunc->continuePosStack.top()){
-            set4B(continuePos, loopStart);
-        }
-        curFunc->breakPosStack.pop();
-        curFunc->continuePosStack.pop();
-    } else {
-        forStmt.iterable->accept(*this);
-        uint32_t loopStart = getLabel();
-        pushOpcode(Opcode::Dup);
-        callBuiltin(Builtin::IterNext);
-        pushOpcode(Opcode::Dup);
-        pushOpcode(Opcode::JumpIfFalse);
-        uint32_t loopEndPos = skip4B();
-        pushOpcode(Opcode::StoreVar);
-        push4B(valSlot);
-        forStmt.body->accept(*this);
-        pushOpcode(Opcode::Jump);
-        push4B(loopStart);
-        uint32_t loopEnd = getLabel();
-        pushOpcode(Opcode::Pop);
-        set4B(loopEndPos, loopEnd);
-        for(uint32_t breakPos : curFunc->breakPosStack.top()){
-            set4B(breakPos, loopEnd);
-        }
-        for(uint32_t continuePos : curFunc->continuePosStack.top()){
-            set4B(continuePos, loopStart);
-        }
-        curFunc->breakPosStack.pop();
-        curFunc->continuePosStack.pop();
+    
+    forStmt.iterable->accept(*this);
+    callBuiltin(Builtin::GetIter);
+    uint32_t loopStart = getLabel();
+    pushOpcode(Opcode::Dup);
+    callBuiltin(Builtin::IterNext);
+    pushOpcode(Opcode::Dup);
+    callBuiltin(Builtin::Error);
+    pushOpcode(Opcode::Eq);
+    pushOpcode(Opcode::JumpIfTrue);
+    uint32_t loopEndPos = skip4B();
+    pushOpcode(Opcode::StoreVar);
+    push4B(valSlot);
+    forStmt.body->accept(*this);
+    pushOpcode(Opcode::Jump);
+    push4B(loopStart);
+    uint32_t loopEnd = getLabel();
+    pushOpcode(Opcode::Pop);
+    set4B(loopEndPos, loopEnd);
+    for(uint32_t breakPos : curFunc->breakPosStack.top()){
+        set4B(breakPos, loopEnd);
     }
+    for(uint32_t continuePos : curFunc->continuePosStack.top()){
+        set4B(continuePos, loopStart);
+    }
+    curFunc->breakPosStack.pop();
+    curFunc->continuePosStack.pop();
+
     curFunc->scopeMgr.exitScope();
 }
 
@@ -512,6 +481,12 @@ void Translator::visit(AST::CallExp& callExp) {
         // normal function call
         for(auto& arg : callExp.args){
             arg->accept(*this);
+        }
+        if(const BuiltinDesc* builtin = findBuiltin(callExp.funcName)){
+            // built-in function call
+            pushOpcode(Opcode::CallBuiltin);
+            push1B(static_cast<uint8_t>(builtin->id));
+            return;
         }
         auto* funcSym = curFunc->scopeMgr.resolve(callExp.funcName);
         if(funcSym){
@@ -850,17 +825,8 @@ int Translator::calcMaxStackSize(const std::vector<uint8_t>& bytecode) {
                 size = 1;
                 break;
             case Opcode::CallBuiltin: {
-                Builtin builtin = static_cast<Builtin>(bytecode[pc + 1]);
-                switch (builtin) {
-                    case Builtin::GetIter:
-                    case Builtin::IterNext:
-                        delta = 0; // pop 1, push 1
-                        break;
-                    case Builtin::NewArray:
-                    case Builtin::NewMap:
-                        delta = 0;
-                        break;
-                }
+                uint8_t id = bytecode[pc + 1];
+                delta = builtinTable[id].stackDelta;
                 size = 2;
                 break;
             }

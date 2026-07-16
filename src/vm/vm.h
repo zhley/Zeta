@@ -12,9 +12,8 @@
 #include <filesystem>
 #include <format>
 
-#define ZETA_DEFAULT_INIT_STACK_SIZE 1024
+#define ZETA_DEFAULT_STACK_SIZE 1024
 #define ZETA_DEFAULT_INIT_HEAP_SIZE 1024
-#define ZETA_DEFAULT_MAX_STACK_SIZE -1
 #define ZETA_DEFAULT_MAX_HEAP_SIZE -1
 
 namespace Zeta {
@@ -25,8 +24,7 @@ public:
 
     struct Config{
         // KiB
-        int initStackSize;
-        int maxStackSize; // -1 for unlimited
+        int stackSize;
         int initHeapSize;
         int maxHeapSize;
         std::vector<std::string> moduleSearchPaths; 
@@ -57,7 +55,7 @@ public:
     };
     using ErrorHandler = std::function<void(const Error&)>;
 
-    VM(Config config = {ZETA_DEFAULT_INIT_STACK_SIZE, ZETA_DEFAULT_MAX_STACK_SIZE, ZETA_DEFAULT_INIT_HEAP_SIZE, ZETA_DEFAULT_MAX_HEAP_SIZE}, ErrorHandler handler = defaultErrorHandler);
+    VM(Config config = {ZETA_DEFAULT_STACK_SIZE, ZETA_DEFAULT_INIT_HEAP_SIZE, ZETA_DEFAULT_MAX_HEAP_SIZE}, ErrorHandler handler = defaultErrorHandler);
     ~VM();
 
     void setErrorHandler(const ErrorHandler& handler) { errorHandler = handler; }

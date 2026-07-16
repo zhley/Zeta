@@ -165,6 +165,15 @@ private:
         }
     }
 
+    const BuiltinDesc* findBuiltin(const std::string& name) {
+        for(int i = 0; i < builtinTableSize; ++i){
+            if(builtinTable[i].funcName == name){
+                return &builtinTable[i];
+            }
+        }
+        return nullptr;
+    }
+
     std::unique_ptr<CompileValue> getValue(const AST::LiteralExp* exp);
     uint32_t compileFunctionProto(const std::vector<std::string>& params, AST::BlockStmt* body, bool isMethod = false);
     int calcMaxStackSize(const std::vector<uint8_t>& bytecode);
