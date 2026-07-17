@@ -1,9 +1,4 @@
 fn main(){
-    // sdsd
-    /* sdsd */
-    var i = 0x0011;
-    var a = 1;
-    var b = "Hello, World!";
-    var c = a * 9;
+    print("Hello, World!\n");
     return 0;
 }
