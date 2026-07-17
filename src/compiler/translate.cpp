@@ -328,9 +328,8 @@ void Translator::visit(AST::ForStmt& forStmt) {
     pushOpcode(Opcode::Dup);
     callBuiltin(Builtin::IterNext);
     pushOpcode(Opcode::Dup);
-    callBuiltin(Builtin::Error);
-    pushOpcode(Opcode::Eq);
-    pushOpcode(Opcode::JumpIfTrue);
+    callBuiltin(Builtin::Check);
+    pushOpcode(Opcode::JumpIfFalse);
     uint32_t loopEndPos = skip4B();
     pushOpcode(Opcode::StoreVar);
     push4B(valSlot);

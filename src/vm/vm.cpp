@@ -1043,6 +1043,11 @@ Value VM::execute() {
                         PUSH(Value::Error);
                         break;
                     }
+                    case Builtin::Check: {
+                        Value val = POP();
+                        PUSH(Value(val.type != Value::Type::Error));
+                        break;
+                    }
                     default: {
                         errorHandler({Error::Type::RuntimeError, std::format("Unknown builtin function: {:#04x}", builtinId)});
                         return Value::Error;

@@ -59,3 +59,4 @@ foo(a, b, c, d):
 | **Print** | `0x04` | `print(val)` | 弹出 `val`, 在控制台打印 `val`. |
 | **Input** | `0x05` | `input()` | 控制台接收控制台输入字符串 `str`, 压入 `str`. |
 | **Error** | `0x06` | `error()` | 将值 `Value::Error` 压栈. |
+| **Check** | `0x07` | `check(val)` | 弹出 `val`, 如果 `val` 是 `Error` 类型, 压入 `false`, 否则压入 `true`.|
