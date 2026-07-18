@@ -250,7 +250,7 @@ Zeta::AST::BinaryExp::Op relopToBinaryOp(Relop relop) {
         case RP_GT: return Zeta::AST::BinaryExp::Op::Gt;
         case RP_LEQ: return Zeta::AST::BinaryExp::Op::Leq;
         case RP_GEQ: return Zeta::AST::BinaryExp::Op::Geq;
-        case RP_IS: return Zeta::AST::BinaryExp::Op::Is
+        case RP_IS: return Zeta::AST::BinaryExp::Op::Is;
         default: assert(false); return Zeta::AST::BinaryExp::Op::Eq; 
     }
 }

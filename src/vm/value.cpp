@@ -182,4 +182,20 @@ Iterator::Iterator(GC* gc, Object* container) : Object(Type::Iterator), index(0)
     gc->writeBarrier(this, &this->container, container);
 }
 
+// String object
+StrObj::StrObj(GC* gc, const char* str, uint32_t len) : Object(Object::Type::StrObj), length(len) {
+    Block* blk = gc->allocateBlock(len + 1);
+    std::memcpy(blk->getData(), str, len);
+    ((char*)blk->getData())[len] = '\0';
+    gc->writeBarrier(this, (Object**)(&data), blk);
+}
+
+StrObj::StrObj(GC* gc, StrView str1, StrView str2) : Object(Object::Type::StrObj), length(str1.length + str2.length) {
+    Block* blk = gc->allocateBlock(length + 1);
+    std::memcpy(blk->getData(), str1.data, str1.length);
+    std::memcpy((char*)blk->getData() + str1.length, str2.data, str2.length);
+    ((char*)blk->getData())[length] = '\0';
+    gc->writeBarrier(this, (Object**)(&data), blk);
+}
+
 }

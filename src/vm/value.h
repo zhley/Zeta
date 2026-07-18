@@ -15,6 +15,11 @@ struct Object;
 struct String;
 struct GC;
 
+struct StrView {
+    const char* data;
+    uint32_t length;
+};
+
 struct Value{
     static const Value Null;
     static const Value Error;
@@ -54,6 +59,9 @@ struct Value{
     bool operator!=(const Value& other) const {
         return !(*this == other);
     }
+
+    bool isString() const;
+    StrView asString() const;
 };
 
 struct Routine{
@@ -74,6 +82,7 @@ struct Object {
         Class,
         Instance, 
         Iterator,
+        StrObj
     };
 
     // head (8 bytes)
@@ -245,6 +254,15 @@ struct Iterator : public Object {
     }
 };
 
+// normal immutable string object, allocated on heap, managed by GC 
+struct StrObj : public Object {
+    Block* data;
+    uint32_t length;
+
+    StrObj(GC* gc, const char* str, uint32_t len);
+    StrObj(GC* gc, StrView str1, StrView str2);
+};
+
 inline int Object::getSize() const {
     switch (type) {
         case Object::Type::Block:       return static_cast<const Block*>(this)->size + sizeof(Block);
@@ -254,6 +272,7 @@ inline int Object::getSize() const {
         case Object::Type::Class:       return sizeof(Class);
         case Object::Type::Instance:    return sizeof(Instance);
         case Object::Type::Iterator:    return sizeof(Iterator);
+        case Object::Type::StrObj:      return sizeof(StrObj);
     }
     return 0;
 }
@@ -305,6 +324,25 @@ inline void Object::trace(F&& f) {
             f(&(iter->container));
             break;
         }
+        case Object::Type::StrObj: {
+            StrObj* strObj = static_cast<StrObj*>(this);
+            f((Object**)(&(strObj->data)));
+            break;
+        }
+    }
+}
+
+inline bool Value::isString() const {
+    return type == Type::String || (type == Type::Object && ptrValue->type == Object::Type::StrObj);
+}
+
+inline StrView Value::asString() const {
+    assert(isString());
+    if(type == Type::String){
+        return {strValue->data, strValue->length};
+    } else {
+        StrObj* strObj = static_cast<StrObj*>(ptrValue);
+        return {static_cast<const char*>(strObj->data->getData()), strObj->length};
     }
 }
 

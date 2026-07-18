@@ -46,6 +46,7 @@ GC::~GC() {
 }
 
 Block* GC::allocateBlock(int size) {
+    size = ALIGN8(size);
     Object* obj = allocateImpl(sizeof(Block) + size);
     Block* block = new (obj) Block(size);
     return block;

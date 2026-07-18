@@ -387,19 +387,29 @@ Value VM::execute() {
             case Opcode::Add: {
                 Value b = POP();
                 Value a = POP();
-                if(a.type == Value::Type::Int && b.type == Value::Type::Int) {
-                    PUSH(Value(a.intValue + b.intValue));
-                } else if(a.type == Value::Type::Float && b.type == Value::Type::Float) {
-                    PUSH(Value(a.floatValue + b.floatValue));
-                } else if(a.type == Value::Type::Int && b.type == Value::Type::Float) {
-                    PUSH(Value(static_cast<double>(a.intValue) + b.floatValue));
-                } else if(a.type == Value::Type::Float && b.type == Value::Type::Int) {
-                    PUSH(Value(a.floatValue + static_cast<double>(b.intValue)));
-                } else {
-                    errorHandler({Error::Type::RuntimeError, "Unsupported operand types for Add"});
-                    return Value::Error;
+                if(a.type == Value::Type::Int) {
+                    if(b.type == Value::Type::Int) {
+                        PUSH(Value(a.intValue + b.intValue));
+                        break;
+                    } else if(b.type == Value::Type::Float) {
+                        PUSH(Value(static_cast<double>(a.intValue) + b.floatValue));
+                        break;
+                    }
+                } else if(a.type == Value::Type::Float) {
+                    if(b.type == Value::Type::Int) {
+                        PUSH(Value(a.floatValue + static_cast<double>(b.intValue)));
+                        break;
+                    } else if(b.type == Value::Type::Float) {
+                        PUSH(Value(a.floatValue + b.floatValue));
+                        break;
+                    }
+                } else if(a.isString() && b.isString()) {
+                    StrObj* str = gc->allocate<StrObj>(gc.get(), a.asString(), b.asString());
+                    PUSH(Value(str));
+                    break;
                 }
-                break;
+                errorHandler({Error::Type::RuntimeError, "Unsupported operand types for Add"});
+                return Value::Error;
             }
             case Opcode::Sub: {
                 Value b = POP();
@@ -601,30 +611,44 @@ Value VM::execute() {
                         break;
                     }
                     case Value::Type::String: {
-                        PUSH(Value(b.type == Value::Type::String && a.strValue == b.strValue));
+                        if(b.type == Value::Type::String) {
+                            PUSH(Value(a.ptrValue == b.ptrValue));
+                        } else if(b.type == Value::Type::Object && b.ptrValue->type == Object::Type::StrObj) {
+                            PUSH(Value(a.strValue->length == static_cast<StrObj*>(b.ptrValue)->length && std::memcmp(a.strValue->data, static_cast<StrObj*>(b.ptrValue)->data->getData(), a.strValue->length) == 0));
+                        } else {
+                            PUSH(Value(false));
+                        }
                         break;
                     }
                     case Value::Type::Object: {
                         Object* aObj = a.ptrValue;
-                        if(aObj->type != Object::Type::Instance) {
+                        if(aObj->type == Object::Type::Instance) {
+                            Instance* aInst = static_cast<Instance*>(aObj);
+                            auto equalsMethodOpt = aInst->cls->methods->get(STRINGS._equals);
+                            if(!equalsMethodOpt.has_value()) {
+                                errorHandler({Error::Type::RuntimeError, std::format("IterNext: class \"{}\" does not have a _equals method with 1 argument", aInst->cls->name->data)});
+                                return Value::Error;
+                            }
+                            Value equalsMethodVal = equalsMethodOpt.value();
+                            assert(equalsMethodVal.type == Value::Type::Object && equalsMethodVal.ptrValue->type == Object::Type::Function);
+                            Function* func = static_cast<Function*>(equalsMethodVal.ptrValue);
+                            if(func->routine->arity != 2) {
+                                errorHandler({Error::Type::RuntimeError, std::format("IterNext: class \"{}\" does not have a _equals method with 1 argument", aInst->cls->name->data)});
+                                return Value::Error;
+                            }
+                            Value args[2] = {a, b};
+                            PUSH(callFunction(func, 2, args));
+                        } else if (aObj->type == Object::Type::StrObj) {
+                            if(b.type == Value::Type::String) {
+                                PUSH(Value(static_cast<StrObj*>(aObj)->length == b.strValue->length && std::memcmp(static_cast<StrObj*>(aObj)->data->getData(), b.strValue->data, b.strValue->length) == 0));
+                            } else if(b.type == Value::Type::Object && b.ptrValue->type == Object::Type::StrObj) {
+                                PUSH(Value(static_cast<StrObj*>(aObj)->length == static_cast<StrObj*>(b.ptrValue)->length && std::memcmp(static_cast<StrObj*>(aObj)->data->getData(), static_cast<StrObj*>(b.ptrValue)->data->getData(), static_cast<StrObj*>(aObj)->length) == 0));
+                            } else {
+                                PUSH(Value(false));
+                            }
+                        } else {
                             PUSH(Value(b.type == Value::Type::Object && a.ptrValue == b.ptrValue));
-                            break;
                         }
-                        Instance* aInst = static_cast<Instance*>(aObj);
-                        auto equalsMethodOpt = aInst->cls->methods->get(STRINGS._equals);
-                        if(!equalsMethodOpt.has_value()) {
-                            errorHandler({Error::Type::RuntimeError, std::format("IterNext: class \"{}\" does not have a _equals method with 1 argument", aInst->cls->name->data)});
-                            return Value::Error;
-                        }
-                        Value equalsMethodVal = equalsMethodOpt.value();
-                        assert(equalsMethodVal.type == Value::Type::Object && equalsMethodVal.ptrValue->type == Object::Type::Function);
-                        Function* func = static_cast<Function*>(equalsMethodVal.ptrValue);
-                        if(func->routine->arity != 2) {
-                            errorHandler({Error::Type::RuntimeError, std::format("IterNext: class \"{}\" does not have a _equals method with 1 argument", aInst->cls->name->data)});
-                            return Value::Error;
-                        }
-                        Value args[2] = {a, b};
-                        PUSH(callFunction(func, 2, args));
                         break;
                     }
                     case Value::Type::Error: {
@@ -672,36 +696,50 @@ Value VM::execute() {
                         break;
                     }
                     case Value::Type::String: {
-                        PUSH(Value(!(b.type == Value::Type::String && a.strValue == b.strValue)));
+                        if(b.type == Value::Type::String) {
+                            PUSH(Value(!(a.ptrValue == b.ptrValue)));
+                        } else if(b.type == Value::Type::Object && b.ptrValue->type == Object::Type::StrObj) {
+                            PUSH(Value(!(a.strValue->length == static_cast<StrObj*>(b.ptrValue)->length && std::memcmp(a.strValue->data, static_cast<StrObj*>(b.ptrValue)->data->getData(), a.strValue->length) == 0)));
+                        } else {
+                            PUSH(Value(true));
+                        }
                         break;
                     }
                     case Value::Type::Object: {
                         Object* aObj = a.ptrValue;
-                        if(aObj->type != Object::Type::Instance) {
+                        if(aObj->type == Object::Type::Instance) {
+                            Instance* aInst = static_cast<Instance*>(aObj);
+                            auto equalsMethodOpt = aInst->cls->methods->get(STRINGS._equals);
+                            if(!equalsMethodOpt.has_value()) {
+                                errorHandler({Error::Type::RuntimeError, std::format("IterNext: class \"{}\" does not have a _equals method with 1 argument", aInst->cls->name->data)});
+                                return Value::Error;
+                            }
+                            Value equalsMethodVal = equalsMethodOpt.value();
+                            assert(equalsMethodVal.type == Value::Type::Object && equalsMethodVal.ptrValue->type == Object::Type::Function);
+                            Function* func = static_cast<Function*>(equalsMethodVal.ptrValue);
+                            if(func->routine->arity != 2) {
+                                errorHandler({Error::Type::RuntimeError, std::format("IterNext: class \"{}\" does not have a _equals method with 1 argument", aInst->cls->name->data)});
+                                return Value::Error;
+                            }
+                            Value args[2] = {a, b};
+                            Value ret = callFunction(func, 2, args);
+                            assert(ret.type == Value::Type::Bool);
+                            PUSH(Value(!ret.boolValue));
+                        } else if (aObj->type == Object::Type::StrObj) {
+                            if(b.type == Value::Type::String) {
+                                PUSH(Value(!(static_cast<StrObj*>(aObj)->length == b.strValue->length && std::memcmp(static_cast<StrObj*>(aObj)->data->getData(), b.strValue->data, b.strValue->length) == 0)));
+                            } else if(b.type == Value::Type::Object && b.ptrValue->type == Object::Type::StrObj) {
+                                PUSH(Value(!(static_cast<StrObj*>(aObj)->length == static_cast<StrObj*>(b.ptrValue)->length && std::memcmp(static_cast<StrObj*>(aObj)->data->getData(), static_cast<StrObj*>(b.ptrValue)->data->getData(), static_cast<StrObj*>(aObj)->length) == 0)));
+                            } else {
+                                PUSH(Value(true));
+                            }
+                        } else {
                             PUSH(Value(!(b.type == Value::Type::Object && a.ptrValue == b.ptrValue)));
-                            break;
                         }
-                        Instance* aInst = static_cast<Instance*>(aObj);
-                        auto equalsMethodOpt = aInst->cls->methods->get(STRINGS._equals);
-                        if(!equalsMethodOpt.has_value()) {
-                            errorHandler({Error::Type::RuntimeError, std::format("IterNext: class \"{}\" does not have a _equals method with 1 argument", aInst->cls->name->data)});
-                            return Value::Error;
-                        }
-                        Value equalsMethodVal = equalsMethodOpt.value();
-                        assert(equalsMethodVal.type == Value::Type::Object && equalsMethodVal.ptrValue->type == Object::Type::Function);
-                        Function* func = static_cast<Function*>(equalsMethodVal.ptrValue);
-                        if(func->routine->arity != 2) {
-                            errorHandler({Error::Type::RuntimeError, std::format("IterNext: class \"{}\" does not have a _equals method with 1 argument", aInst->cls->name->data)});
-                            return Value::Error;
-                        }
-                        Value args[2] = {a, b};
-                        Value ret = callFunction(func, 2, args);
-                        assert(ret.type == Value::Type::Bool);
-                        PUSH(Value(!ret.boolValue));
                         break;
                     }
                     case Value::Type::Error: {
-                        PUSH(Value(b.type == Value::Type::Error));
+                        PUSH(Value(b.type != Value::Type::Error));
                         break;
                     }
                     default: assert(false);
@@ -982,6 +1020,7 @@ Value VM::execute() {
                     PUSH(arr->get(idx));
                 } else if(objVal.ptrValue->type == Object::Type::Map) {
                     Map* map = static_cast<Map*>(objVal.ptrValue);
+                    // NOTE: map 只能使用常驻字符串来访问, 对象型字符串必须调用内置函数 intern 驻留后访问.
                     if(index.type != Value::Type::String) {
                         errorHandler({Error::Type::RuntimeError, "IndexGet: map key must be a string"});
                         return Value::Error;
@@ -1161,6 +1200,11 @@ Value VM::execute() {
                                     case Object::Type::Class: std::cout << "<class>"; break;
                                     case Object::Type::Instance: std::cout << "<instance>"; break;
                                     case Object::Type::Iterator: std::cout << "<iterator>"; break;
+                                    case Object::Type::StrObj: {
+                                        StrObj* strObj = static_cast<StrObj*>(val.ptrValue);
+                                        std::cout << (const char*)strObj->data->getData();
+                                        break;
+                                    }
                                     default: assert(false); break;
                                 }
                                 break;
@@ -1173,7 +1217,7 @@ Value VM::execute() {
                     case Builtin::Input: {
                         std::string input;
                         std::cin >> input;
-                        String* str = internString(input); // TODO: 这个可能不应该驻留, 对象型字符串实现后要改
+                        StrObj* str = gc->allocate<StrObj>(gc.get(), input.c_str(), input.size());
                         PUSH(Value(str));
                         break;
                     }
@@ -1186,6 +1230,16 @@ Value VM::execute() {
                     case Builtin::Check: {
                         Value val = POP();
                         PUSH(Value(val.type != Value::Type::Error));
+                        break;
+                    }
+                    case Builtin::Intern: {
+                        Value strVal = POP();
+                        if(!(strVal.type == Value::Type::Object && strVal.ptrValue->type == Object::Type::StrObj)) {
+                            errorHandler({Error::Type::RuntimeError, "Intern: argument must be a StrObj"});
+                            return Value::Error;
+                        }
+                        String* internedStr = internString(strVal.strValue->data);
+                        PUSH(Value(internedStr));
                         break;
                     }
                     default: {

@@ -73,6 +73,7 @@ enum class Builtin : uint8_t {
     Input       = 0x05,
     Error       = 0x06,
     Check       = 0x07,
+    Intern      = 0x08
 };
 
 struct BuiltinDesc {
@@ -90,6 +91,7 @@ inline constexpr BuiltinDesc builtinTable[] = {
     {Builtin::Input, "input", 1},
     {Builtin::Error, "error", 0},
     {Builtin::Check, "check", 0},
+    {Builtin::Intern, "intern", 0},
 };
 inline constexpr int builtinTableSize = sizeof(builtinTable) / sizeof(BuiltinDesc);
 
