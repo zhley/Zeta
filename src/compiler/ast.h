@@ -187,7 +187,7 @@ public:
     ACCEPT
     enum class Op {
         Add, Sub, Mul, Div, Mod,
-        Eq, Neq, Lt, Gt, Leq, Geq,
+        Eq, Neq, Lt, Gt, Leq, Geq, Is,
         And, Or, 
         BitAnd, BitOr, BitXor, Shl, Shr
     } op;

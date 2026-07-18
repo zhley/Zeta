@@ -78,6 +78,18 @@ private:
     std::unordered_map<std::string, ModuleInfo> loadedModules; // module path -> module info
     std::vector<std::unique_ptr<Routine>> routines; // [module1.protos[0], module1.protos[1], ..., module2.protos[0], ...]
 
+    // literal strings
+    struct Strings {
+        String* _iter;
+        String* _next;
+        String* _equals;
+    };
+    const Strings STRINGS = {
+        internString("_iter"),
+        internString("_next"),
+        internString("_equals"),
+    };
+
     void importModule(const std::filesystem::path& path);
     std::filesystem::path searchModuleFile(const std::filesystem::path& basePath, const std::string& moduleName);
     

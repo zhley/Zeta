@@ -26,6 +26,7 @@
 | **Gt** | `0x23` | 无 | 弹出 `b, a`，压入 `a > b` 的结果。 |
 | **Le** | `0x24` | 无 | 弹出 `b, a`，压入 `a <= b` 的结果。 |
 | **Ge** | `0x25` | 无 | 弹出 `b, a`，压入 `a >= b` 的结果。 |
+| **Is** | `0x26` | 无 | 弹出 `b, a`，压入 `a is b` 的结果, 严格相等。 |
 | **Jump** | `0x30` | `uint32_t offset` | 无条件跳转，跳转到字节码索引 `offset` |
 | **JumpIfFalse** | `0x31` | `uint32_t offset` | 弹出栈顶值，若为 `false`、`null` 或数值 0，则跳转 `offset`；否则继续。 |
 | **JumpIfTrue** | `0x32` | `uint32_t offset` | 弹出栈顶值，若为非零值，则跳转 `offset`；否则继续。 |
@@ -58,5 +59,5 @@ foo(a, b, c, d):
 | **NewMap** | `0x03` | `map(size)` | 弹出映射大小 `size`, 压入映射(初始大小为0, 根据 `size` 分配合适的容量). |
 | **Print** | `0x04` | `print(val)` | 弹出 `val`, 在控制台打印 `val`. |
 | **Input** | `0x05` | `input()` | 控制台接收控制台输入字符串 `str`, 压入 `str`. |
-| **Error** | `0x06` | `error()` | 将值 `Value::Error` 压栈. |
+| **Error** | `0x06` | `error(code)` | 弹出 `code`, 压入错误码为 `code` 的 `Error` 类型值. |
 | **Check** | `0x07` | `check(val)` | 弹出 `val`, 如果 `val` 是 `Error` 类型, 压入 `false`, 否则压入 `true`.|

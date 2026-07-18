@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -42,6 +43,7 @@ enum class Opcode : uint8_t {
     Gt          = 0x23,
     Le          = 0x24,
     Ge          = 0x25,
+    Is          = 0x26,
     // Control Flow
     Jump        = 0x30,
     JumpIfFalse = 0x31,
@@ -86,7 +88,7 @@ inline constexpr BuiltinDesc builtinTable[] = {
     {Builtin::NewMap, "map", 0},
     {Builtin::Print, "print", -1},
     {Builtin::Input, "input", 1},
-    {Builtin::Error, "error", 1},
+    {Builtin::Error, "error", 0},
     {Builtin::Check, "check", 0},
 };
 inline constexpr int builtinTableSize = sizeof(builtinTable) / sizeof(BuiltinDesc);

@@ -8,7 +8,7 @@
     #include <vector>
     #include <assert.h>
 
-    enum Relop { RP_EQ, RP_NEQ, RP_LT, RP_GT, RP_LEQ, RP_GEQ };
+    enum Relop { RP_EQ, RP_NEQ, RP_LT, RP_GT, RP_LEQ, RP_GEQ, RP_IS };
     enum AssignOp { AS_ASSIGN, AS_PLUS, AS_MINUS, AS_STAR, AS_DIV, AS_MOD, AS_BITAND, AS_BITOR, AS_BITXOR, AS_LSHIFT, AS_RSHIFT };
 
     extern int yylineno;
@@ -250,6 +250,7 @@ Zeta::AST::BinaryExp::Op relopToBinaryOp(Relop relop) {
         case RP_GT: return Zeta::AST::BinaryExp::Op::Gt;
         case RP_LEQ: return Zeta::AST::BinaryExp::Op::Leq;
         case RP_GEQ: return Zeta::AST::BinaryExp::Op::Geq;
+        case RP_IS: return Zeta::AST::BinaryExp::Op::Is
         default: assert(false); return Zeta::AST::BinaryExp::Op::Eq; 
     }
 }

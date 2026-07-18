@@ -26,7 +26,7 @@ struct Value{
         Bool,
         String, // interned string
         Object,
-        Error // flag for error // TODO: 或许可以用来传递错误码
+        Error // flag for error, val is error code
     } type = Type::Null;
     union {
         int64_t intValue;
@@ -68,7 +68,6 @@ struct Routine{
 struct Object {
     enum class Type : uint8_t {
         Block, // 8 bytes head + (size - 8) bytes data
-        String,
         Array,
         Map,
         Function,
@@ -109,12 +108,12 @@ private:
 // immutable string
 // TODO: 这个是VM直接管理的字符串, GC管理的字符串要改实现. 目前 String* 都是VM直接管理的常量字符串
 // TODO: 实现对象级字符串后, VM::execute()的一些指令逻辑要改
-struct String : public Object {
+struct String {
     char* data;
     uint32_t length;
     uint32_t hash;
 
-    String(const char* str, uint32_t len) : Object(Type::String), length(len) {
+    String(const char* str, uint32_t len) : length(len) {
         data = static_cast<char*>(std::malloc(len + 1));
         std::memcpy(data, str, len);
         data[len] = '\0';
@@ -249,7 +248,6 @@ struct Iterator : public Object {
 inline int Object::getSize() const {
     switch (type) {
         case Object::Type::Block:       return static_cast<const Block*>(this)->size + sizeof(Block);
-        case Object::Type::String:      return sizeof(String);
         case Object::Type::Array:       return sizeof(Array);
         case Object::Type::Map:         return sizeof(Map);
         case Object::Type::Function:    return sizeof(Function);
@@ -265,7 +263,6 @@ requires std::is_invocable_v<F, Object**>
 inline void Object::trace(F&& f) {
     switch (type) {
         case Object::Type::Block: break; // actually, Block may contain references to other objects, but it does not know how to trace them, so they will be traced by the owner of the Block. (The owner of the Block is responsible for tracing the references in the Block.)
-        case Object::Type::String: break; // String has no references to other objects
         case Object::Type::Array: {
             Array* arr = static_cast<Array*>(this);
             f((Object**)(&(arr->data)));

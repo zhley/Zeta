@@ -337,6 +337,7 @@ Value VM::callFunction(Function* func, int argc, Value* args) {
 Value VM::execute() {
     StackFrame* curFrame = &stackFrames.back();
     Routine* curRoutine = curFrame->routine;
+    int initDepth = stackFrames.size();
 
     #define READ_BYTE(val) (val = curRoutine->bytecode[curFrame->ip++])
     #define READ_UINT32(val) { std::memcpy(&val, &(curRoutine->bytecode[curFrame->ip]), 4); curFrame->ip += 4; } 
@@ -564,16 +565,147 @@ Value VM::execute() {
                 break;
             }
             case Opcode::Eq: {
-                // TODO: 目前是严格类型相等, 后续可能要支持类型转换的相等, 比如 0 == 0.0, Opcode::Neq 同理
                 Value b = POP();
                 Value a = POP();
-                PUSH(Value(a == b));
+                if(a == b) {
+                    PUSH(Value(true));
+                    break;
+                }
+                switch(a.type) {
+                    case Value::Type::Null: {
+                        PUSH(Value(b.type == Value::Type::Null));
+                        break;
+                    }
+                    case Value::Type::Int: {
+                        if(b.type == Value::Type::Int) {
+                            PUSH(Value(a.intValue == b.intValue));
+                        } else if(b.type == Value::Type::Float) {
+                            PUSH(Value(static_cast<double>(a.intValue) == b.floatValue));
+                        } else {
+                            PUSH(Value(false));
+                        }
+                        break;
+                    }
+                    case Value::Type::Float: {
+                        if(b.type == Value::Type::Float) {
+                            PUSH(Value(a.floatValue == b.floatValue));
+                        } else if(b.type == Value::Type::Int) {
+                            PUSH(Value(a.floatValue == static_cast<double>(b.intValue)));
+                        } else {
+                            PUSH(Value(false));
+                        }
+                        break;
+                    }
+                    case Value::Type::Bool: {
+                        PUSH(Value(b.type == Value::Type::Bool && a.boolValue == b.boolValue));
+                        break;
+                    }
+                    case Value::Type::String: {
+                        PUSH(Value(b.type == Value::Type::String && a.strValue == b.strValue));
+                        break;
+                    }
+                    case Value::Type::Object: {
+                        Object* aObj = a.ptrValue;
+                        if(aObj->type != Object::Type::Instance) {
+                            PUSH(Value(b.type == Value::Type::Object && a.ptrValue == b.ptrValue));
+                            break;
+                        }
+                        Instance* aInst = static_cast<Instance*>(aObj);
+                        auto equalsMethodOpt = aInst->cls->methods->get(STRINGS._equals);
+                        if(!equalsMethodOpt.has_value()) {
+                            errorHandler({Error::Type::RuntimeError, std::format("IterNext: class \"{}\" does not have a _equals method with 1 argument", aInst->cls->name->data)});
+                            return Value::Error;
+                        }
+                        Value equalsMethodVal = equalsMethodOpt.value();
+                        assert(equalsMethodVal.type == Value::Type::Object && equalsMethodVal.ptrValue->type == Object::Type::Function);
+                        Function* func = static_cast<Function*>(equalsMethodVal.ptrValue);
+                        if(func->routine->arity != 2) {
+                            errorHandler({Error::Type::RuntimeError, std::format("IterNext: class \"{}\" does not have a _equals method with 1 argument", aInst->cls->name->data)});
+                            return Value::Error;
+                        }
+                        Value args[2] = {a, b};
+                        PUSH(callFunction(func, 2, args));
+                        break;
+                    }
+                    case Value::Type::Error: {
+                        PUSH(Value(b.type == Value::Type::Error));
+                        break;
+                    }
+                    default: assert(false);
+                }
                 break;
             }
             case Opcode::Neq: {
                 Value b = POP();
                 Value a = POP();
-                PUSH(Value(a != b));
+                if(a == b) {
+                    PUSH(Value(false));
+                    break;
+                }
+                switch(a.type) {
+                    case Value::Type::Null: {
+                        PUSH(Value(b.type != Value::Type::Null));
+                        break;
+                    }
+                    case Value::Type::Int: {
+                        if(b.type == Value::Type::Int) {
+                            PUSH(Value(a.intValue != b.intValue));
+                        } else if(b.type == Value::Type::Float) {
+                            PUSH(Value(static_cast<double>(a.intValue) != b.floatValue));
+                        } else {
+                            PUSH(Value(true));
+                        }
+                        break;
+                    }
+                    case Value::Type::Float: {
+                        if(b.type == Value::Type::Float) {
+                            PUSH(Value(a.floatValue != b.floatValue));
+                        } else if(b.type == Value::Type::Int) {
+                            PUSH(Value(a.floatValue != static_cast<double>(b.intValue)));
+                        } else {
+                            PUSH(Value(true));
+                        }
+                        break;
+                    }
+                    case Value::Type::Bool: {
+                        PUSH(Value(!(b.type == Value::Type::Bool && a.boolValue == b.boolValue)));
+                        break;
+                    }
+                    case Value::Type::String: {
+                        PUSH(Value(!(b.type == Value::Type::String && a.strValue == b.strValue)));
+                        break;
+                    }
+                    case Value::Type::Object: {
+                        Object* aObj = a.ptrValue;
+                        if(aObj->type != Object::Type::Instance) {
+                            PUSH(Value(!(b.type == Value::Type::Object && a.ptrValue == b.ptrValue)));
+                            break;
+                        }
+                        Instance* aInst = static_cast<Instance*>(aObj);
+                        auto equalsMethodOpt = aInst->cls->methods->get(STRINGS._equals);
+                        if(!equalsMethodOpt.has_value()) {
+                            errorHandler({Error::Type::RuntimeError, std::format("IterNext: class \"{}\" does not have a _equals method with 1 argument", aInst->cls->name->data)});
+                            return Value::Error;
+                        }
+                        Value equalsMethodVal = equalsMethodOpt.value();
+                        assert(equalsMethodVal.type == Value::Type::Object && equalsMethodVal.ptrValue->type == Object::Type::Function);
+                        Function* func = static_cast<Function*>(equalsMethodVal.ptrValue);
+                        if(func->routine->arity != 2) {
+                            errorHandler({Error::Type::RuntimeError, std::format("IterNext: class \"{}\" does not have a _equals method with 1 argument", aInst->cls->name->data)});
+                            return Value::Error;
+                        }
+                        Value args[2] = {a, b};
+                        Value ret = callFunction(func, 2, args);
+                        assert(ret.type == Value::Type::Bool);
+                        PUSH(Value(!ret.boolValue));
+                        break;
+                    }
+                    case Value::Type::Error: {
+                        PUSH(Value(b.type == Value::Type::Error));
+                        break;
+                    }
+                    default: assert(false);
+                }
                 break;
             }
             case Opcode::Lt: {
@@ -644,6 +776,12 @@ Value VM::execute() {
                 }
                 break;
             }
+            case Opcode::Is: {
+                Value b = POP();
+                Value a = POP();
+                PUSH(Value(a == b));
+                break;
+            }
             case Opcode::Jump: {
                 uint32_t offset;
                 READ_UINT32(offset);
@@ -681,7 +819,7 @@ Value VM::execute() {
             case Opcode::Ret:{
                 Value retVal = POP();
                 popFrame();
-                if(stackFrames.empty()) {
+                if(stackFrames.size() == initDepth - 1) {
                     return retVal;
                 }
                 curFrame = &stackFrames.back();
@@ -921,9 +1059,9 @@ Value VM::execute() {
                             PUSH(Value(iter));
                         } else if (objVal.ptrValue->type == Object::Type::Instance) {
                             Instance* instance = static_cast<Instance*>(objVal.ptrValue);
-                            auto iterMethodOpt = instance->cls->methods->get(internString("__iter__"));
+                            auto iterMethodOpt = instance->cls->methods->get(STRINGS._iter);
                             if(!iterMethodOpt.has_value()) {
-                                errorHandler({Error::Type::RuntimeError, std::format("GetIter: class \"{}\" does not have an __iter__ method with 0 arguments", instance->cls->name->data)});
+                                errorHandler({Error::Type::RuntimeError, std::format("GetIter: class \"{}\" does not have an _iter method with 0 arguments", instance->cls->name->data)});
                                 return Value::Error;
                             }
                             Value iterMethodVal = iterMethodOpt.value();
@@ -937,7 +1075,7 @@ Value VM::execute() {
                             newFrame.ip = 0;
                             pushFrame(newFrame);
                             if(routine->arity != 1) {
-                                errorHandler({Error::Type::RuntimeError, std::format("GetIter: class \"{}\" does not have an __iter__ method with 0 arguments", instance->cls->name->data)});
+                                errorHandler({Error::Type::RuntimeError, std::format("GetIter: class \"{}\" does not have an _iter method with 0 arguments", instance->cls->name->data)});
                                 return Value::Error;
                             }
                             newFrame.base[0] = objVal; // push 'this' as the first argument
@@ -961,9 +1099,9 @@ Value VM::execute() {
                             PUSH(nextVal);
                         } else if (iterVal.ptrValue->type == Object::Type::Instance) {
                             Instance* instance = static_cast<Instance*>(iterVal.ptrValue);
-                            auto nextMethodOpt = instance->cls->methods->get(internString("__next__"));
+                            auto nextMethodOpt = instance->cls->methods->get(STRINGS._next);
                             if(!nextMethodOpt.has_value()) {
-                                errorHandler({Error::Type::RuntimeError, std::format("IterNext: class \"{}\" does not have a __next__ method with 0 arguments", instance->cls->name->data)});
+                                errorHandler({Error::Type::RuntimeError, std::format("IterNext: class \"{}\" does not have a _next method with 0 arguments", instance->cls->name->data)});
                                 return Value::Error;
                             }
                             Value nextMethodVal = nextMethodOpt.value();
@@ -977,7 +1115,7 @@ Value VM::execute() {
                             newFrame.ip = 0;
                             pushFrame(newFrame);
                             if(routine->arity != 1) {
-                                errorHandler({Error::Type::RuntimeError, std::format("IterNext: class \"{}\" does not have a __next__ method with 0 arguments", instance->cls->name->data)});
+                                errorHandler({Error::Type::RuntimeError, std::format("IterNext: class \"{}\" does not have a _next method with 0 arguments", instance->cls->name->data)});
                                 return Value::Error;
                             }
                             newFrame.base[0] = iterVal; // push 'this' as the first argument
@@ -1040,7 +1178,9 @@ Value VM::execute() {
                         break;
                     }
                     case Builtin::Error: {
-                        PUSH(Value::Error);
+                        Value code = POP(); 
+                        assert(code.type == Value::Type::Int);
+                        PUSH(Value(Value::Type::Error, code.intValue));
                         break;
                     }
                     case Builtin::Check: {
