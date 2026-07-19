@@ -334,6 +334,7 @@ Value VM::callFunction(Function* func, int argc, Value* args) {
     return execute();
 }
 
+// TODO: 需要重构
 Value VM::execute() {
     StackFrame* curFrame = &stackFrames.back();
     Routine* curRoutine = curFrame->routine;
@@ -830,12 +831,17 @@ Value VM::execute() {
                 uint32_t offset;
                 READ_UINT32(offset);
                 Value cond = POP();
-                // TODO: 需要支持类型转换
-                if(cond.type != Value::Type::Bool) {
-                    errorHandler({Error::Type::RuntimeError, "Condition must be a boolean"});
-                    return Value::Error;
+                bool isTrue = false;
+                switch(cond.type) {
+                    case Value::Type::Null: isTrue = false; break;
+                    case Value::Type::Int: isTrue = cond.intValue != 0; break;
+                    case Value::Type::Float: isTrue = cond.floatValue != 0.0; break;
+                    case Value::Type::Bool: isTrue = cond.boolValue; break;
+                    case Value::Type::String: isTrue = true; break;
+                    case Value::Type::Object: isTrue = true; break;
+                    case Value::Type::Error: isTrue = true; break;
                 }
-                if(!cond.boolValue) {
+                if(!isTrue) {
                     curFrame->ip = offset;
                 }
                 break;
@@ -844,12 +850,17 @@ Value VM::execute() {
                 uint32_t offset;
                 READ_UINT32(offset);
                 Value cond = POP();
-                // TODO: 需要支持类型转换
-                if(cond.type != Value::Type::Bool) {
-                    errorHandler({Error::Type::RuntimeError, "Condition must be a boolean"});
-                    return Value::Error;
+                bool isTrue = false;
+                switch(cond.type) {
+                    case Value::Type::Null: isTrue = false; break;
+                    case Value::Type::Int: isTrue = cond.intValue != 0; break;
+                    case Value::Type::Float: isTrue = cond.floatValue != 0.0; break;
+                    case Value::Type::Bool: isTrue = cond.boolValue; break;
+                    case Value::Type::String: isTrue = true; break;
+                    case Value::Type::Object: isTrue = true; break;
+                    case Value::Type::Error: isTrue = true; break;
                 }
-                if(cond.boolValue) {
+                if(isTrue) {
                     curFrame->ip = offset;
                 }
                 break;
@@ -961,43 +972,114 @@ Value VM::execute() {
                 uint8_t argCount;
                 READ_BYTE(argCount);
                 Value objVal = POP();
-                if(objVal.type != Value::Type::Object || objVal.ptrValue->type != Object::Type::Instance) {
-                    errorHandler({Error::Type::RuntimeError, "CallMethod: object must be a class instance"});
-                    return Value::Error;
-                }
-                Instance* instance = static_cast<Instance*>(objVal.ptrValue);
                 uint32_t nameIndex;
                 READ_UINT32(nameIndex);
                 assert(nameIndex < curRoutine->constants.size());
                 Value nameVal = curRoutine->constants[nameIndex];
                 assert(nameVal.type == Value::Type::String);
                 String* methodName = nameVal.strValue;
-                auto methodValOpt = instance->cls->methods->get(methodName);
-                if(!methodValOpt.has_value()) {
-                    errorHandler({Error::Type::RuntimeError, std::format("CallMethod: method \"{}\" not found in class \"{}\"", methodName->data, instance->cls->name->data)});
-                    return Value::Error;
+                if(objVal.type == Value::Type::String) {
+                    if(methodName == STRINGS.len){
+                        if(argCount != 0) {
+                            errorHandler({Error::Type::RuntimeError, std::format("Method \"len\" expects 0 arguments, but {} were provided", argCount)});
+                            return Value::Error;
+                        }
+                        PUSH(Value(static_cast<int64_t>(objVal.strValue->length)));
+                        break;
+                    } else {
+                        errorHandler({Error::Type::RuntimeError, std::format("CallMethod: string does not have method \"{}\"", methodName->data)});
+                        return Value::Error;
+                    }
+                } else if(objVal.type == Value::Type::Object) {
+                    Object* obj = objVal.ptrValue;
+                    switch(obj->type) {
+                        case Object::Type::Array: {
+                            if(methodName == STRINGS.size) {
+                                if(argCount != 0) {
+                                    errorHandler({Error::Type::RuntimeError, std::format("Method \"size\" expects 0 arguments, but {} were provided", argCount)});
+                                    return Value::Error;
+                                }
+                                Array* arr = static_cast<Array*>(obj);
+                                PUSH(Value(static_cast<int64_t>(arr->size)));
+                                break;
+                            } else if (methodName == STRINGS.add) {
+                                if(argCount != 1) {
+                                    errorHandler({Error::Type::RuntimeError, std::format("Method \"add\" expects 1 argument, but {} were provided", argCount)});
+                                    return Value::Error;
+                                }
+                                Array* arr = static_cast<Array*>(obj);
+                                Value valueToAdd = POP();
+                                arr->add(valueToAdd);
+                                PUSH(Value::Null);
+                                break;
+                            } else {
+                                errorHandler({Error::Type::RuntimeError, std::format("CallMethod: array does not have method \"{}\"", methodName->data)});
+                                return Value::Error;
+                            }
+                        }
+                        case Object::Type::Map: {
+                            if(methodName == STRINGS.size) {
+                                if(argCount != 0) {
+                                    errorHandler({Error::Type::RuntimeError, std::format("Method \"len\" expects 0 arguments, but {} were provided", argCount)});
+                                    return Value::Error;
+                                }
+                                Map* map = static_cast<Map*>(obj);
+                                PUSH(Value(static_cast<int64_t>(map->size)));
+                                break;
+                            } else {
+                                errorHandler({Error::Type::RuntimeError, std::format("CallMethod: map does not have method \"{}\"", methodName->data)});
+                                return Value::Error;
+                            }
+                        }
+                        case Object::Type::StrObj: {
+                            if(methodName == STRINGS.len) {
+                                if(argCount != 0) {
+                                    errorHandler({Error::Type::RuntimeError, std::format("Method \"len\" expects 0 arguments, but {} were provided", argCount)});
+                                    return Value::Error;
+                                }
+                                StrObj* strObj = static_cast<StrObj*>(obj);
+                                PUSH(Value(static_cast<int64_t>(strObj->length)));
+                                break;
+                            } else {
+                                errorHandler({Error::Type::RuntimeError, std::format("CallMethod: string object does not have method \"{}\"", methodName->data)});
+                                return Value::Error;
+                            }
+                        }
+                        case Object::Type::Instance: {
+                            Instance* instance = static_cast<Instance*>(objVal.ptrValue);
+                            auto methodValOpt = instance->cls->methods->get(methodName);
+                            if(!methodValOpt.has_value()) {
+                                errorHandler({Error::Type::RuntimeError, std::format("CallMethod: method \"{}\" not found in class \"{}\"", methodName->data, instance->cls->name->data)});
+                                return Value::Error;
+                            }
+                            Value methodVal = methodValOpt.value();
+                            assert(methodVal.type == Value::Type::Object && methodVal.ptrValue->type == Object::Type::Function);
+                            Function* func = static_cast<Function*>(methodVal.ptrValue);
+                            Routine* routine = func->routine;
+                            StackFrame newFrame;
+                            newFrame.routine = routine;
+                            newFrame.base = stack.top;
+                            newFrame.top = newFrame.base + routine->localCount;
+                            newFrame.ip = 0;
+                            pushFrame(newFrame);
+                            if(argCount != routine->arity - 1) {
+                                errorHandler({Error::Type::RuntimeError, std::format("Method expects {} arguments, but {} were provided", routine->arity - 1, argCount)});
+                                return Value::Error;
+                            }
+                            newFrame.base[0] = objVal; // push 'this' as the first argument
+                            for(int i = routine->arity - 1; i >= 1; i--) {
+                                newFrame.base[i] = POP();
+                            }
+                            curFrame = &stackFrames.back();
+                            curRoutine = curFrame->routine;
+                            break;
+                        }
+                        default: {
+                            errorHandler({Error::Type::RuntimeError, "CallMethod: object must be an array, map, string or class instance"});
+                            return Value::Error;
+                        }
+                    }
                 }
-                Value methodVal = methodValOpt.value();
-                assert(methodVal.type == Value::Type::Object && methodVal.ptrValue->type == Object::Type::Function);
-                Function* func = static_cast<Function*>(methodVal.ptrValue);
-                Routine* routine = func->routine;
-                StackFrame newFrame;
-                newFrame.routine = routine;
-                newFrame.base = stack.top;
-                newFrame.top = newFrame.base + routine->localCount;
-                newFrame.ip = 0;
-                pushFrame(newFrame);
-                if(argCount != routine->arity - 1) {
-                    errorHandler({Error::Type::RuntimeError, std::format("Method expects {} arguments, but {} were provided", routine->arity - 1, argCount)});
-                    return Value::Error;
-                }
-                newFrame.base[0] = objVal; // push 'this' as the first argument
-                for(int i = routine->arity - 1; i >= 1; i--) {
-                    newFrame.base[i] = POP();
-                }
-                curFrame = &stackFrames.back();
-                curRoutine = curFrame->routine;
-                break;
             }
             case Opcode::IndexGet: {
                 Value index = POP();

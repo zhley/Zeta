@@ -83,11 +83,17 @@ private:
         String* _iter;
         String* _next;
         String* _equals;
+        String* size;
+        String* add;
+        String* len;
     };
     const Strings STRINGS = {
         internString("_iter"),
         internString("_next"),
         internString("_equals"),
+        internString("size"),
+        internString("add"),
+        internString("len")
     };
 
     void importModule(const std::filesystem::path& path);
