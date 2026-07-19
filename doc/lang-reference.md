@@ -17,6 +17,7 @@
 8. [类与对象](#8-类与对象)
 9. [模块系统](#9-模块系统)
 10. [内置函数](#10-内置函数)
+    - [10.1 内置方法](#101-内置方法)
 11. [程序入口](#11-程序入口)
 12. [运行时](#12-运行时)
 13. [字节码参考](#13-字节码参考)
@@ -51,7 +52,7 @@
 var    let    fn     return  if     else
 while  for    break  continue
 class  extends  this
-import as
+import as    is
 true   false  null
 ```
 
@@ -73,16 +74,17 @@ Zeta 是动态类型语言。运行时类型如下：
 | `Int` | 64 位有符号整数（`int64_t`） |
 | `Float` | 双精度浮点数（`double`） |
 | `Bool` | 布尔值：`true` / `false` |
-| `String` | 不可变字符串（运行时驻留） |
+| `String` | 不可变驻留字符串（VM 管理，相同内容共享内存） |
+| `StrObj` | 堆分配的不可变字符串对象（GC 管理，由拼接或 `input()` 产生） |
 | `Array` | 动态数组，索引为整数 |
-| `Map` | 键值对容器，键为字符串 |
+| `Map` | 键值对容器，键为驻留字符串 |
 | `Function` | 函数（一等公民） |
 | `Class` | 类 |
 | `Instance` | 类的实例 |
 | `Iterator` | 迭代器（通常由内置函数 `iter()` 产生） |
-| `Error` | 错误标记值（由内置函数 `error()` 产生，或某些操作失败时返回） |
+| `Error` | 错误标记值，携带一个整数错误码 |
 
-> **注意**: 相等比较 (`==`) 目前是严格类型相等，即 `0 != 0.0`。此行为可能在后续版本中改变。
+> **String vs StrObj**: `String` 是 VM 级别的驻留字符串（字面量、标识符），`StrObj` 是运行时动态创建的堆字符串（拼接结果、`input()` 返回值）。两者都代表不可变字符串，且在大多数场景下行为一致。Map 键只能用驻留 `String`，如需用 `StrObj` 访问 Map，请先调用 `intern()` 驻留。
 
 ---
 
@@ -189,10 +191,21 @@ cond ? a : b
 
 ### 4.4 关系运算符
 
-| 运算符 | 示例 |
-|--------|------|
-| `==` `!=` | `a == b` |
-| `<` `>` `<=` `>=` | `a < b` |
+| 运算符 | 示例 | 说明 |
+|--------|------|------|
+| `==` `!=` | `a == b` | 值相等比较（见下方规则） |
+| `<` `>` `<=` `>=` | `a < b` | 有序比较 |
+| `is` | `a is b` | 严格恒等比较（类型 + 值/指针完全相同） |
+
+#### 4.4.1 `==` / `!=` 比较规则
+
+- **Int 与 Float**: 按数值比较（`0 == 0.0` → `true`）。
+- **String 与 StrObj**: 按字符串内容比较。
+- **实例（Instance）**: 若类定义了 `_equals` 方法（接收 `this` + 一个参数），则委托给该方法；否则按指针相等比较。
+- **其他对象类型**（Array, Map, Function 等）: 按指针相等比较。
+- **其他基础类型**: 按类型和值比较。
+
+> 示例：`0 == 0.0` 为 `true`，但 `0 is 0.0` 为 `false`（类型不同）。`"a" + "b" == "ab"` 为 `true`（内容相同）。
 
 ### 4.5 移位运算符
 
@@ -246,20 +259,27 @@ cond ? a : b
 
 位运算（`&` `|` `^` `<<` `>>` `~`）和取模（`%`）仅支持 Int 类型。
 
-字符串支持 `+` 拼接、`==` 和 `!=` 比较。
+**字符串拼接**: `+` 运算符支持字符串拼接（String 和 StrObj 均可），结果为新的 `StrObj`。
+
+```zeta
+var s = "Hello, " + "World!";   // s 是 StrObj, 内容为 "Hello, World!"
+```
 
 ### 4.12 真值规则
 
-在条件判断和逻辑非运算中：
+条件判断（`if`、`while`、条件分支 `JumpIfFalse`/`JumpIfTrue`）中自动进行真值转换：
 
 | 值 | 真值 |
 |----|------|
-| `false`, `null` | false |
-| 整数/浮点数 `0` / `0.0` | false |
-| 空字符串 `""` | false |
-| 空数组 `[]` | false |
-| 空映射 `{}` | false |
-| 其他所有值（非零数、非空字符串、函数等） | true |
+| `null` | false |
+| `0` (Int), `0.0` (Float) | false |
+| `false` (Bool) | false |
+| 非零整数/浮点数、`true` | true |
+| 字符串（String / StrObj） | true |
+| 对象（Array, Map, Function, Instance 等） | true |
+| `Error` | true |
+
+> 注意：此规则同时适用于 `if`/`while` 等语句条件，以及 `!` 逻辑非运算符。
 
 ---
 
@@ -361,7 +381,7 @@ for (key : map) {          // 遍历映射返回键（字符串）
 }
 ```
 
-> for-in 循环通过内置函数 `iter()` 和 `next()` 实现。数组遍历返回元素值，映射遍历返回键。当 `next()` 返回 `Error` 时循环终止。
+> for-in 循环通过内置函数 `iter()` 和 `next()` 实现。数组遍历返回元素值，映射遍历返回键。当 `next()` 返回 `Error` 时通过 `check()` 检测并终止循环。
 
 **break / continue**:
 
@@ -492,9 +512,17 @@ p.init(5, 6);           // 调用方法
 
 `this` 只能在方法内部使用，指向调用该方法的当前实例。方法体内 `this` 始终位于局部变量槽位 0。
 
-### 8.6 自定义迭代器
+### 8.6 自定义迭代器与特殊方法
 
-如果类定义了 `__iter__` 和 `__next__` 方法（各接收 1 个参数——`this`），其实例即可用于 for-in 循环：
+Zeta 支持以下特殊方法：
+
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| `_iter` | `fn _iter()` | 返回迭代器实例，使对象可用于 for-in 循环 |
+| `_next` | `fn _next()` | 返回下一个元素；迭代结束时返回 `error(0)` |
+| `_equals` | `fn _equals(other)` | 自定义相等比较；用于 `==` / `!=` 运算符 |
+
+**迭代器示例**:
 
 ```zeta
 class Range {
@@ -507,7 +535,7 @@ class Range {
         return this;
     }
 
-    fn __iter__() {
+    fn _iter() {
         return RangeIter(this.start, this.end);
     }
 }
@@ -522,9 +550,9 @@ class RangeIter {
         return this;
     }
 
-    fn __next__() {
+    fn _next() {
         if (this.current >= this.end) {
-            return error();
+            return error(0);
         }
         var val = this.current;
         this.current = this.current + 1;
@@ -536,6 +564,34 @@ for (i : Range(0, 10)) {
     print(i);
 }
 ```
+
+> 注意：迭代器协议方法名以下划线开头（`_iter`、`_next`），而非双下划线。
+
+**_equals 示例**（自定义相等比较）：
+
+```zeta
+class Vec2 {
+    var x = 0;
+    var y = 0;
+
+    fn init(x, y) {
+        this.x = x;
+        this.y = y;
+        return this;
+    }
+
+    fn _equals(other) {
+        if (this.x == other.x && this.y == other.y) {
+            return true;
+        }
+        return false;
+    }
+}
+
+var a = Vec2(1, 2);
+var b = Vec2(1, 2);
+print(a == b);    // true（通过 _equals 比较）
+print(a is b);    // false（不同实例）
 
 ---
 
@@ -576,17 +632,61 @@ import "bar.zt" as bar;   // 导入并起别名，通过 bar.name 访问
 
 | 函数 | 签名 | 说明 |
 |------|------|------|
-| `print` | `print(val)` | 将值打印到标准输出。对象类型显示为 `<array>`、`<map>`、`<function>` 等标签 |
-| `input` | `input()` | 从标准输入读取一个字符串并返回 |
-| `iter` | `iter(container)` | 获取数组、映射或实例的迭代器。对于实例，调用 `__iter__()` 方法 |
+| `print` | `print(val)` | 将值打印到标准输出。对象类型显示为 `<array>`、`<map>`、`<function>` 等标签；StrObj 打印其字符串内容 |
+| `input` | `input()` | 从标准输入读取一个字符串，返回 `StrObj` |
+| `iter` | `iter(container)` | 获取数组、映射或实例的迭代器。对于实例，调用 `_iter()` 方法 |
 | `next` | `next(iter)` | 获取迭代器的下一个值。数组返回元素值，映射返回键。若迭代完毕返回 `Error` |
 | `array` | `array(size)` | 创建指定大小的新数组（元素初始为 `null`） |
 | `map` | `map(capacity)` | 创建指定初始容量的新映射 |
-| `error` | `error()` | 返回 `Error` 标记值（常用于标记迭代结束等） |
+| `error` | `error(code)` | 返回携带整数错误码 `code` 的 `Error` 值 |
+| `check` | `check(val)` | 若 `val` 不是 `Error` 类型返回 `true`，否则返回 `false` |
+| `intern` | `intern(strObj)` | 将 `StrObj` 驻留为 `String`（存入 VM 字符串表）。用于需要驻留字符串的场景（如 Map 键访问） |
 
 > 自定义函数名不能与内置函数同名，否则编译报错。
 
 ---
+
+### 10.1 内置方法
+
+以下内置方法通过方法调用语法直接由 VM 实现，无需类定义：
+
+**字符串**（String 和 StrObj）：
+
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| `len` | `str.len()` | 返回字符串的字符长度（Int） |
+
+```zeta
+var s = "hello";
+print(s.len());    // 5
+```
+
+**数组**（Array）：
+
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| `size` | `arr.size()` | 返回数组元素个数（Int） |
+| `add` | `arr.add(val)` | 向数组末尾添加一个元素，返回 `null` |
+
+```zeta
+var arr = [1, 2, 3];
+print(arr.size());  // 3
+arr.add(4);
+print(arr.size());  // 4
+```
+
+**映射**（Map）：
+
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| `size` | `map.size()` | 返回映射中的键值对数量（Int） |
+
+```zeta
+var m = {a: 1, b: 2};
+print(m.size());    // 2
+```
+
+> Map 只能用驻留字符串（`String`）作为键来索引。如果使用 `StrObj`（如 `input()` 或字符串拼接的结果），需要先通过 `intern()` 驻留后再用作键。
 
 ## 11. 程序入口
 
@@ -632,7 +732,18 @@ Zeta 采用基于栈的字节码虚拟机（VM）执行。编译流程：
 
 ### 12.3 字符串驻留
 
-所有字符串在 VM 层驻留（interning），相同内容的字符串共享同一块内存，因此字符串相等比较效率为 O(1)。
+VM 管理一个字符串驻留表（string table），字面量字符串和标识符会被驻留（`String`），相同内容共享同一块内存，因此驻留字符串的相等比较效率为 O(1)。
+
+运行时动态创建的字符串（如 `input()` 返回值、字符串拼接结果）是 `StrObj` 类型，由 GC 管理，不自动驻留。可通过内置函数 `intern()` 将其显式驻留为 `String`。
+
+```zeta
+var s1 = "hello";                     // String（驻留）
+var s2 = input();                     // StrObj（非驻留）
+var s3 = intern(s2);                  // String（驻留）
+print(s1 == s2);                      // true（按内容比较）
+print(s1 is s2);                      // false（不同类型）
+print(s1 is s3);                      // true（同为驻留 String，相同内容）
+```
 
 ### 12.4 VM 配置
 
@@ -671,7 +782,7 @@ Zeta 采用基于栈的字节码虚拟机（VM）执行。编译流程：
 
 Zeta 编译为自定义字节码。字节码指令的完整说明见 [bytecode.md](bytecode.md)。
 
-指令概览（46 条指令）：
+指令概览（47 条指令）：
 
 | 类别 | 指令 |
 |------|------|
@@ -679,7 +790,7 @@ Zeta 编译为自定义字节码。字节码指令的完整说明见 [bytecode.m
 | 算术 | `Add`, `Sub`, `Mul`, `Div`, `Mod`, `Neg` |
 | 位运算 | `BitAnd`, `BitOr`, `BitXor`, `BitNot`, `Shl`, `Shr` |
 | 逻辑 | `Not` |
-| 比较 | `Eq`, `Neq`, `Lt`, `Gt`, `Le`, `Ge` |
+| 比较 | `Eq`, `Neq`, `Lt`, `Gt`, `Le`, `Ge`, `Is` |
 | 控制流 | `Jump`, `JumpIfFalse`, `JumpIfTrue`, `Ret`, `Call` |
 | 对象 | `GetField`, `SetField`, `CallMethod`, `IndexGet`, `IndexSet` |
 | 杂项 | `Pop`, `Dup`, `CallBuiltin`, `Nop`, `Halt` |
