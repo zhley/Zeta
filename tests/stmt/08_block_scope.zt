@@ -1,0 +1,53 @@
+fn main() {
+    var pass = 0;
+    var fail = 0;
+
+    // block creates a new scope
+    var outer = 1;
+    {
+        var inner = 2;
+        if (inner == 2) { pass = pass + 1; } else { print("FAIL: inner var\n"); fail = fail + 1; }
+        // can access outer from inner
+        if (outer == 1) { pass = pass + 1; } else { print("FAIL: outer from inner\n"); fail = fail + 1; }
+    }
+    // outer should still be 1
+    if (outer == 1) { pass = pass + 1; } else { print("FAIL: outer after block\n"); fail = fail + 1; }
+
+    // variable shadowing: inner var shadows outer with same name
+    var x = "outer";
+    {
+        var x = "inner";
+        if (x == "inner") { pass = pass + 1; } else { print("FAIL: shadow inner\n"); fail = fail + 1; }
+    }
+    if (x == "outer") { pass = pass + 1; } else { print("FAIL: shadow outer preserved\n"); fail = fail + 1; }
+
+    // nested blocks
+    {
+        var a = 1;
+        {
+            var b = 2;
+            if (a + b == 3) { pass = pass + 1; } else { print("FAIL: nested blocks\n"); fail = fail + 1; }
+        }
+    }
+
+    // if body is a block (creates scope)
+    if (true) {
+        var in_if = "yes";
+        if (in_if == "yes") { pass = pass + 1; } else { print("FAIL: if scope\n"); fail = fail + 1; }
+    }
+
+    // while body is a block
+    var count = 0;
+    while (count < 3) {
+        var w = count;
+        count = count + 1;
+    }
+    if (count == 3) { pass = pass + 1; } else { print("FAIL: while scope\n"); fail = fail + 1; }
+
+    print("block_scope: ");
+    print(pass);
+    print("/");
+    print(pass + fail);
+    print(" passed\n");
+    return 0;
+}

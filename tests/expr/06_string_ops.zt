@@ -1,0 +1,38 @@
+fn main() {
+    var pass = 0;
+    var fail = 0;
+
+    // string concatenation
+    var s1 = "Hello, " + "World!";
+    if (s1 == "Hello, World!") { pass = pass + 1; } else { print("FAIL: string concat\n"); fail = fail + 1; }
+
+    // concatenation with empty string
+    if (("" + "x") == "x") { pass = pass + 1; } else { print("FAIL: empty + x\n"); fail = fail + 1; }
+    if (("x" + "") == "x") { pass = pass + 1; } else { print("FAIL: x + empty\n"); fail = fail + 1; }
+
+    // multiple concatenation
+    if (("a" + "b" + "c") == "abc") { pass = pass + 1; } else { print("FAIL: multi concat\n"); fail = fail + 1; }
+
+    // string comparison
+    if ("abc" == "abc") { pass = pass + 1; } else { print("FAIL: str eq\n"); fail = fail + 1; }
+    if ("abc" != "xyz") { pass = pass + 1; } else { print("FAIL: str neq\n"); fail = fail + 1; }
+
+    // is operator on strings
+    if ("foo" is "foo") { pass = pass + 1; } else { print("FAIL: is on interned strings\n"); fail = fail + 1; }
+    // concatenated string vs literal: content same but types differ
+    var cs = "a" + "b";
+    if (cs == "ab") { pass = pass + 1; } else { print("FAIL: concat == literal\n"); fail = fail + 1; }
+    if (!(cs is "ab")) { pass = pass + 1; } else { print("FAIL: concat is not literal (StrObj vs String)\n"); fail = fail + 1; }
+
+    // string length
+    if ("".len() == 0) { pass = pass + 1; } else { print("FAIL: empty len\n"); fail = fail + 1; }
+    if ("hello".len() == 5) { pass = pass + 1; } else { print("FAIL: hello len\n"); fail = fail + 1; }
+    if (("ab" + "c").len() == 3) { pass = pass + 1; } else { print("FAIL: concat len\n"); fail = fail + 1; }
+
+    print("string_ops: ");
+    print(pass);
+    print("/");
+    print(pass + fail);
+    print(" passed\n");
+    return 0;
+}

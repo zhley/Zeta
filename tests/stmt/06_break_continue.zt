@@ -1,0 +1,74 @@
+fn main() {
+    var pass = 0;
+    var fail = 0;
+
+    // break in while
+    var i = 0;
+    var found = 0;
+    while (i < 100) {
+        if (i == 5) {
+            found = i;
+            break;
+        }
+        i = i + 1;
+    }
+    if (found == 5) { pass = pass + 1; } else { print("FAIL: break in while\n"); fail = fail + 1; }
+
+    // continue in while
+    var sum = 0;
+    i = 0;
+    while (i < 10) {
+        i = i + 1;
+        if (i % 2 == 0) {
+            continue;
+        }
+        sum = sum + i;
+    }
+    // sum of odd numbers 1..10 = 25
+    if (sum == 25) { pass = pass + 1; } else { print("FAIL: continue in while\n"); fail = fail + 1; }
+
+    // break in for-in
+    sum = 0;
+    for (item : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+        if (item > 5) {
+            break;
+        }
+        sum = sum + item;
+    }
+    if (sum == 15) { pass = pass + 1; } else { print("FAIL: break in for-in\n"); fail = fail + 1; }
+
+    // continue in for-in
+    sum = 0;
+    for (item : [1, 2, 3, 4, 5]) {
+        if (item % 2 == 0) {
+            continue;
+        }
+        sum = sum + item;
+    }
+    // odd numbers: 1+3+5 = 9
+    if (sum == 9) { pass = pass + 1; } else { print("FAIL: continue in for-in\n"); fail = fail + 1; }
+
+    // break in nested loop (inner only)
+    var outer = 0;
+    var inner = 0;
+    while (outer < 3) {
+        outer = outer + 1;
+        var j = 0;
+        while (j < 10) {
+            j = j + 1;
+            if (j == 3) {
+                break;
+            }
+            inner = inner + 1;
+        }
+    }
+    // outer: 3 iterations, inner break at 3 -> 2 iterations per outer = 6
+    if (inner == 6) { pass = pass + 1; } else { print("FAIL: break nested\n"); fail = fail + 1; }
+
+    print("break_continue: ");
+    print(pass);
+    print("/");
+    print(pass + fail);
+    print(" passed\n");
+    return 0;
+}

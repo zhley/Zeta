@@ -1,0 +1,12 @@
+// Module A: exports utility functions
+fn add(a, b) {
+    return a + b;
+}
+
+fn multiply(a, b) {
+    return a * b;
+}
+
+let PI = 3.14159;
+
+var counter = 0;

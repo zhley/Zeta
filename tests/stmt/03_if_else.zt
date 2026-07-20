@@ -1,0 +1,78 @@
+fn main() {
+    var pass = 0;
+    var fail = 0;
+
+    // if with true condition
+    var r = "none";
+    if (true) {
+        r = "then";
+    }
+    if (r == "then") { pass = pass + 1; } else { print("FAIL: if true\n"); fail = fail + 1; }
+
+    // if with false condition
+    r = "none";
+    if (false) {
+        r = "then";
+    }
+    if (r == "none") { pass = pass + 1; } else { print("FAIL: if false\n"); fail = fail + 1; }
+
+    // if-else true
+    r = "none";
+    if (true) {
+        r = "then";
+    } else {
+        r = "else";
+    }
+    if (r == "then") { pass = pass + 1; } else { print("FAIL: if-else true\n"); fail = fail + 1; }
+
+    // if-else false
+    r = "none";
+    if (false) {
+        r = "then";
+    } else {
+        r = "else";
+    }
+    if (r == "else") { pass = pass + 1; } else { print("FAIL: if-else false\n"); fail = fail + 1; }
+
+    // nested if
+    r = "none";
+    if (true) {
+        if (false) {
+            r = "inner-then";
+        } else {
+            r = "inner-else";
+        }
+    }
+    if (r == "inner-else") { pass = pass + 1; } else { print("FAIL: nested if\n"); fail = fail + 1; }
+
+    // if with truthiness: non-zero int
+    r = "none";
+    if (1) { r = "yes"; }
+    if (r == "yes") { pass = pass + 1; } else { print("FAIL: if truthy int\n"); fail = fail + 1; }
+
+    // if with truthiness: 0 is falsey
+    r = "none";
+    if (0) { r = "yes"; }
+    if (r == "none") { pass = pass + 1; } else { print("FAIL: if falsey 0\n"); fail = fail + 1; }
+
+    // if with null is falsey
+    r = "none";
+    if (null) { r = "yes"; }
+    if (r == "none") { pass = pass + 1; } else { print("FAIL: if falsey null\n"); fail = fail + 1; }
+
+    // dangling-else: else binds to nearest if
+    r = "none";
+    if (true)
+        if (false)
+            r = "inner";
+        else
+            r = "dangling";
+    if (r == "dangling") { pass = pass + 1; } else { print("FAIL: dangling else\n"); fail = fail + 1; }
+
+    print("if_else: ");
+    print(pass);
+    print("/");
+    print(pass + fail);
+    print(" passed\n");
+    return 0;
+}

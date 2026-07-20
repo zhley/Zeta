@@ -1,0 +1,32 @@
+fn main() {
+    var pass = 0;
+    var fail = 0;
+
+    // double-quoted strings
+    if ("hello" == "hello") { pass = pass + 1; } else { print("FAIL: double-quoted\n"); fail = fail + 1; }
+    if ("" == "") { pass = pass + 1; } else { print("FAIL: empty string\n"); fail = fail + 1; }
+
+    // single-quoted strings
+    if ('world' == 'world') { pass = pass + 1; } else { print("FAIL: single-quoted\n"); fail = fail + 1; }
+    if ('x' == 'x') { pass = pass + 1; } else { print("FAIL: single char\n"); fail = fail + 1; }
+
+    // escape sequences
+    if ("\n" == "\n") { pass = pass + 1; } else { print("FAIL: newline escape\n"); fail = fail + 1; }
+    if ("\t" == "\t") { pass = pass + 1; } else { print("FAIL: tab escape\n"); fail = fail + 1; }
+    if ("\\" == "\\") { pass = pass + 1; } else { print("FAIL: backslash escape\n"); fail = fail + 1; }
+    if ("\"" == "\"") { pass = pass + 1; } else { print("FAIL: double-quote escape\n"); fail = fail + 1; }
+    if ("\'" == "\'") { pass = pass + 1; } else { print("FAIL: single-quote escape\n"); fail = fail + 1; }
+    if ("\r" == "\r") { pass = pass + 1; } else { print("FAIL: carriage return escape\n"); fail = fail + 1; }
+
+    // string length
+    if ("abc".len() == 3) { pass = pass + 1; } else { print("FAIL: string len\n"); fail = fail + 1; }
+    if ("".len() == 0) { pass = pass + 1; } else { print("FAIL: empty string len\n"); fail = fail + 1; }
+    if ("你好".len() != 0) { pass = pass + 1; } else { print("FAIL: non-ascii\n"); fail = fail + 1; }
+
+    print("string_literals: ");
+    print(pass);
+    print("/");
+    print(pass + fail);
+    print(" passed\n");
+    return 0;
+}

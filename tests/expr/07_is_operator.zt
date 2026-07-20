@@ -1,0 +1,29 @@
+fn main() {
+    var pass = 0;
+    var fail = 0;
+
+    // is: strict identity (type + value/pointer)
+    if (42 is 42) { pass = pass + 1; } else { print("FAIL: int is int\n"); fail = fail + 1; }
+    if (!(0 is 0.0)) { pass = pass + 1; } else { print("FAIL: int is not float\n"); fail = fail + 1; }
+    if (true is true) { pass = pass + 1; } else { print("FAIL: bool is bool\n"); fail = fail + 1; }
+    if (null is null) { pass = pass + 1; } else { print("FAIL: null is null\n"); fail = fail + 1; }
+    if ("s" is "s") { pass = pass + 1; } else { print("FAIL: string is string\n"); fail = fail + 1; }
+
+    // is vs == : different behavior
+    // 0 == 0.0 is true (value equality across types)
+    // 0 is 0.0 is false (strict identity differs)
+    if (0 == 0.0) { pass = pass + 1; } else { print("FAIL: 0==0.0\n"); fail = fail + 1; }
+    if (!(0 is 0.0)) { pass = pass + 1; } else { print("FAIL: 0 is not 0.0\n"); fail = fail + 1; }
+
+    // is on objects
+    var arr = [1, 2, 3];
+    if (arr is arr) { pass = pass + 1; } else { print("FAIL: arr is arr\n"); fail = fail + 1; }
+    if (!(arr is [1, 2, 3])) { pass = pass + 1; } else { print("FAIL: arr is not different arr\n"); fail = fail + 1; }
+
+    print("is_operator: ");
+    print(pass);
+    print("/");
+    print(pass + fail);
+    print(" passed\n");
+    return 0;
+}

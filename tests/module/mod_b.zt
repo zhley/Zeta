@@ -1,0 +1,11 @@
+// Module B: depends on Module A
+import "tests/module/mod_a.zt" as a;
+
+fn circle_area(radius) {
+    return a.multiply(a.PI, a.multiply(radius, radius));
+}
+
+fn increment_counter() {
+    a.counter = a.counter + 1;
+    return a.counter;
+}

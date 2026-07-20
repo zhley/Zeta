@@ -1,0 +1,72 @@
+// Simple expression-like calculator using various language features
+
+class Calculator {
+    var value = 0;
+
+    fn Calculator(init) {
+        this.value = init;
+        return this;
+    }
+
+    fn add(n) {
+        this.value = this.value + n;
+        return this;
+    }
+
+    fn sub(n) {
+        this.value = this.value - n;
+        return this;
+    }
+
+    fn mul(n) {
+        this.value = this.value * n;
+        return this;
+    }
+
+    fn div(n) {
+        this.value = this.value / n;
+        return this;
+    }
+
+    fn result() {
+        return this.value;
+    }
+}
+
+fn main() {
+    var pass = 0;
+    var fail = 0;
+
+    // method chaining
+    var result = Calculator(0).add(10).mul(3).sub(5).div(5).result();
+    if (result == 5) { pass = pass + 1; } else { print("FAIL: calculator chain\n"); fail = fail + 1; }
+
+    // another computation
+    var r2 = Calculator(100).add(50).sub(30).result();
+    if (r2 == 120) { pass = pass + 1; } else { print("FAIL: calculator add/sub\n"); fail = fail + 1; }
+
+    // using a function that processes an array of operations
+    fn process_ops(init, ops) {
+        var calc = Calculator(init);
+        for (op : ops) {
+            // op contains value only, add it
+            calc.add(op.value);
+        }
+        return calc.result();
+    }
+
+    // Array of operation-like objects (just values)
+    var arr = [10, 20, 30];
+    var sum = 0;
+    for (v : arr) {
+        sum = sum + v;
+    }
+    if (sum == 60) { pass = pass + 1; } else { print("FAIL: array sum\n"); fail = fail + 1; }
+
+    print("calculator: ");
+    print(pass);
+    print("/");
+    print(pass + fail);
+    print(" passed\n");
+    return 0;
+}

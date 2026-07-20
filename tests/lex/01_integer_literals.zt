@@ -1,0 +1,33 @@
+fn main() {
+    var pass = 0;
+    var fail = 0;
+
+    // decimal
+    if (0 == 0) { pass = pass + 1; } else { print("FAIL: decimal 0\n"); fail = fail + 1; }
+    if (42 == 42) { pass = pass + 1; } else { print("FAIL: decimal 42\n"); fail = fail + 1; }
+    if (1_000_000 == 1000000) { pass = pass + 1; } else { print("FAIL: decimal with separators\n"); fail = fail + 1; }
+
+    // hexadecimal
+    if (0xFF == 255) { pass = pass + 1; } else { print("FAIL: hex 0xFF\n"); fail = fail + 1; }
+    if (0X1A == 26) { pass = pass + 1; } else { print("FAIL: hex 0X1A\n"); fail = fail + 1; }
+    if (0x0 == 0) { pass = pass + 1; } else { print("FAIL: hex 0x0\n"); fail = fail + 1; }
+
+    // binary
+    if (0b1010 == 10) { pass = pass + 1; } else { print("FAIL: binary 0b1010\n"); fail = fail + 1; }
+    if (0B1111 == 15) { pass = pass + 1; } else { print("FAIL: binary 0B1111\n"); fail = fail + 1; }
+    if (0b10_10 == 10) { pass = pass + 1; } else { print("FAIL: binary with separators\n"); fail = fail + 1; }
+
+    // octal
+    if (0o777 == 511) { pass = pass + 1; } else { print("FAIL: octal 0o777\n"); fail = fail + 1; }
+    if (0o10 == 8) { pass = pass + 1; } else { print("FAIL: octal 0o10\n"); fail = fail + 1; }
+
+    // negative numbers
+    if (-42 == -42) { pass = pass + 1; } else { print("FAIL: negative\n"); fail = fail + 1; }
+
+    print("integer_literals: ");
+    print(pass);
+    print("/");
+    print(pass + fail);
+    print(" passed\n");
+    return 0;
+}

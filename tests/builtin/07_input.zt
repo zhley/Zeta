@@ -1,0 +1,16 @@
+fn main() {
+    // This test requires user input - can't be fully automated
+    // Just print a message. Manual test.
+    print("Input test: type something and press enter\n");
+    var s = input();
+    print("You typed: ");
+    print(s);
+    print("\n");
+    // verify StrObj basic operations
+    if (s != null) {
+        print("Input received (StrObj type, len=");
+        print(s.len());
+        print(")\n");
+    }
+    return 0;
+}

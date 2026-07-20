@@ -1,0 +1,72 @@
+fn map(arr, f) {
+    var result = array(arr.size());
+    var i = 0;
+    while (i < arr.size()) {
+        result[i] = f(arr[i]);
+        i = i + 1;
+    }
+    return result;
+}
+
+fn filter(arr, pred) {
+    var result = array(0);
+    var i = 0;
+    while (i < arr.size()) {
+        if (pred(arr[i])) {
+            result.add(arr[i]);
+        }
+        i = i + 1;
+    }
+    return result;
+}
+
+fn reduce(arr, f, init) {
+    var acc = init;
+    var i = 0;
+    while (i < arr.size()) {
+        acc = f(acc, arr[i]);
+        i = i + 1;
+    }
+    return acc;
+}
+
+fn main() {
+    var pass = 0;
+    var fail = 0;
+
+    // map
+    var doubled = map([1, 2, 3], fn(x) { return x * 2; });
+    if (doubled[0] == 2 && doubled[1] == 4 && doubled[2] == 6) {
+        pass = pass + 1;
+    } else {
+        print("FAIL: map\n");
+        fail = fail + 1;
+    }
+
+    // filter
+    var evens = filter([1, 2, 3, 4, 5, 6], fn(x) { return x % 2 == 0; });
+    if (evens.size() == 3 && evens[0] == 2 && evens[1] == 4 && evens[2] == 6) {
+        pass = pass + 1;
+    } else {
+        print("FAIL: filter\n");
+        fail = fail + 1;
+    }
+
+    // reduce
+    var sum = reduce([1, 2, 3, 4, 5], fn(a, b) { return a + b; }, 0);
+    if (sum == 15) { pass = pass + 1; } else { print("FAIL: reduce sum\n"); fail = fail + 1; }
+
+    var product = reduce([1, 2, 3, 4], fn(a, b) { return a * b; }, 1);
+    if (product == 24) { pass = pass + 1; } else { print("FAIL: reduce product\n"); fail = fail + 1; }
+
+    // empty filter
+    var empty = filter([1, 3, 5], fn(x) { return x % 2 == 0; });
+    if (empty.size() == 0) { pass = pass + 1; } else { print("FAIL: filter empty\n"); fail = fail + 1; }
+
+    print("higher_order: ");
+    print(pass);
+    print("/");
+    print(pass + fail);
+    print(" passed\n");
+    return 0;
+}

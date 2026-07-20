@@ -1,0 +1,55 @@
+// Iterative and recursive fibonacci implementations
+
+fn fib_iterative(n) {
+    if (n <= 1) {
+        return n;
+    }
+    var a = 0;
+    var b = 1;
+    var i = 2;
+    while (i <= n) {
+        var temp = a + b;
+        a = b;
+        b = temp;
+        i = i + 1;
+    }
+    return b;
+}
+
+fn fib_recursive(n) {
+    if (n <= 1) {
+        return n;
+    }
+    return fib_recursive(n - 1) + fib_recursive(n - 2);
+}
+
+fn main() {
+    var pass = 0;
+    var fail = 0;
+
+    // fib(0) and fib(1)
+    if (fib_iterative(0) == 0) { pass = pass + 1; } else { print("FAIL: fib_iter(0)\n"); fail = fail + 1; }
+    if (fib_iterative(1) == 1) { pass = pass + 1; } else { print("FAIL: fib_iter(1)\n"); fail = fail + 1; }
+    if (fib_recursive(0) == 0) { pass = pass + 1; } else { print("FAIL: fib_rec(0)\n"); fail = fail + 1; }
+    if (fib_recursive(1) == 1) { pass = pass + 1; } else { print("FAIL: fib_rec(1)\n"); fail = fail + 1; }
+
+    // fib(10) = 55
+    if (fib_iterative(10) == 55) { pass = pass + 1; } else { print("FAIL: fib_iter(10)\n"); fail = fail + 1; }
+    if (fib_recursive(10) == 55) { pass = pass + 1; } else { print("FAIL: fib_rec(10)\n"); fail = fail + 1; }
+
+    // both methods agree
+    var n = 15;
+    if (fib_iterative(n) == fib_recursive(n)) {
+        pass = pass + 1;
+    } else {
+        print("FAIL: fib methods agree\n");
+        fail = fail + 1;
+    }
+
+    print("fibonacci: ");
+    print(pass);
+    print("/");
+    print(pass + fail);
+    print(" passed\n");
+    return 0;
+}

@@ -1,0 +1,65 @@
+fn main() {
+    var pass = 0;
+    var fail = 0;
+
+    // for-in over array
+    var sum = 0;
+    var arr = [1, 2, 3, 4, 5];
+    for (item : arr) {
+        sum = sum + item;
+    }
+    if (sum == 15) { pass = pass + 1; } else { print("FAIL: for-in array sum\n"); fail = fail + 1; }
+
+    // for-in over empty array
+    var count = 0;
+    var empty = [];
+    for (x : empty) {
+        count = count + 1;
+    }
+    if (count == 0) { pass = pass + 1; } else { print("FAIL: for-in empty array\n"); fail = fail + 1; }
+
+    // for-in over map (iterates keys)
+    count = 0;
+    var keys = "";
+    var m = {a: 1, b: 2, c: 3};
+    for (k : m) {
+        count = count + 1;
+        keys = keys + k;
+    }
+    if (count == 3) { pass = pass + 1; } else { print("FAIL: for-in map count\n"); fail = fail + 1; }
+
+    // for-in over array with single element
+    sum = 0;
+    var one = [42];
+    for (v : one) {
+        sum = sum + v;
+    }
+    if (sum == 42) { pass = pass + 1; } else { print("FAIL: for-in single element\n"); fail = fail + 1; }
+
+    // for-in with break
+    sum = 0;
+    for (item : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+        if (item > 5) {
+            break;
+        }
+        sum = sum + item;
+    }
+    if (sum == 15) { pass = pass + 1; } else { print("FAIL: for-in break\n"); fail = fail + 1; }
+
+    // for-in with continue
+    sum = 0;
+    for (item : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+        if (item > 5) {
+            continue;
+        }
+        sum = sum + 1;
+    }
+    if (sum == 5) { pass = pass + 1; } else { print("FAIL: for-in continue\n"); fail = fail + 1; }
+
+    print("for_in: ");
+    print(pass);
+    print("/");
+    print(pass + fail);
+    print(" passed\n");
+    return 0;
+}

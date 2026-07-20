@@ -1,0 +1,43 @@
+fn main() {
+    var pass = 0;
+    var fail = 0;
+
+    // int comparisons
+    if (1 == 1) { pass = pass + 1; } else { print("FAIL: int eq\n"); fail = fail + 1; }
+    if (1 != 2) { pass = pass + 1; } else { print("FAIL: int neq\n"); fail = fail + 1; }
+    if (1 < 2) { pass = pass + 1; } else { print("FAIL: int lt\n"); fail = fail + 1; }
+    if (2 > 1) { pass = pass + 1; } else { print("FAIL: int gt\n"); fail = fail + 1; }
+    if (1 <= 1) { pass = pass + 1; } else { print("FAIL: int leq\n"); fail = fail + 1; }
+    if (1 >= 1) { pass = pass + 1; } else { print("FAIL: int geq\n"); fail = fail + 1; }
+
+    // float comparisons
+    if (1.5 == 1.5) { pass = pass + 1; } else { print("FAIL: float eq\n"); fail = fail + 1; }
+    if (1.0 != 2.0) { pass = pass + 1; } else { print("FAIL: float neq\n"); fail = fail + 1; }
+    if (1.0 < 2.0) { pass = pass + 1; } else { print("FAIL: float lt\n"); fail = fail + 1; }
+    if (2.0 > 1.0) { pass = pass + 1; } else { print("FAIL: float gt\n"); fail = fail + 1; }
+    if (1.0 <= 1.0) { pass = pass + 1; } else { print("FAIL: float leq\n"); fail = fail + 1; }
+    if (1.0 >= 1.0) { pass = pass + 1; } else { print("FAIL: float geq\n"); fail = fail + 1; }
+
+    // cross-type int/float
+    if (0 == 0.0) { pass = pass + 1; } else { print("FAIL: int==float (zero)\n"); fail = fail + 1; }
+    if (1 == 1.0) { pass = pass + 1; } else { print("FAIL: int==float\n"); fail = fail + 1; }
+    if (1.0 == 1) { pass = pass + 1; } else { print("FAIL: float==int\n"); fail = fail + 1; }
+    if (2 != 3.0) { pass = pass + 1; } else { print("FAIL: int!=float\n"); fail = fail + 1; }
+    if (0 < 0.5) { pass = pass + 1; } else { print("FAIL: int<float\n"); fail = fail + 1; }
+    if (1.5 > 1) { pass = pass + 1; } else { print("FAIL: float>int\n"); fail = fail + 1; }
+
+    // bool comparisons
+    if (true == true) { pass = pass + 1; } else { print("FAIL: bool eq\n"); fail = fail + 1; }
+    if (true != false) { pass = pass + 1; } else { print("FAIL: bool neq\n"); fail = fail + 1; }
+
+    // null comparisons
+    if (null == null) { pass = pass + 1; } else { print("FAIL: null eq\n"); fail = fail + 1; }
+    if (null != true) { pass = pass + 1; } else { print("FAIL: null neq\n"); fail = fail + 1; }
+
+    print("comparison: ");
+    print(pass);
+    print("/");
+    print(pass + fail);
+    print(" passed\n");
+    return 0;
+}

@@ -1,0 +1,54 @@
+class Animal {
+    var name = "";
+
+    fn Animal(n) {
+        this.name = n;
+        return this;
+    }
+
+    fn speak() {
+        return "Animal " + this.name;
+    }
+}
+
+class Dog extends Animal {
+    var breed = "";
+
+    fn Dog(n, b) {
+        this.name = n;
+        this.breed = b;
+        return this;
+    }
+
+    fn speak() {
+        return "Dog " + this.name + " (" + this.breed + ")";
+    }
+}
+
+fn main() {
+    var pass = 0;
+    var fail = 0;
+
+    // base class
+    var a = Animal("Bob");
+    if (a.name == "Bob") { pass = pass + 1; } else { print("FAIL: base field\n"); fail = fail + 1; }
+    if (a.speak() == "Animal Bob") { pass = pass + 1; } else { print("FAIL: base method\n"); fail = fail + 1; }
+
+    // derived class inherits fields
+    var d = Dog("Rex", "Labrador");
+    if (d.name == "Rex") { pass = pass + 1; } else { print("FAIL: inherited field\n"); fail = fail + 1; }
+    if (d.breed == "Labrador") { pass = pass + 1; } else { print("FAIL: own field\n"); fail = fail + 1; }
+
+    // method override
+    if (d.speak() == "Dog Rex (Labrador)") { pass = pass + 1; } else { print("FAIL: method override\n"); fail = fail + 1; }
+
+    // base method still works on base instance
+    if (a.speak() == "Animal Bob") { pass = pass + 1; } else { print("FAIL: base method preserved\n"); fail = fail + 1; }
+
+    print("inheritance: ");
+    print(pass);
+    print("/");
+    print(pass + fail);
+    print(" passed\n");
+    return 0;
+}

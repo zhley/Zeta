@@ -1,0 +1,13 @@
+// Module C: exports a base class
+class Shape {
+    var name = "shape";
+
+    fn Shape(n) {
+        this.name = n;
+        return this;
+    }
+
+    fn describe() {
+        return "Shape: " + this.name;
+    }
+}

@@ -1,0 +1,106 @@
+// Linked list implemented with classes
+
+class Node {
+    var value = null;
+    var next = null;
+
+    fn Node(v) {
+        this.value = v;
+        this.next = null;
+        return this;
+    }
+}
+
+class LinkedList {
+    var head = null;
+    var tail = null;
+    var count = 0;
+
+    fn push(val) {
+        var node = Node(val);
+        if (this.head == null) {
+            this.head = node;
+            this.tail = node;
+        } else {
+            this.tail.next = node;
+            this.tail = node;
+        }
+        this.count = this.count + 1;
+        return this.count;
+    }
+
+    fn get(idx) {
+        if (idx < 0 || idx >= this.count) {
+            return null;
+        }
+        var current = this.head;
+        var i = 0;
+        while (i < idx) {
+            current = current.next;
+            i = i + 1;
+        }
+        return current.value;
+    }
+
+    fn size() {
+        return this.count;
+    }
+}
+
+fn list_to_array(list) {
+    var result = array(list.size());
+    var i = 0;
+    while (i < list.size()) {
+        result[i] = list.get(i);
+        i = i + 1;
+    }
+    return result;
+}
+
+fn main() {
+    var pass = 0;
+    var fail = 0;
+
+    // create list and push elements
+    var list = LinkedList();
+    list.push("a");
+    list.push("b");
+    list.push("c");
+
+    if (list.size() == 3) { pass = pass + 1; } else { print("FAIL: list size\n"); fail = fail + 1; }
+    if (list.get(0) == "a" && list.get(1) == "b" && list.get(2) == "c") {
+        pass = pass + 1;
+    } else {
+        print("FAIL: list get\n");
+        fail = fail + 1;
+    }
+
+    // out of bounds returns null
+    if (list.get(-1) == null && list.get(5) == null) {
+        pass = pass + 1;
+    } else {
+        print("FAIL: list bounds\n");
+        fail = fail + 1;
+    }
+
+    // convert to array
+    var arr = list_to_array(list);
+    if (arr.size() == 3 && arr[0] == "a" && arr[2] == "c") {
+        pass = pass + 1;
+    } else {
+        print("FAIL: list to array\n");
+        fail = fail + 1;
+    }
+
+    // empty list
+    var empty = LinkedList();
+    if (empty.size() == 0) { pass = pass + 1; } else { print("FAIL: empty list\n"); fail = fail + 1; }
+    if (empty.get(0) == null) { pass = pass + 1; } else { print("FAIL: empty list get\n"); fail = fail + 1; }
+
+    print("linked_list: ");
+    print(pass);
+    print("/");
+    print(pass + fail);
+    print(" passed\n");
+    return 0;
+}

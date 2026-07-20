@@ -1,0 +1,33 @@
+fn main() {
+    var pass = 0;
+    var fail = 0;
+
+    // precedence: * before +
+    if (2 + 3 * 4 == 14) { pass = pass + 1; } else { print("FAIL: * before +\n"); fail = fail + 1; }
+
+    // precedence: comparison before logical
+    if (1 < 2 || 3 > 4 == true) { pass = pass + 1; } else { print("FAIL: comp before ||\n"); fail = fail + 1; }
+
+    // precedence: && before ||
+    if (false || true && false == false) { pass = pass + 1; } else { print("FAIL: && before ||\n"); fail = fail + 1; }
+
+    // precedence: unary before binary
+    if (-3 + 5 == 2) { pass = pass + 1; } else { print("FAIL: unary before binary\n"); fail = fail + 1; }
+    if (!false || false == true) { pass = pass + 1; } else { print("FAIL: ! before ||\n"); fail = fail + 1; }
+
+    // precedence: ternary is low
+    if (true ? 1 : 2 + 3 == 1) { pass = pass + 1; } else { print("FAIL: ternary lower than +\n"); fail = fail + 1; }
+
+    // parentheses override
+    if ((2 + 3) * 4 == 20) { pass = pass + 1; } else { print("FAIL: parens override\n"); fail = fail + 1; }
+
+    // shift vs arithmetic precedence
+    if (1 << 1 + 1 == 4) { pass = pass + 1; } else { print("FAIL: shift vs +\n"); fail = fail + 1; }
+
+    print("precedence: ");
+    print(pass);
+    print("/");
+    print(pass + fail);
+    print(" passed\n");
+    return 0;
+}

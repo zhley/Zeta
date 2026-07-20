@@ -1,0 +1,44 @@
+fn main() {
+    var pass = 0;
+    var fail = 0;
+
+    // function literal assigned to variable
+    var double = fn(x) { return x * 2; };
+    if (double(5) == 10) { pass = pass + 1; } else { print("FAIL: lambda double\n"); fail = fail + 1; }
+
+    // lambda with no parameters
+    var getOne = fn() { return 1; };
+    if (getOne() == 1) { pass = pass + 1; } else { print("FAIL: lambda no params\n"); fail = fail + 1; }
+
+    // lambda with multiple parameters
+    var mul = fn(a, b) { return a * b; };
+    if (mul(6, 7) == 42) { pass = pass + 1; } else { print("FAIL: lambda mul\n"); fail = fail + 1; }
+
+    // lambda capturing outer variables (no closure support yet, just accessing global/outer scope)
+    // NOTE: currently no closure support, using parameter only
+    var _ = 0;
+
+    // passing lambda as argument
+    fn apply(f, x) {
+        return f(x);
+    }
+    if (apply(fn(y) { return y + 1; }, 10) == 11) { pass = pass + 1; } else { print("FAIL: lambda as arg\n"); fail = fail + 1; }
+
+    // lambda returning lambda (higher-order)
+    fn make_adder(n) {
+        return fn(x) { return x + n; };
+    }
+    var add3 = make_adder(3);
+    if (add3(7) == 10) { pass = pass + 1; } else { print("FAIL: lambda returning lambda\n"); fail = fail + 1; }
+
+    // immediately invoked function literal
+    var result = fn(a, b) { return a + b; }(3, 4);
+    if (result == 7) { pass = pass + 1; } else { print("FAIL: IIFE\n"); fail = fail + 1; }
+
+    print("lambda: ");
+    print(pass);
+    print("/");
+    print(pass + fail);
+    print(" passed\n");
+    return 0;
+}

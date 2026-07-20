@@ -1,0 +1,55 @@
+fn main() {
+    var pass = 0;
+    var fail = 0;
+
+    // array creation with literal
+    var arr = [10, 20, 30];
+    if (arr[0] == 10 && arr[1] == 20 && arr[2] == 30) { pass = pass + 1; } else { print("FAIL: array literal\n"); fail = fail + 1; }
+
+    // array creation via built-in
+    var arr2 = array(3);
+    arr2[0] = 100;
+    arr2[1] = 200;
+    arr2[2] = 300;
+    if (arr2[0] == 100 && arr2[1] == 200 && arr2[2] == 300) { pass = pass + 1; } else { print("FAIL: array(size)\n"); fail = fail + 1; }
+
+    // array default values are null
+    var arr3 = array(2);
+    if (arr3[0] == null && arr3[1] == null) { pass = pass + 1; } else { print("FAIL: array default null\n"); fail = fail + 1; }
+
+    // array.size() method
+    if (arr.size() == 3) { pass = pass + 1; } else { print("FAIL: array.size\n"); fail = fail + 1; }
+    var empty = [];
+    if (empty.size() == 0) { pass = pass + 1; } else { print("FAIL: empty array.size\n"); fail = fail + 1; }
+
+    // array.add() method
+    arr.add(40);
+    if (arr.size() == 4 && arr[3] == 40) { pass = pass + 1; } else { print("FAIL: array.add\n"); fail = fail + 1; }
+
+    // add to empty array
+    empty.add("first");
+    if (empty.size() == 1 && empty[0] == "first") { pass = pass + 1; } else { print("FAIL: empty array.add\n"); fail = fail + 1; }
+
+    // mixed element types
+    var mixed = [1, "two", 3.0, true, null];
+    if (mixed[0] == 1 && mixed[1] == "two" && mixed[3] == true && mixed[4] == null) {
+        pass = pass + 1;
+    } else {
+        print("FAIL: mixed types\n");
+        fail = fail + 1;
+    }
+
+    // array literal for-in
+    var sum = 0;
+    for (item : [1, 2, 3, 4]) {
+        sum = sum + item;
+    }
+    if (sum == 10) { pass = pass + 1; } else { print("FAIL: array for-in\n"); fail = fail + 1; }
+
+    print("array: ");
+    print(pass);
+    print("/");
+    print(pass + fail);
+    print(" passed\n");
+    return 0;
+}

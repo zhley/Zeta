@@ -1,0 +1,45 @@
+fn main() {
+    var pass = 0;
+    var fail = 0;
+
+    // var declaration without initializer (defaults to null)
+    var x;
+    if (x == null) { pass = pass + 1; } else { print("FAIL: var default null\n"); fail = fail + 1; }
+
+    // var with initializer
+    var y = 42;
+    if (y == 42) { pass = pass + 1; } else { print("FAIL: var with init\n"); fail = fail + 1; }
+
+    // let (immutable) with initializer
+    let z = "hello";
+    if (z == "hello") { pass = pass + 1; } else { print("FAIL: let with init\n"); fail = fail + 1; }
+
+    // multiple var declarations in one statement
+    var a = 1, b = 2, c = 3;
+    if (a == 1 && b == 2 && c == 3) { pass = pass + 1; } else { print("FAIL: multiple var\n"); fail = fail + 1; }
+
+    // var is mutable
+    var m = 10;
+    m = 20;
+    if (m == 20) { pass = pass + 1; } else { print("FAIL: var mutable\n"); fail = fail + 1; }
+
+    // mixed var and value types
+    var i = 10;
+    var f = 3.14;
+    var s = "test";
+    var b = true;
+    var n = null;
+    if (i == 10 && f == 3.14 && s == "test" && b == true && n == null) {
+        pass = pass + 1;
+    } else {
+        print("FAIL: various var types\n");
+        fail = fail + 1;
+    }
+
+    print("var_let: ");
+    print(pass);
+    print("/");
+    print(pass + fail);
+    print(" passed\n");
+    return 0;
+}

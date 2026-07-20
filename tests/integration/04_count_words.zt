@@ -1,0 +1,49 @@
+// Simple word/character counting using strings and maps
+
+fn count_chars(s) {
+    var result = {};
+    var i = 0;
+    while (i < s.len()) {
+        // We can't easily index into strings, so this is a conceptual test
+        // Increment the counter
+        var key = "length";
+        i = i + 1;
+    }
+    // Just return the length
+    return s.len();
+}
+
+fn main() {
+    var pass = 0;
+    var fail = 0;
+
+    // String length
+    if (count_chars("hello") == 5) { pass = pass + 1; } else { print("FAIL: char count\n"); fail = fail + 1; }
+    if (count_chars("") == 0) { pass = pass + 1; } else { print("FAIL: empty char count\n"); fail = fail + 1; }
+
+    // String concatenation
+    var greeting = "Hello, " + "World!";
+    if (greeting.len() == 13) { pass = pass + 1; } else { print("FAIL: greeting len\n"); fail = fail + 1; }
+
+    // Using map for word counting
+    var counts = {};
+    // Simulate counting by using fixed keys
+    counts["hello"] = 2;
+    counts["world"] = 1;
+
+    if (counts["hello"] == 2 && counts["world"] == 1) {
+        pass = pass + 1;
+    } else {
+        print("FAIL: word counts\n");
+        fail = fail + 1;
+    }
+
+    if (counts.size() == 2) { pass = pass + 1; } else { print("FAIL: counts size\n"); fail = fail + 1; }
+
+    print("count_words: ");
+    print(pass);
+    print("/");
+    print(pass + fail);
+    print(" passed\n");
+    return 0;
+}

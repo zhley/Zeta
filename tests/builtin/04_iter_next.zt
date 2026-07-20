@@ -1,0 +1,48 @@
+fn main() {
+    var pass = 0;
+    var fail = 0;
+
+    // iter on array
+    var arr = [10, 20, 30];
+    var it = iter(arr);
+
+    // next on array
+    var n1 = next(it);
+    var n2 = next(it);
+    var n3 = next(it);
+    if (n1 == 10 && n2 == 20 && n3 == 30) { pass = pass + 1; } else { print("FAIL: next on array\n"); fail = fail + 1; }
+
+    // 4th next returns Error
+    var n4 = next(it);
+    if (check(n4) == false) { pass = pass + 1; } else { print("FAIL: next past end is Error\n"); fail = fail + 1; }
+
+    // iter on map
+    var m = {x: 100, y: 200};
+    var mi = iter(m);
+    var count = 0;
+    var mk = next(mi);
+    while (check(mk)) {
+        count = count + 1;
+        mk = next(mi);
+    }
+    if (count == 2) { pass = pass + 1; } else { print("FAIL: iter on map\n"); fail = fail + 1; }
+
+    // iter on empty array
+    var empty = [];
+    var ei = iter(empty);
+    var en = next(ei);
+    if (check(en) == false) { pass = pass + 1; } else { print("FAIL: iter empty array\n"); fail = fail + 1; }
+
+    // iter on empty map
+    var emptyMap = {};
+    var emi = iter(emptyMap);
+    var emn = next(emi);
+    if (check(emn) == false) { pass = pass + 1; } else { print("FAIL: iter empty map\n"); fail = fail + 1; }
+
+    print("iter_next: ");
+    print(pass);
+    print("/");
+    print(pass + fail);
+    print(" passed\n");
+    return 0;
+}
