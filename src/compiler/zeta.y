@@ -97,7 +97,6 @@ ImportList: ImportList Import { $1.push_back(std::move($2)); $$ = std::move($1);
     ;
 Import: IMPORT STR SEMI { auto t = std::make_unique<Import>(); t->path = std::move($2); $$ = std::move(t); }
     | IMPORT STR AS ID SEMI { auto t = std::make_unique<Import>(); t->path = std::move($2); t->alias = std::move($4); $$ = std::move(t); }
-    | error SEMI { $$ = nullptr; }
     ;
 
 DecList: DecList VarDec SEMI { for(auto& d: $2) $1.push_back(std::unique_ptr<Dec>(std::move(d))); $$ = std::move($1); }
@@ -118,8 +117,6 @@ Var: ID { auto t = std::make_unique<VarDec>(); t->name = std::move($1); t->isMut
 
 FuncDec: FN ID LP ParamList RP BlockStmt { auto f = std::make_unique<FuncDec>(); f->name = std::move($2); f->params = std::move($4); $6->isFuncBody = true; f->body = std::move($6); $$ = std::move(f); }
     | FN ID LP RP BlockStmt { auto f = std::make_unique<FuncDec>(); f->name = std::move($2); $5->isFuncBody = true; f->body = std::move($5); $$ = std::move(f); }
-    | error RP BlockStmt { $$ = nullptr; }
-    | error RC { $$ = nullptr; }
     ;
 ParamList: ParamList COMMA Param { $1.push_back(std::move($3)); $$ = std::move($1); }
     | Param { Zeta::ParserTypes::ParamList t; t.push_back(std::move($1)); $$ = std::move(t); }
@@ -130,7 +127,6 @@ Param: ID { $$ = std::move($1); }
 ClassDec: CLASS ID LC ClassBody RC { auto c = std::make_unique<ClassDec>(); c->name = std::move($2); c->members = std::move($4); $$ = std::move(c); }
     | CLASS ID EXTENDS ID LC ClassBody RC { auto c = std::make_unique<ClassDec>(); c->name = std::move($2); c->base = std::make_pair(std::string(), std::move($4)); c->members = std::move($6); $$ = std::move(c); }
     | CLASS ID EXTENDS ID DOT ID LC ClassBody RC { auto c = std::make_unique<ClassDec>(); c->name = std::move($2); c->base = std::make_pair(std::move($4), std::move($6)); c->members = std::move($8); $$ = std::move(c); }
-    | error LC ClassBody RC { $$ = nullptr; }
     ;
 ClassBody: ClassBody VarDec SEMI { for(auto& d: $2) $1.push_back(std::unique_ptr<Dec>(std::move(d))); $$ = std::move($1); }
     | ClassBody FuncDec { $1.push_back(std::unique_ptr<Dec>(std::move($2))); $$ = std::move($1); }
@@ -138,13 +134,15 @@ ClassBody: ClassBody VarDec SEMI { for(auto& d: $2) $1.push_back(std::unique_ptr
     ;
 
 StmtList: StmtList Stmt { $1.push_back(std::move($2)); $$ = std::move($1); }
-    | { $$ = Zeta::ParserTypes::StmtList{}; }
+    | Stmt { Zeta::ParserTypes::StmtList t; t.push_back(std::move($1)); $$ = std::move(t); }
     ;
 BlockStmt: LC StmtList RC { auto b = std::make_unique<BlockStmt>(); b->stmts = std::move($2); $$ = std::move(b); }
+    | LC RC { auto b = std::make_unique<BlockStmt>(); $$ = std::move(b); }
     ;
 Stmt: VarDec SEMI { auto s = std::make_unique<VarDecStmt>(); s->varDecs = std::move($1); $$ = std::move(s); }
-    | Exp SEMI { auto s = std::make_unique<ExpStmt>(); s->exp = std::move($1); $$ = std::move(s); }
+    | BlockStmt { $$ = std::move($1); }
     | Exp ASSIGN Exp SEMI { auto s = std::make_unique<AssignStmt>(); s->op = toAssignOp($2); s->target = std::move($1); s->value = std::move($3); $$ = std::move(s); }
+    | Exp SEMI { auto s = std::make_unique<ExpStmt>(); s->exp = std::move($1); $$ = std::move(s); }
     | IF LP Exp RP Stmt %prec ELSE { auto s = std::make_unique<IfStmt>(); s->cond = std::move($3); s->thenBranch = std::move($5); $$ = std::move(s); }
     | IF LP Exp RP Stmt ELSE Stmt { auto s = std::make_unique<IfStmt>(); s->cond = std::move($3); s->thenBranch = std::move($5); s->elseBranch = std::move($7); $$ = std::move(s); }
     | WHILE LP Exp RP Stmt { auto s = std::make_unique<WhileStmt>(); s->cond = std::move($3); s->body = std::move($5); $$ = std::move(s); }
@@ -153,10 +151,7 @@ Stmt: VarDec SEMI { auto s = std::make_unique<VarDecStmt>(); s->varDecs = std::m
     | CONTINUE SEMI { auto s = std::make_unique<ContinueStmt>(); $$ = std::move(s); }
     | RETURN SEMI { auto s = std::make_unique<ReturnStmt>(); $$ = std::move(s); }
     | RETURN Exp SEMI { auto s = std::make_unique<ReturnStmt>(); s->value = std::move($2); $$ = std::move(s); }
-    | BlockStmt { $$ = std::move($1); }
     | SEMI { $$ = nullptr; }
-    | error SEMI { $$ = nullptr; }
-    | error RC { $$ = nullptr; }
     ;
 
 Exp: Exp QMARK Exp COLON Exp { auto e = std::make_unique<ConditionalExp>(); e->cond = std::move($1); e->thenBranch = std::move($3); e->elseBranch = std::move($5); $$ = tryExpFold(std::move(e)); }
@@ -216,7 +211,6 @@ MapElem: ID COLON Exp { $$ = std::make_pair(std::move($1), std::move($3)); }
     ;
 FuncLit: FN LP ParamList RP BlockStmt { auto f = std::make_unique<FuncLitExp>(); f->params = std::move($3); $5->isFuncBody = true; f->body = std::move($5); $$ = std::move(f); }
     | FN LP RP BlockStmt { auto f = std::make_unique<FuncLitExp>(); $4->isFuncBody = true; f->body = std::move($4); $$ = std::move(f); }
-    | error RC { $$ = nullptr; }
     ;
 
 %%
