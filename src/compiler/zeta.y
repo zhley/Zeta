@@ -144,7 +144,7 @@ BlockStmt: LC StmtList RC { auto b = std::make_unique<BlockStmt>(); b->stmts = s
     ;
 Stmt: VarDec SEMI { auto s = std::make_unique<VarDecStmt>(); s->varDecs = std::move($1); $$ = std::move(s); }
     | Exp SEMI { auto s = std::make_unique<ExpStmt>(); s->exp = std::move($1); $$ = std::move(s); }
-    | Exp ASSIGN Exp { auto s = std::make_unique<AssignStmt>(); s->op = toAssignOp($2); s->target = std::move($1); s->value = std::move($3); $$ = std::move(s); }
+    | Exp ASSIGN Exp SEMI { auto s = std::make_unique<AssignStmt>(); s->op = toAssignOp($2); s->target = std::move($1); s->value = std::move($3); $$ = std::move(s); }
     | IF LP Exp RP Stmt %prec ELSE { auto s = std::make_unique<IfStmt>(); s->cond = std::move($3); s->thenBranch = std::move($5); $$ = std::move(s); }
     | IF LP Exp RP Stmt ELSE Stmt { auto s = std::make_unique<IfStmt>(); s->cond = std::move($3); s->thenBranch = std::move($5); s->elseBranch = std::move($7); $$ = std::move(s); }
     | WHILE LP Exp RP Stmt { auto s = std::make_unique<WhileStmt>(); s->cond = std::move($3); s->body = std::move($5); $$ = std::move(s); }
@@ -206,7 +206,7 @@ ElemList: ElemList COMMA Exp { $1.push_back(std::move($3)); $$ = std::move($1); 
     | Exp { Zeta::ParserTypes::ExpList t; t.push_back(std::move($1)); $$ = std::move(t); }
     ;
 MapLit: LC MapElemList RC { auto e = std::make_unique<MapExp>(); e->entries = std::move($2); $$ = std::move(e); }
-    | LC RC { auto e = std::make_unique<MapExp>(); $$ = std::move(e); }
+    | LC COLON RC { auto e = std::make_unique<MapExp>(); $$ = std::move(e); }
     ;
 MapElemList: MapElemList COMMA MapElem { $1.push_back(std::move($3)); $$ = std::move($1); }
     | MapElem { Zeta::ParserTypes::MapEntryList t; t.push_back(std::move($1)); $$ = std::move(t); }

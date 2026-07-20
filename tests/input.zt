@@ -1,4 +1,0 @@
-fn main(){
-    var a = input();
-    print(a + "\n");
-}
