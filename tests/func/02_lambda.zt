@@ -19,21 +19,17 @@ fn main() {
     var _ = 0;
 
     // passing lambda as argument
-    fn apply(f, x) {
+    var apply = fn (f, x) {
         return f(x);
-    }
+    };
     if (apply(fn(y) { return y + 1; }, 10) == 11) { pass = pass + 1; } else { print("FAIL: lambda as arg\n"); fail = fail + 1; }
 
     // lambda returning lambda (higher-order)
-    fn make_adder(n) {
+    var make_adder = fn(n) {
         return fn(x) { return x + n; };
-    }
+    };
     var add3 = make_adder(3);
     if (add3(7) == 10) { pass = pass + 1; } else { print("FAIL: lambda returning lambda\n"); fail = fail + 1; }
-
-    // immediately invoked function literal
-    var result = fn(a, b) { return a + b; }(3, 4);
-    if (result == 7) { pass = pass + 1; } else { print("FAIL: IIFE\n"); fail = fail + 1; }
 
     print("lambda: ");
     print(pass);

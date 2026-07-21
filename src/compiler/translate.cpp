@@ -102,7 +102,7 @@ void Translator::visit(AST::Import& import) {
 }
 
 void Translator::visit(AST::VarDec& varDec) {
-    if(curFunc->scopeMgr.empty()){
+    if(!curFunc){
         if(module->globalSyms.find(varDec.name) != module->globalSyms.end()){
             REPORT_SEMANTIC_ERROR(varDec.line, varDec.column, "Duplicate global variable '{}'", varDec.name);
         }
@@ -328,11 +328,11 @@ void Translator::visit(AST::ForStmt& forStmt) {
     pushOpcode(Opcode::Dup);
     callBuiltin(Builtin::IterNext);
     pushOpcode(Opcode::Dup);
+    pushOpcode(Opcode::StoreVar);
+    push4B(valSlot);
     callBuiltin(Builtin::Check);
     pushOpcode(Opcode::JumpIfFalse);
     uint32_t loopEndPos = skip4B();
-    pushOpcode(Opcode::StoreVar);
-    push4B(valSlot);
     forStmt.body->accept(*this);
     pushOpcode(Opcode::Jump);
     push4B(loopStart);
@@ -426,12 +426,13 @@ void Translator::visit(AST::BinaryExp& binaryExp) {
             case AST::BinaryExp::Op::Gt: pushOpcode(Opcode::Gt); break;
             case AST::BinaryExp::Op::Leq: pushOpcode(Opcode::Le); break;
             case AST::BinaryExp::Op::Geq: pushOpcode(Opcode::Ge); break;
+            case AST::BinaryExp::Op::Is: pushOpcode(Opcode::Is); break;
             case AST::BinaryExp::Op::BitAnd: pushOpcode(Opcode::BitAnd); break;
             case AST::BinaryExp::Op::BitOr: pushOpcode(Opcode::BitOr); break;
             case AST::BinaryExp::Op::BitXor: pushOpcode(Opcode::BitXor); break;
             case AST::BinaryExp::Op::Shl: pushOpcode(Opcode::Shl); break;
             case AST::BinaryExp::Op ::Shr: pushOpcode(Opcode::Shr); break;
-            default: break;
+            default: assert(false); break;
         }
     }
 }

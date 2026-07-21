@@ -60,6 +60,7 @@ struct Value{
         return !(*this == other);
     }
 
+    explicit operator bool() const;
     bool isString() const;
     StrView asString() const;
 };
@@ -331,6 +332,31 @@ inline void Object::trace(F&& f) {
         }
     }
 }
+
+inline Value::operator bool() const  {
+    switch (type) {
+        case Type::Null: return false;
+        case Type::Int: return static_cast<bool>(intValue);
+        case Type::Float: return static_cast<bool>(floatValue);
+        case Type::Bool: return boolValue;
+        case Type::String: return strValue != nullptr && strValue->length > 0;
+        case Type::Object: {
+            switch(ptrValue->type) {
+                case Object::Type::Block: return true;
+                case Object::Type::Array: return static_cast<Array*>(ptrValue)->size > 0;
+                case Object::Type::Map: return static_cast<Map*>(ptrValue)->size > 0;
+                case Object::Type::Function: return true;
+                case Object::Type::Class: return true;
+                case Object::Type::Instance: return true;
+                case Object::Type::Iterator: return true;
+                case Object::Type::StrObj: return static_cast<StrObj*>(ptrValue)->length > 0;
+            }
+        }
+        case Type::Error: return true;
+    }
+    return false;
+}
+
 
 inline bool Value::isString() const {
     return type == Type::String || (type == Type::Object && ptrValue->type == Object::Type::StrObj);

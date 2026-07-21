@@ -27,7 +27,7 @@ fn main() {
     var i = 10;
     var f = 3.14;
     var s = "test";
-    var b = true;
+    b = true;
     var n = null;
     if (i == 10 && f == 3.14 && s == "test" && b == true && n == null) {
         pass = pass + 1;

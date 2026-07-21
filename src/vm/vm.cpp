@@ -560,19 +560,7 @@ Value VM::execute() {
             }
             case Opcode::Not: {
                 Value a = POP();
-                if(a.type == Value::Type::Bool) {
-                    PUSH(Value(!a.boolValue));
-                } else if(a.type == Value::Type::Int) {
-                    PUSH(Value(static_cast<bool>(a.intValue)));
-                } else if(a.type == Value::Type::Float) {
-                    PUSH(Value(static_cast<bool>(a.floatValue)));
-                } else if(a.type == Value::Type::Null) {
-                    PUSH(Value(true));
-                } else if(a.type == Value::Type::String || a.type == Value::Type::Object) {
-                    PUSH(Value(false));
-                } else {
-                    assert(false);
-                }
+                PUSH(Value(!static_cast<bool>(a)));
                 break;
             }
             case Opcode::Eq: {
@@ -831,17 +819,7 @@ Value VM::execute() {
                 uint32_t offset;
                 READ_UINT32(offset);
                 Value cond = POP();
-                bool isTrue = false;
-                switch(cond.type) {
-                    case Value::Type::Null: isTrue = false; break;
-                    case Value::Type::Int: isTrue = cond.intValue != 0; break;
-                    case Value::Type::Float: isTrue = cond.floatValue != 0.0; break;
-                    case Value::Type::Bool: isTrue = cond.boolValue; break;
-                    case Value::Type::String: isTrue = true; break;
-                    case Value::Type::Object: isTrue = true; break;
-                    case Value::Type::Error: isTrue = true; break;
-                }
-                if(!isTrue) {
+                if(!static_cast<bool>(cond)) {
                     curFrame->ip = offset;
                 }
                 break;
@@ -850,23 +828,14 @@ Value VM::execute() {
                 uint32_t offset;
                 READ_UINT32(offset);
                 Value cond = POP();
-                bool isTrue = false;
-                switch(cond.type) {
-                    case Value::Type::Null: isTrue = false; break;
-                    case Value::Type::Int: isTrue = cond.intValue != 0; break;
-                    case Value::Type::Float: isTrue = cond.floatValue != 0.0; break;
-                    case Value::Type::Bool: isTrue = cond.boolValue; break;
-                    case Value::Type::String: isTrue = true; break;
-                    case Value::Type::Object: isTrue = true; break;
-                    case Value::Type::Error: isTrue = true; break;
-                }
-                if(isTrue) {
+                if(static_cast<bool>(cond)) {
                     curFrame->ip = offset;
                 }
                 break;
             }
             case Opcode::Ret:{
                 Value retVal = POP();
+                assert(curFrame->top == curFrame->base + curRoutine->localCount);
                 popFrame();
                 if(stackFrames.size() == initDepth - 1) {
                     return retVal;
@@ -888,7 +857,6 @@ Value VM::execute() {
                     newFrame.base = stack.top;
                     newFrame.top = newFrame.base + routine->localCount;
                     newFrame.ip = 0;
-                    pushFrame(newFrame);
                     if(argCount != routine->arity) {
                         errorHandler({Error::Type::RuntimeError, std::format("Function expects {} arguments, but {} were provided", routine->arity, argCount)});
                         return Value::Error;
@@ -896,6 +864,7 @@ Value VM::execute() {
                     for(int i = routine->arity - 1; i >= 0; i--) {
                         newFrame.base[i] = POP();
                     }
+                    pushFrame(newFrame);
                     curFrame = &stackFrames.back();
                     curRoutine = curFrame->routine;
                 } else if(callee.type == Value::Type::Object && callee.ptrValue->type == Object::Type::Class) {
@@ -1157,7 +1126,7 @@ Value VM::execute() {
                 break;
             }
             case Opcode::Dup: {
-                PUSH(*curFrame->top);
+                PUSH(*(curFrame->top - 1));
                 break;
             }
             case Opcode::CallBuiltin: {

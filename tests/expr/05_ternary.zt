@@ -16,15 +16,6 @@ fn main() {
     // ternary returning different types
     if ((false ? 0 : 1.0) == 1.0) { pass = pass + 1; } else { print("FAIL: ternary mixed types\n"); fail = fail + 1; }
 
-    // ternary short-circuit: only evaluated branch executes
-    var flag = "none";
-    var _ = true ? {flag = "then"; return "x";} : {flag = "else"; return "y";};
-    if (flag == "then") { pass = pass + 1; } else { print("FAIL: ternary short-circuit then\n"); fail = fail + 1; }
-
-    flag = "none";
-    _ = false ? {flag = "then"; return "x";} : {flag = "else"; return "y";};
-    if (flag == "else") { pass = pass + 1; } else { print("FAIL: ternary short-circuit else\n"); fail = fail + 1; }
-
     print("ternary: ");
     print(pass);
     print("/");

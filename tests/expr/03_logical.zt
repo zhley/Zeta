@@ -1,34 +1,33 @@
+var flag = 1;
+
+fn func(){
+    flag += 1;
+    return true;
+}
+
 fn main() {
     var pass = 0;
     var fail = 0;
 
     // AND truth table
-    if (true && true == true) { pass = pass + 1; } else { print("FAIL: T&&T\n"); fail = fail + 1; }
-    if (true && false == false) { pass = pass + 1; } else { print("FAIL: T&&F\n"); fail = fail + 1; }
-    if (false && true == false) { pass = pass + 1; } else { print("FAIL: F&&T\n"); fail = fail + 1; }
-    if (false && false == false) { pass = pass + 1; } else { print("FAIL: F&&F\n"); fail = fail + 1; }
+    if ((true && true) == true) { pass = pass + 1; } else { print("FAIL: T&&T\n"); fail = fail + 1; }
+    if ((true && false) == false) { pass = pass + 1; } else { print("FAIL: T&&F\n"); fail = fail + 1; }
+    if ((false && true) == false) { pass = pass + 1; } else { print("FAIL: F&&T\n"); fail = fail + 1; }
+    if ((false && false) == false) { pass = pass + 1; } else { print("FAIL: F&&F\n"); fail = fail + 1; }
 
     // OR truth table
-    if (true || true == true) { pass = pass + 1; } else { print("FAIL: T||T\n"); fail = fail + 1; }
-    if (true || false == true) { pass = pass + 1; } else { print("FAIL: T||F\n"); fail = fail + 1; }
-    if (false || true == true) { pass = pass + 1; } else { print("FAIL: F||T\n"); fail = fail + 1; }
-    if (false || false == false) { pass = pass + 1; } else { print("FAIL: F||F\n"); fail = fail + 1; }
+    if ((true || true) == true) { pass = pass + 1; } else { print("FAIL: T||T\n"); fail = fail + 1; }
+    if ((true || false) == true) { pass = pass + 1; } else { print("FAIL: T||F\n"); fail = fail + 1; }
+    if ((false || true) == true) { pass = pass + 1; } else { print("FAIL: F||T\n"); fail = fail + 1; }
+    if ((false || false) == false) { pass = pass + 1; } else { print("FAIL: F||F\n"); fail = fail + 1; }
 
     // NOT
     if (!true == false) { pass = pass + 1; } else { print("FAIL: !T\n"); fail = fail + 1; }
     if (!false == true) { pass = pass + 1; } else { print("FAIL: !F\n"); fail = fail + 1; }
 
-    // short-circuit: second operand should not be evaluated
-    // true || (anything) should be true
-    var flag = false;
-    if (true || {flag = true; return true;}) { pass = pass + 1; } else { print("FAIL: OR short-circuit\n"); fail = fail + 1; }
-    // flag should still be false because the block didn't execute
-    if (flag == false) { pass = pass + 1; } else { print("FAIL: OR short-circuit side effect\n"); fail = fail + 1; }
-
-    // for AND short-circuit: false && (anything) should be false
-    var flag2 = false;
-    if (false && {flag2 = true; return true;}) {} else { flag2 = flag2; } // the expression evaluates to false
-    if (flag2 == false) { pass = pass + 1; } else { print("FAIL: AND short-circuit side effect\n"); fail = fail + 1; }
+    if(true || func()) { pass = pass + 1; } else { print("FAIL: short-circuit OR\n"); fail = fail + 1; }
+    if(false && func()) { print("FAIL: short-circuit AND\n"); fail = fail + 1; } else { pass = pass + 1; }
+    if(flag == 1) { pass = pass + 1; } else { print("FAIL: short-circuit AND/OR\n"); fail = fail + 1; }
 
     // truthiness: non-bool in condition context
     if (1 && 1) { pass = pass + 1; } else { print("FAIL: truthy int\n"); fail = fail + 1; }

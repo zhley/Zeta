@@ -313,6 +313,25 @@ std::unique_ptr<Zeta::AST::Exp> tryExpFold(std::unique_ptr<Zeta::AST::Exp> exp) 
                 if(binaryExp->op == Zeta::AST::BinaryExp::Op::Or){
                     return makeBool(boolean(leftLit) || boolean(rightLit));
                 }
+                if(binaryExp->op == Zeta::AST::BinaryExp::Op::Is){
+                    if(leftLit->type == rightLit->type){
+                        switch (leftLit->type){
+                            case Zeta::AST::LiteralExp::LiteralType::Int:
+                                return makeBool(static_cast<const Zeta::AST::IntLitExp*>(leftLit)->value == static_cast<const Zeta::AST::IntLitExp*>(rightLit)->value);
+                            case Zeta::AST::LiteralExp::LiteralType::Float:
+                                return makeBool(static_cast<const Zeta::AST::FloatLitExp*>(leftLit)->value == static_cast<const Zeta::AST::FloatLitExp*>(rightLit)->value);
+                            case Zeta::AST::LiteralExp::LiteralType::Str:
+                                return makeBool(static_cast<const Zeta::AST::StrLitExp*>(leftLit)->value == static_cast<const Zeta::AST::StrLitExp*>(rightLit)->value);
+                            case Zeta::AST::LiteralExp::LiteralType::Bool:
+                                return makeBool(static_cast<const Zeta::AST::BoolLitExp*>(leftLit)->value == static_cast<const Zeta::AST::BoolLitExp*>(rightLit)->value);
+                            case Zeta::AST::LiteralExp::LiteralType::Null:
+                                return makeBool(true);
+                            default:
+                                return std::move(exp);
+                        }
+                    }
+                    return makeBool(false);
+                }
 
                 const bool leftIsInt = leftLit->type == Zeta::AST::LiteralExp::LiteralType::Int;
                 const bool rightIsInt = rightLit->type == Zeta::AST::LiteralExp::LiteralType::Int;
@@ -444,6 +463,11 @@ std::unique_ptr<Zeta::AST::Exp> tryExpFold(std::unique_ptr<Zeta::AST::Exp> exp) 
                         default:
                             break;
                     }
+                }
+                if(binaryExp->op == Zeta::AST::BinaryExp::Op::Eq) {
+                    return makeBool(false);
+                } else if(binaryExp->op == Zeta::AST::BinaryExp::Op::Neq) {
+                    return makeBool(true);
                 }
                 REPORT_SEMANTIC_ERROR(binaryExp->line, binaryExp->column, "Unsupported operand types for constant expression");
                 return std::move(exp);

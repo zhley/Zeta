@@ -20,9 +20,12 @@ fn main() {
     // is operator on strings
     if ("foo" is "foo") { pass = pass + 1; } else { print("FAIL: is on interned strings\n"); fail = fail + 1; }
     // concatenated string vs literal: content same but types differ
-    var cs = "a" + "b";
+    var cs = "a" + "b"; // constant fold => var cs = "ab"; so cs is still a interned string, not a String object
     if (cs == "ab") { pass = pass + 1; } else { print("FAIL: concat == literal\n"); fail = fail + 1; }
-    if (!(cs is "ab")) { pass = pass + 1; } else { print("FAIL: concat is not literal (StrObj vs String)\n"); fail = fail + 1; }
+    if (cs is "ab") { pass = pass + 1; } else { print("FAIL: concat is literal\n"); fail = fail + 1; }
+    var sobj = cs + "x"; 
+    if(sobj == "abx") { pass = pass + 1; } else { print("FAIL: concat obj == literal\n"); fail = fail + 1; }
+    if(!(sobj is "abx")) { pass = pass + 1; } else { print("FAIL: concat obj is not literal\n"); fail = fail + 1; }
 
     // string length
     if ("".len() == 0) { pass = pass + 1; } else { print("FAIL: empty len\n"); fail = fail + 1; }

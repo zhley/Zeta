@@ -54,7 +54,7 @@ RELOP       ==|!=|<=|>=|<|>|is
 ID          [a-zA-Z_][a-zA-Z0-9_]*
 
 INT         0[bB][01](_?[01])*|0[oO][0-7](_?[0-7])*|0[xX][0-9a-fA-F](_?[0-9a-fA-f])*|[1-9](_?[0-9])*|0
-FLOAT       [0-9]+(_?[0-9])*\.([0-9]+(_?[0-9])*)?([eE][+-]?[0-9]+(_?[0-9])*)?
+FLOAT       ([0-9]+(_?[0-9])*\.([0-9]+(_?[0-9])*)?|[0-9]+(_?[0-9])*[eE][+-]?[0-9]+(_?[0-9])*)([eE][+-]?[0-9]+(_?[0-9])*)?
 STR         \"(\\.|[^\"\n\\])*\"|\'(\\.|[^\'\n\\])*\'
 BOOL        true|false
 NULL_       null
@@ -145,6 +145,7 @@ Relop textToRelop(const char* op) {
     if (strcmp(op, ">") == 0) return RP_GT;
     if (strcmp(op, "<=") == 0) return RP_LEQ;
     if (strcmp(op, ">=") == 0) return RP_GEQ;
+    if (strcmp(op, "is") == 0) return RP_IS;
     assert(false && "Invalid relational operator");
     return RP_EQ;
 }
@@ -162,7 +163,14 @@ int64_t textToInt(const char* text) {
             }
         } else if (text[1] == 'x' || text[1] == 'X') {
             for (const char* p = text + 2; *p; ++p) {
-                if (*p != '_') value = (value << 4) | ((*p >= 'a' && *p <= 'f') ? (*p - 'a' + 10) : (*p - '0'));
+                if (*p != '_') {
+                    int digit;
+                    if(*p >= '0' && *p <= '9') digit = *p - '0';
+                    else if(*p >= 'a' && *p <= 'f') digit = *p - 'a' + 10;
+                    else if(*p >= 'A' && *p <= 'F') digit = *p - 'A' + 10;
+                    else assert(false && "Invalid hex digit");
+                    value = (value << 4) | digit;
+                }
             }
         } else {
             for (const char* p = text + 1; *p; ++p) {
