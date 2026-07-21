@@ -1268,6 +1268,7 @@ Value VM::execute() {
                     }
                     case Builtin::Print: {
                         Value val = POP();
+                        PUSH(Value::Null); // print does not return a value, so we push null to maintain stack balance
                         switch(val.type) {
                             case Value::Type::Null: std::cout << "null"; break;
                             case Value::Type::Bool: std::cout << (val.boolValue ? "true" : "false"); break;

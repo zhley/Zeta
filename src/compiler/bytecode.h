@@ -2,6 +2,9 @@
 
 #include <cmath>
 #include <cstdint>
+#include <cstring>
+#include <iostream>
+#include <format>
 #include <memory>
 #include <string>
 #include <vector>
@@ -82,12 +85,13 @@ struct BuiltinDesc {
     int stackDelta;
 };
 
+// built-in function must also have a return value, although it may be null. 
 inline constexpr BuiltinDesc builtinTable[] = {
     {Builtin::GetIter, "iter", 0},
     {Builtin::IterNext, "next", 0},
     {Builtin::NewArray, "array", 0},
     {Builtin::NewMap, "map", 0},
-    {Builtin::Print, "print", -1},
+    {Builtin::Print, "print", 0},
     {Builtin::Input, "input", 1},
     {Builtin::Error, "error", 0},
     {Builtin::Check, "check", 0},
@@ -240,5 +244,161 @@ struct Module{
     std::vector<ExtSymbol> externalSyms;
     std::vector<std::unique_ptr<Proto>> protos;
 };
+
+inline void printBytecode(const std::vector<uint8_t>& bytecode){
+    auto readUint32 = [&](uint32_t& ip) -> uint32_t {
+        uint32_t v;
+        std::memcpy(&v, &bytecode[ip], 4);
+        ip += 4;
+        return v;
+    };
+    auto readByte = [&](uint32_t& ip) -> uint8_t {
+        return bytecode[ip++];
+    };
+
+    uint32_t ip = 0;
+    while (ip < bytecode.size()) {
+        uint32_t start = ip;
+        uint8_t op = bytecode[ip++];
+        std::cout << std::format("  {:04x}  ", start);
+
+        switch (static_cast<Opcode>(op)) {
+            case Opcode::Nop:
+                std::cout << "Nop\n";
+                break;
+            case Opcode::LoadConst:
+                std::cout << std::format("LoadConst {}\n", readUint32(ip));
+                break;
+            case Opcode::LoadGlobal:
+                std::cout << std::format("LoadGlobal {}\n", readUint32(ip));
+                break;
+            case Opcode::StoreGlobal:
+                std::cout << std::format("StoreGlobal {}\n", readUint32(ip));
+                break;
+            case Opcode::LoadVar:
+                std::cout << std::format("LoadVar {}\n", readUint32(ip));
+                break;
+            case Opcode::StoreVar:
+                std::cout << std::format("StoreVar {}\n", readUint32(ip));
+                break;
+            case Opcode::Add:
+                std::cout << "Add\n";
+                break;
+            case Opcode::Sub:
+                std::cout << "Sub\n";
+                break;
+            case Opcode::Mul:
+                std::cout << "Mul\n";
+                break;
+            case Opcode::Div:
+                std::cout << "Div\n";
+                break;
+            case Opcode::Mod:
+                std::cout << "Mod\n";
+                break;
+            case Opcode::Neg:
+                std::cout << "Neg\n";
+                break;
+            case Opcode::BitAnd:
+                std::cout << "BitAnd\n";
+                break;
+            case Opcode::BitOr:
+                std::cout << "BitOr\n";
+                break;
+            case Opcode::BitXor:
+                std::cout << "BitXor\n";
+                break;
+            case Opcode::BitNot:
+                std::cout << "BitNot\n";
+                break;
+            case Opcode::Shl:
+                std::cout << "Shl\n";
+                break;
+            case Opcode::Shr:
+                std::cout << "Shr\n";
+                break;
+            case Opcode::Not:
+                std::cout << "Not\n";
+                break;
+            case Opcode::Eq:
+                std::cout << "Eq\n";
+                break;
+            case Opcode::Neq:
+                std::cout << "Neq\n";
+                break;
+            case Opcode::Lt:
+                std::cout << "Lt\n";
+                break;
+            case Opcode::Gt:
+                std::cout << "Gt\n";
+                break;
+            case Opcode::Le:
+                std::cout << "Le\n";
+                break;
+            case Opcode::Ge:
+                std::cout << "Ge\n";
+                break;
+            case Opcode::Is:
+                std::cout << "Is\n";
+                break;
+            case Opcode::Jump:
+                std::cout << std::format("Jump -> {:04x}\n", readUint32(ip));
+                break;
+            case Opcode::JumpIfFalse:
+                std::cout << std::format("JumpIfFalse -> {:04x}\n", readUint32(ip));
+                break;
+            case Opcode::JumpIfTrue:
+                std::cout << std::format("JumpIfTrue -> {:04x}\n", readUint32(ip));
+                break;
+            case Opcode::Ret:
+                std::cout << "Ret\n";
+                break;
+            case Opcode::Call: {
+                uint8_t argc = readByte(ip);
+                std::cout << std::format("Call {}\n", argc);
+                break;
+            }
+            case Opcode::GetField:
+                std::cout << std::format("GetField {}\n", readUint32(ip));
+                break;
+            case Opcode::SetField:
+                std::cout << std::format("SetField {}\n", readUint32(ip));
+                break;
+            case Opcode::CallMethod: {
+                uint8_t argc = readByte(ip);
+                uint32_t nameIdx = readUint32(ip);
+                std::cout << std::format("CallMethod {} {}\n", argc, nameIdx);
+                break;
+            }
+            case Opcode::IndexGet:
+                std::cout << "IndexGet\n";
+                break;
+            case Opcode::IndexSet:
+                std::cout << "IndexSet\n";
+                break;
+            case Opcode::Pop:
+                std::cout << "Pop\n";
+                break;
+            case Opcode::Dup:
+                std::cout << "Dup\n";
+                break;
+            case Opcode::CallBuiltin: {
+                uint8_t id = readByte(ip);
+                const char* name = "???";
+                for (const auto& bd : builtinTable) {
+                    if (static_cast<uint8_t>(bd.id) == id) { name = bd.funcName.c_str(); break; }
+                }
+                std::cout << std::format("CallBuiltin {}\n", name);
+                break;
+            }
+            case Opcode::Halt:
+                std::cout << "Halt\n";
+                break;
+            default:
+                std::cout << std::format("??? ({:#04x})\n", op);
+                break;
+        }
+    }
+}
 
 } // namespace Zeta

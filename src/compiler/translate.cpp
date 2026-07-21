@@ -692,6 +692,12 @@ uint32_t Translator::compileFunctionProto(const std::vector<std::string>& params
 }
 
 int Translator::calcMaxStackSize(const std::vector<uint8_t>& bytecode) {
+    // {
+    //     std::cout << "====================\n";
+    //     printBytecode(bytecode);
+    //     std::cout << "====================\n";
+    // }
+    
     if (bytecode.empty()) return 0;
 
     std::unordered_map<uint32_t, int> stackDepths;
