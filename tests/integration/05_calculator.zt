@@ -46,14 +46,14 @@ fn main() {
     if (r2 == 120) { pass = pass + 1; } else { print("FAIL: calculator add/sub\n"); fail = fail + 1; }
 
     // using a function that processes an array of operations
-    fn process_ops(init, ops) {
+    var process_ops = fn (init, ops) {
         var calc = Calculator(init);
         for (op : ops) {
             // op contains value only, add it
             calc.add(op.value);
         }
         return calc.result();
-    }
+    };
 
     // Array of operation-like objects (just values)
     var arr = [10, 20, 30];

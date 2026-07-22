@@ -2,8 +2,9 @@ fn main() {
     var pass = 0;
     var fail = 0;
 
+    var s1 = "hel";
     // intern a concatenated string
-    var concat = "hel" + "lo";
+    var concat = s1 + "lo";
     var interned = intern(concat);
     // interned string is a String (interned), equal to literal
     if (interned == "hello") { pass = pass + 1; } else { print("FAIL: intern == literal\n"); fail = fail + 1; }
@@ -15,7 +16,8 @@ fn main() {
 
     // StrObj can't be used as map key (would need different key)
     // Just verify the intern doesn't crash
-    var s2 = "a" + "b";
+    var s2 = "a";
+    s2 = s2 + "b";
     var i2 = intern(s2);
     if (i2 == "ab") { pass = pass + 1; } else { print("FAIL: intern second\n"); fail = fail + 1; }
 

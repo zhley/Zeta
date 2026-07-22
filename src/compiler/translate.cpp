@@ -82,6 +82,21 @@ void Translator::visit(AST::Program& program) {
     for (auto& import : program.imports) {
         import->accept(*this);
     }
+    for(auto& dec : program.decs) {
+        switch(dec->type) {
+            case AST::Dec::DecType::Var:
+                module->globalSyms[static_cast<AST::VarDec*>(dec.get())->name] = {};
+                break;
+            case AST::Dec::DecType::Func:
+                module->globalSyms[static_cast<AST::FuncDec*>(dec.get())->name] = {};
+                break;
+            case AST::Dec::DecType::Class:
+                module->globalSyms[static_cast<AST::ClassDec*>(dec.get())->name] = {};
+                break;
+            default:
+                assert(false);
+        }
+    }
     for (auto& dec : program.decs) {
         dec->accept(*this);
     }
@@ -103,9 +118,12 @@ void Translator::visit(AST::Import& import) {
 
 void Translator::visit(AST::VarDec& varDec) {
     if(!curFunc){
-        if(module->globalSyms.find(varDec.name) != module->globalSyms.end()){
+        auto& varSym = module->globalSyms[varDec.name];
+        if(varSym.valid){
             REPORT_SEMANTIC_ERROR(varDec.line, varDec.column, "Duplicate global variable '{}'", varDec.name);
         }
+        varSym.valid = true;
+        varSym.isMutable = varDec.isMutable;
         std::unique_ptr<CompileValue> value = nullptr;
         if(varDec.init){
             if(varDec.init->type == AST::Exp::ExpType::Literal){
@@ -114,7 +132,7 @@ void Translator::visit(AST::VarDec& varDec) {
                 REPORT_SEMANTIC_ERROR(varDec.line, varDec.column, "Initializer for global variable '{}' must be a constant expression", varDec.name);
             }
         }
-        module->globalSyms[varDec.name] = {varDec.isMutable, std::move(*value)};
+        varSym.initValue = std::move(*value);
     } else {
         int index = curFunc->scopeMgr.declare(varDec.name, varDec.isMutable);
         if(index == -1){
@@ -129,20 +147,26 @@ void Translator::visit(AST::VarDec& varDec) {
 }
 
 void Translator::visit(AST::FuncDec& funcDec) {
+    auto& funcSym = module->globalSyms[funcDec.name];
     if(findBuiltin(funcDec.name)){
         REPORT_SEMANTIC_ERROR(funcDec.line, funcDec.column, "Function name '{}' conflicts with a built-in function", funcDec.name);
     }
-    if(module->globalSyms.find(funcDec.name) != module->globalSyms.end()){
+    if(funcSym.valid){
         REPORT_SEMANTIC_ERROR(funcDec.line, funcDec.column, "Duplicate global function '{}'", funcDec.name);
     }
+    funcSym.valid = true;
+    funcSym.isMutable = false;
     uint32_t protoIdx = compileFunctionProto(funcDec.params, funcDec.body.get(), false);
-    module->globalSyms[funcDec.name] = {false, CompileValue(new CompileFunction{protoIdx})};
+    funcSym.initValue = CompileValue(new CompileFunction{protoIdx});
 }
 
 void Translator::visit(AST::ClassDec& classDec) {
-    if(module->globalSyms.find(classDec.name) != module->globalSyms.end()){
+    auto& classSym = module->globalSyms[classDec.name];
+    if(classSym.valid){
         REPORT_SEMANTIC_ERROR(classDec.line, classDec.column, "Duplicate global class '{}'", classDec.name);
     }
+    classSym.valid = true;
+    classSym.isMutable = false;
     CompileClass* compileClass = new CompileClass();
     compileClass->name = classDec.name;
     compileClass->base.second = classDec.base.second;
@@ -179,7 +203,7 @@ void Translator::visit(AST::ClassDec& classDec) {
             REPORT_SEMANTIC_ERROR(member->line, member->column, "Invalid instance member in class '{}'", classDec.name);
         }
     }
-    module->globalSyms[classDec.name] = {false, CompileValue(compileClass)};
+    classSym.initValue = CompileValue(compileClass);
 }
 
 void Translator::visit(AST::BlockStmt& blockStmt) {
@@ -759,6 +783,7 @@ int Translator::calcMaxStackSize(const std::vector<uint8_t>& bytecode) {
             case Opcode::Gt:
             case Opcode::Le:
             case Opcode::Ge:
+            case Opcode::Is:
                 delta = -1;
                 size = 1;
                 break;
@@ -793,6 +818,7 @@ int Translator::calcMaxStackSize(const std::vector<uint8_t>& bytecode) {
                 delta = -1;
                 size = 1;
                 hasFallthrough = false;
+                assert(depth + delta == 0);
                 break;
             case Opcode::Call: {
                 uint8_t argCount = bytecode[pc + 1];

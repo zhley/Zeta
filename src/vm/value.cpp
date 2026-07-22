@@ -60,8 +60,8 @@ Map::Map(GC* gc) : Object(Object::Type::Map), capacity(8), size(0), deletedCnt(0
     std::memset(data->getData(), 0, data->size);
 } 
 
-Map::Map(GC* gc, uint32_t minCapacity) : Object(Object::Type::Map), capacity(minCapacity), size(0), deletedCnt(0), gc(gc){
-    capacity = 1;
+Map::Map(GC* gc, uint32_t minCapacity) : Object(Object::Type::Map), size(0), deletedCnt(0), gc(gc){
+    capacity = 4;
     while(capacity < minCapacity) capacity <<= 1;
     Block* blk = gc->allocateBlock(capacity * sizeof(Entry));
     gc->writeBarrier(this, (Object**)(&data), blk);

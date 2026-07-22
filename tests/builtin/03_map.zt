@@ -14,7 +14,7 @@ fn main() {
 
     // map.size()
     if (m.size() == 2) { pass = pass + 1; } else { print("FAIL: map.size\n"); fail = fail + 1; }
-    var empty = {};
+    var empty = {:};
     if (empty.size() == 0) { pass = pass + 1; } else { print("FAIL: empty map.size\n"); fail = fail + 1; }
 
     // map update value

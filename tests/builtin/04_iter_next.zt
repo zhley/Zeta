@@ -34,7 +34,7 @@ fn main() {
     if (check(en) == false) { pass = pass + 1; } else { print("FAIL: iter empty array\n"); fail = fail + 1; }
 
     // iter on empty map
-    var emptyMap = {};
+    var emptyMap = {:};
     var emi = iter(emptyMap);
     var emn = next(emi);
     if (check(emn) == false) { pass = pass + 1; } else { print("FAIL: iter empty map\n"); fail = fail + 1; }

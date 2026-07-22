@@ -1,4 +1,4 @@
-fn map(arr, f) {
+fn map_(arr, f) {
     var result = array(arr.size());
     var i = 0;
     while (i < arr.size()) {
@@ -35,7 +35,7 @@ fn main() {
     var fail = 0;
 
     // map
-    var doubled = map([1, 2, 3], fn(x) { return x * 2; });
+    var doubled = map_([1, 2, 3], fn(x) { return x * 2; });
     if (doubled[0] == 2 && doubled[1] == 4 && doubled[2] == 6) {
         pass = pass + 1;
     } else {

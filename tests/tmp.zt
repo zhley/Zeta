@@ -1,20 +1,10 @@
 
-fn func(x){
-    /*
-    if(x > 1){
-        return 1;
-    }
-    */
-    return 0;
-}
-
 fn main(){
-    func(1);
-    /*
-    var a = [1, 2, 3, 4, 5];
-    for(i : a){
-        print(i);
-        print(" ");
+    var a = "a";
+    a = a + "b";
+    if(intern(a) is "ab"){
+        print("intern: pass\n");
+    } else {
+        print("intern: fail\n");
     }
-    */
 }

@@ -223,6 +223,7 @@ struct Pos{
 };
 
 struct Symbol{
+    bool valid = false;
     bool isMutable;
     CompileValue initValue;
     std::vector<Pos> relocations;

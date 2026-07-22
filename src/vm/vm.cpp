@@ -181,14 +181,19 @@ void VM::importModule(const std::filesystem::path& path) {
     for(auto& proto : module->protos) {
         auto routine = std::make_unique<Routine>();
         routine->bytecode = std::move(proto->bytecode);
-        for(const auto& constVal : proto->constants) {
-            routine->constants.push_back(makeValue(makeValue, constVal));
-        }
         routine->arity = proto->arity;
         routine->localCount = proto->localCount;
         routine->maxStackSize = proto->maxStackSize;
         routines.push_back(std::move(routine));
     }
+    for(int i = 0; i < module->protos.size(); i++) {
+        auto& proto = module->protos[i];
+        auto& routine = routines[moduleInfo.protoBaseIndex + i];
+        for(const auto& constVal : proto->constants) {
+            routine->constants.push_back(makeValue(makeValue, constVal));
+        }
+    }
+
     for(const auto& [symName, sym] : module->globalSyms) {
         uint32_t index = global.size();
         global.push_back(makeValue(makeValue, sym.initValue));
@@ -255,19 +260,24 @@ void VM::importModule(const std::filesystem::path& path) {
         Class* cls = static_cast<Class*>(classVal.ptrValue);
         uint32_t baseIdx;
         if(patch.baseClassNames.first.empty()) {
-            bool found = false;
-            for(const auto& [import, importPath] : nameToPath) {
-                const auto& symMap = loadedModules[importPath].symbolMap;
-                auto symIt = symMap.find(patch.baseClassNames.second);
-                if(symIt != symMap.end()) {
-                    baseIdx = symIt->second;
-                    found = true;
-                    break;
+            auto it = moduleInfo.symbolMap.find(patch.baseClassNames.second);
+            if(it != moduleInfo.symbolMap.end()) {
+                baseIdx = it->second;
+            } else {
+                bool found = false;
+                for(const auto& [import, importPath] : nameToPath) {
+                    const auto& symMap = loadedModules[importPath].symbolMap;
+                    auto symIt = symMap.find(patch.baseClassNames.second);
+                    if(symIt != symMap.end()) {
+                        baseIdx = symIt->second;
+                        found = true;
+                        break;
+                    }
                 }
-            }
-            if(!found) {
-                errorHandler({Error::Type::VMError, std::format("Failed to resolve base class: \"{}\" for class \"{}\" in module \"{}\"", patch.baseClassNames.second, patch.className, pathStr)});
-                return;
+                if(!found) {
+                    errorHandler({Error::Type::VMError, std::format("Failed to resolve base class: \"{}\" for class \"{}\" in module \"{}\"", patch.baseClassNames.second, patch.className, pathStr)});
+                    return;
+                }
             }
         } else {
             auto it = std::find_if(nameToPath.begin(), nameToPath.end(), [&patch](const std::pair<std::string, std::string>& p) {
@@ -465,6 +475,7 @@ Value VM::execute() {
                     errorHandler({Error::Type::RuntimeError, "Unsupported operand types for Div"});
                     return Value::Error;
                 }
+                break;
             }
             case Opcode::Mod: {
                 Value b = POP();
@@ -615,18 +626,18 @@ Value VM::execute() {
                             Instance* aInst = static_cast<Instance*>(aObj);
                             auto equalsMethodOpt = aInst->cls->methods->get(STRINGS._equals);
                             if(!equalsMethodOpt.has_value()) {
-                                errorHandler({Error::Type::RuntimeError, std::format("IterNext: class \"{}\" does not have a _equals method with 1 argument", aInst->cls->name->data)});
-                                return Value::Error;
+                                PUSH(Value(false));
+                            } else {
+                                Value equalsMethodVal = equalsMethodOpt.value();
+                                assert(equalsMethodVal.type == Value::Type::Object && equalsMethodVal.ptrValue->type == Object::Type::Function);
+                                Function* func = static_cast<Function*>(equalsMethodVal.ptrValue);
+                                if(func->routine->arity != 2) {
+                                    errorHandler({Error::Type::RuntimeError, std::format("Eq: _equals method of class \"{}\" should have 2 arguments", aInst->cls->name->data)});
+                                    return Value::Error;
+                                }
+                                Value args[2] = {a, b};
+                                PUSH(callFunction(func, 2, args));
                             }
-                            Value equalsMethodVal = equalsMethodOpt.value();
-                            assert(equalsMethodVal.type == Value::Type::Object && equalsMethodVal.ptrValue->type == Object::Type::Function);
-                            Function* func = static_cast<Function*>(equalsMethodVal.ptrValue);
-                            if(func->routine->arity != 2) {
-                                errorHandler({Error::Type::RuntimeError, std::format("IterNext: class \"{}\" does not have a _equals method with 1 argument", aInst->cls->name->data)});
-                                return Value::Error;
-                            }
-                            Value args[2] = {a, b};
-                            PUSH(callFunction(func, 2, args));
                         } else if (aObj->type == Object::Type::StrObj) {
                             if(b.type == Value::Type::String) {
                                 PUSH(Value(static_cast<StrObj*>(aObj)->length == b.strValue->length && std::memcmp(static_cast<StrObj*>(aObj)->data->getData(), b.strValue->data, b.strValue->length) == 0));
@@ -700,20 +711,20 @@ Value VM::execute() {
                             Instance* aInst = static_cast<Instance*>(aObj);
                             auto equalsMethodOpt = aInst->cls->methods->get(STRINGS._equals);
                             if(!equalsMethodOpt.has_value()) {
-                                errorHandler({Error::Type::RuntimeError, std::format("IterNext: class \"{}\" does not have a _equals method with 1 argument", aInst->cls->name->data)});
-                                return Value::Error;
+                                PUSH(Value(true));
+                            } else {
+                                Value equalsMethodVal = equalsMethodOpt.value();
+                                assert(equalsMethodVal.type == Value::Type::Object && equalsMethodVal.ptrValue->type == Object::Type::Function);
+                                Function* func = static_cast<Function*>(equalsMethodVal.ptrValue);
+                                if(func->routine->arity != 2) {
+                                    errorHandler({Error::Type::RuntimeError, std::format("Neq: _equals method of class \"{}\" should have 2 arguments", aInst->cls->name->data)});
+                                    return Value::Error;
+                                }
+                                Value args[2] = {a, b};
+                                Value ret = callFunction(func, 2, args);
+                                assert(ret.type == Value::Type::Bool);
+                                PUSH(Value(!ret.boolValue));
                             }
-                            Value equalsMethodVal = equalsMethodOpt.value();
-                            assert(equalsMethodVal.type == Value::Type::Object && equalsMethodVal.ptrValue->type == Object::Type::Function);
-                            Function* func = static_cast<Function*>(equalsMethodVal.ptrValue);
-                            if(func->routine->arity != 2) {
-                                errorHandler({Error::Type::RuntimeError, std::format("IterNext: class \"{}\" does not have a _equals method with 1 argument", aInst->cls->name->data)});
-                                return Value::Error;
-                            }
-                            Value args[2] = {a, b};
-                            Value ret = callFunction(func, 2, args);
-                            assert(ret.type == Value::Type::Bool);
-                            PUSH(Value(!ret.boolValue));
                         } else if (aObj->type == Object::Type::StrObj) {
                             if(b.type == Value::Type::String) {
                                 PUSH(Value(!(static_cast<StrObj*>(aObj)->length == b.strValue->length && std::memcmp(static_cast<StrObj*>(aObj)->data->getData(), b.strValue->data, b.strValue->length) == 0)));
@@ -881,7 +892,6 @@ Value VM::execute() {
                         newFrame.base = stack.top;
                         newFrame.top = newFrame.base + routine->localCount;
                         newFrame.ip = 0;
-                        pushFrame(newFrame);
                         if(argCount != routine->arity - 1) {
                             errorHandler({Error::Type::RuntimeError, std::format("Constructor expects {} arguments, but {} were provided", routine->arity - 1, argCount)});
                             return Value::Error;
@@ -890,6 +900,7 @@ Value VM::execute() {
                         for(int i = routine->arity - 1; i >= 1; i--) {
                             newFrame.base[i] = POP();
                         }
+                        pushFrame(newFrame);
                         curFrame = &stackFrames.back();
                         curRoutine = curFrame->routine;
                     } else {
@@ -920,6 +931,7 @@ Value VM::execute() {
                     return Value::Error;
                 }
                 PUSH(fieldValOpt.value());
+                break;
             }
             case Opcode::SetField: {
                 Value fieldVal = POP();
@@ -936,6 +948,7 @@ Value VM::execute() {
                 assert(nameVal.type == Value::Type::String);
                 String* fieldName = nameVal.strValue;
                 instance->fields->set(fieldName, fieldVal);
+                break;
             }
             case Opcode::CallMethod: {
                 uint8_t argCount;
@@ -1030,7 +1043,6 @@ Value VM::execute() {
                             newFrame.base = stack.top;
                             newFrame.top = newFrame.base + routine->localCount;
                             newFrame.ip = 0;
-                            pushFrame(newFrame);
                             if(argCount != routine->arity - 1) {
                                 errorHandler({Error::Type::RuntimeError, std::format("Method expects {} arguments, but {} were provided", routine->arity - 1, argCount)});
                                 return Value::Error;
@@ -1039,6 +1051,7 @@ Value VM::execute() {
                             for(int i = routine->arity - 1; i >= 1; i--) {
                                 newFrame.base[i] = POP();
                             }
+                            pushFrame(newFrame);
                             curFrame = &stackFrames.back();
                             curRoutine = curFrame->routine;
                             break;
@@ -1049,6 +1062,7 @@ Value VM::execute() {
                         }
                     }
                 }
+                break;
             }
             case Opcode::IndexGet: {
                 Value index = POP();
@@ -1163,12 +1177,12 @@ Value VM::execute() {
                             newFrame.base = stack.top;
                             newFrame.top = newFrame.base + routine->localCount;
                             newFrame.ip = 0;
-                            pushFrame(newFrame);
                             if(routine->arity != 1) {
                                 errorHandler({Error::Type::RuntimeError, std::format("GetIter: class \"{}\" does not have an _iter method with 0 arguments", instance->cls->name->data)});
                                 return Value::Error;
                             }
                             newFrame.base[0] = objVal; // push 'this' as the first argument
+                            pushFrame(newFrame);
                             curFrame = &stackFrames.back();
                             curRoutine = curFrame->routine;
                         } else {
@@ -1203,12 +1217,12 @@ Value VM::execute() {
                             newFrame.base = stack.top;
                             newFrame.top = newFrame.base + routine->localCount;
                             newFrame.ip = 0;
-                            pushFrame(newFrame);
                             if(routine->arity != 1) {
                                 errorHandler({Error::Type::RuntimeError, std::format("IterNext: class \"{}\" does not have a _next method with 0 arguments", instance->cls->name->data)});
                                 return Value::Error;
                             }
                             newFrame.base[0] = iterVal; // push 'this' as the first argument
+                            pushFrame(newFrame);
                             curFrame = &stackFrames.back();
                             curRoutine = curFrame->routine;
                         } else {
@@ -1286,11 +1300,15 @@ Value VM::execute() {
                     }
                     case Builtin::Intern: {
                         Value strVal = POP();
+                        if(strVal.type == Value::Type::String) {
+                            PUSH(strVal);
+                            break;
+                        }
                         if(!(strVal.type == Value::Type::Object && strVal.ptrValue->type == Object::Type::StrObj)) {
                             errorHandler({Error::Type::RuntimeError, "Intern: argument must be a StrObj"});
                             return Value::Error;
                         }
-                        String* internedStr = internString(strVal.strValue->data);
+                        String* internedStr = internString(static_cast<char*>(static_cast<StrObj*>(strVal.ptrValue)->data->getData()));
                         PUSH(Value(internedStr));
                         break;
                     }

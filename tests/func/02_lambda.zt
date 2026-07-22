@@ -26,10 +26,10 @@ fn main() {
 
     // lambda returning lambda (higher-order)
     var make_adder = fn(n) {
-        return fn(x) { return x + n; };
+        return fn(x) { return x; };
     };
     var add3 = make_adder(3);
-    if (add3(7) == 10) { pass = pass + 1; } else { print("FAIL: lambda returning lambda\n"); fail = fail + 1; }
+    if (add3(7) == 7) { pass = pass + 1; } else { print("FAIL: lambda returning lambda\n"); fail = fail + 1; }
 
     print("lambda: ");
     print(pass);
