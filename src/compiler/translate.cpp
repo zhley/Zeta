@@ -11,7 +11,6 @@
 #include <vector>
 
 // TODO: 需要做优化
-// TODO: 计算最大操作数栈深度. 需要做数据流分析, 可以顺便把优化做了
 
 // NOTE: 模块别名和全局符号名可能冲突, 行为: 优先模块别名
 
@@ -207,6 +206,7 @@ void Translator::visit(AST::ClassDec& classDec) {
 }
 
 void Translator::visit(AST::BlockStmt& blockStmt) {
+    recordLineno(blockStmt.line);
     if(blockStmt.isFuncBody){
         for(auto& stmt : blockStmt.stmts){
             stmt->accept(*this);
@@ -221,11 +221,13 @@ void Translator::visit(AST::BlockStmt& blockStmt) {
 }
 
 void Translator::visit(AST::ExpStmt& expStmt) {
+    recordLineno(expStmt.line);
     expStmt.exp->accept(*this);
     pushOpcode(Opcode::Pop);
 }
 
-void Translator::visit(AST::AssignStmt& assignStmt) { 
+void Translator::visit(AST::AssignStmt& assignStmt) {
+    recordLineno(assignStmt.line); 
     auto pushVal = [&](){
         if(assignStmt.op == AST::AssignStmt::Op::Assign){
             assignStmt.value->accept(*this);
@@ -297,12 +299,14 @@ void Translator::visit(AST::AssignStmt& assignStmt) {
 }
 
 void Translator::visit(AST::VarDecStmt& varDecStmt) {
+    recordLineno(varDecStmt.line);
     for(auto& varDec : varDecStmt.varDecs){
         varDec->accept(*this);
     }
 }
 
 void Translator::visit(AST::IfStmt& ifStmt) {
+    recordLineno(ifStmt.line);
     ifStmt.cond->accept(*this);
     pushOpcode(Opcode::JumpIfFalse);
     uint32_t next = skip4B();
@@ -319,6 +323,7 @@ void Translator::visit(AST::IfStmt& ifStmt) {
 }
 
 void Translator::visit(AST::WhileStmt& whileStmt) {
+    recordLineno(whileStmt.line);
     curFunc->breakPosStack.push({});
     curFunc->continuePosStack.push({});
     uint32_t loopStart = getLabel();
@@ -341,6 +346,7 @@ void Translator::visit(AST::WhileStmt& whileStmt) {
 }
 
 void Translator::visit(AST::ForStmt& forStmt) {
+    recordLineno(forStmt.line);
     curFunc->breakPosStack.push({});
     curFunc->continuePosStack.push({});
     curFunc->scopeMgr.enterScope();
@@ -376,6 +382,7 @@ void Translator::visit(AST::ForStmt& forStmt) {
 }
 
 void Translator::visit(AST::ReturnStmt& returnStmt) {
+    recordLineno(returnStmt.line);
     if(returnStmt.value){
         returnStmt.value->accept(*this);
     } else {
@@ -386,6 +393,7 @@ void Translator::visit(AST::ReturnStmt& returnStmt) {
 }
 
 void Translator::visit(AST::BreakStmt& breakStmt) {
+    recordLineno(breakStmt.line);
     if(curFunc->breakPosStack.empty()){
         REPORT_SEMANTIC_ERROR(breakStmt.line, breakStmt.column, "Break statement not within a loop");
     }
@@ -395,6 +403,7 @@ void Translator::visit(AST::BreakStmt& breakStmt) {
 }
 
 void Translator::visit(AST::ContinueStmt& continueStmt) {
+    recordLineno(continueStmt.line);
     if(curFunc->continuePosStack.empty()){
         REPORT_SEMANTIC_ERROR(continueStmt.line, continueStmt.column, "Continue statement not within a loop");
     }
@@ -404,6 +413,7 @@ void Translator::visit(AST::ContinueStmt& continueStmt) {
 }
 
 void Translator::visit(AST::ConditionalExp& conditionalExp) {
+    recordLineno(conditionalExp.line);
     conditionalExp.cond->accept(*this);
     pushOpcode(Opcode::JumpIfFalse);
     uint32_t elsePos = skip4B();
@@ -416,6 +426,7 @@ void Translator::visit(AST::ConditionalExp& conditionalExp) {
 }
 
 void Translator::visit(AST::BinaryExp& binaryExp) {
+    recordLineno(binaryExp.line);
     if(binaryExp.op == AST::BinaryExp::Op::And){
         // NOTE: 表达式结果可能不是布尔类型, 但应该不重要
         binaryExp.left->accept(*this);
@@ -462,6 +473,7 @@ void Translator::visit(AST::BinaryExp& binaryExp) {
 }
 
 void Translator::visit(AST::UnaryExp& unaryExp) {
+    recordLineno(unaryExp.line);
     unaryExp.operand->accept(*this);
     switch (unaryExp.op) {
         case AST::UnaryExp::Op::Neg: pushOpcode(Opcode::Neg); break;
@@ -472,6 +484,7 @@ void Translator::visit(AST::UnaryExp& unaryExp) {
 }
 
 void Translator::visit(AST::CallExp& callExp) {
+    recordLineno(callExp.line);
     if(callExp.caller){
         std::string moduleName;
         if(callExp.caller->type == AST::Exp::ExpType::Identifier){
@@ -529,6 +542,7 @@ void Translator::visit(AST::CallExp& callExp) {
 }
 
 void Translator::visit(AST::MemberAccessExp& memberAccessExp) {
+    recordLineno(memberAccessExp.line);
     std::string moduleName;
     if(memberAccessExp.object->type == AST::Exp::ExpType::Identifier){
         auto* idExp = static_cast<AST::IdentifierExp*>(memberAccessExp.object.get());
@@ -550,12 +564,14 @@ void Translator::visit(AST::MemberAccessExp& memberAccessExp) {
 }
 
 void Translator::visit(AST::IndexAccessExp& indexAccessExp) {
+    recordLineno(indexAccessExp.line);
     indexAccessExp.object->accept(*this);
     indexAccessExp.index->accept(*this);
     pushOpcode(Opcode::IndexGet);
 }
 
 void Translator::visit(AST::IdentifierExp& identifierExp) {
+    recordLineno(identifierExp.line);
     auto* varSym = curFunc->scopeMgr.resolve(identifierExp.name);
     if(varSym){
         pushOpcode(Opcode::LoadVar);
@@ -568,6 +584,7 @@ void Translator::visit(AST::IdentifierExp& identifierExp) {
 }
 
 void Translator::visit(AST::ThisExp& thisExp) {
+    recordLineno(thisExp.line);
     pushOpcode(Opcode::LoadVar);
     push4B(0); // "this" is always at slot 0
     if(!curFunc->inMethod){
@@ -576,6 +593,7 @@ void Translator::visit(AST::ThisExp& thisExp) {
 }
 
 void Translator::visit(AST::ArrayExp& arrayExp) {
+    recordLineno(arrayExp.line);
     pushOpcode(Opcode::LoadConst);
     push4B(makeConstIdx(CompileValue((int64_t)arrayExp.elements.size())));
     callBuiltin(Builtin::NewArray);
@@ -589,6 +607,7 @@ void Translator::visit(AST::ArrayExp& arrayExp) {
 }
 
 void Translator::visit(AST::MapExp& mapExp) {
+    recordLineno(mapExp.line);
     pushOpcode(Opcode::LoadConst);
     push4B(makeConstIdx(CompileValue((int64_t)mapExp.entries.size())));
     callBuiltin(Builtin::NewMap);
@@ -602,31 +621,37 @@ void Translator::visit(AST::MapExp& mapExp) {
 }
 
 void Translator::visit(AST::IntLitExp& intLitExp) {
+    recordLineno(intLitExp.line);
     pushOpcode(Opcode::LoadConst);
     push4B(makeConstIdx(CompileValue(intLitExp.value)));
 }
 
 void Translator::visit(AST::FloatLitExp& floatLitExp) {
+    recordLineno(floatLitExp.line);
     pushOpcode(Opcode::LoadConst);
     push4B(makeConstIdx(CompileValue(floatLitExp.value)));
 }
 
 void Translator::visit(AST::StrLitExp& strLitExp) {
+    recordLineno(strLitExp.line);
     pushOpcode(Opcode::LoadConst);
     push4B(makeConstIdx(CompileValue(strLitExp.value)));
 }
 
 void Translator::visit(AST::BoolLitExp& boolLitExp) {
+    recordLineno(boolLitExp.line);
     pushOpcode(Opcode::LoadConst);
     push4B(makeConstIdx(CompileValue(boolLitExp.value)));
 }
 
 void Translator::visit(AST::NullLitExp& nullLitExp) {
+    recordLineno(nullLitExp.line);
     pushOpcode(Opcode::LoadConst);
     push4B(makeConstIdx(CompileValue()));
 }
 
 void Translator::visit(AST::ArrayLitExp& arrayLitExp) {
+    recordLineno(arrayLitExp.line);
     std::vector<CompileValue>* arr = new std::vector<CompileValue>();
     for(auto& elem : arrayLitExp.elements){
         auto elemVal = getValue(elem.get());
@@ -637,6 +662,7 @@ void Translator::visit(AST::ArrayLitExp& arrayLitExp) {
 }
 
 void Translator::visit(AST::MapLitExp& mapLitExp) {
+    recordLineno(mapLitExp.line);
     std::vector<std::pair<std::string, CompileValue>>* m = new std::vector<std::pair<std::string, CompileValue>>();
     for(auto& pair : mapLitExp.entries){
         auto val = getValue(pair.second.get());
@@ -647,6 +673,7 @@ void Translator::visit(AST::MapLitExp& mapLitExp) {
 }
 
 void Translator::visit(AST::FuncLitExp& funcLitExp) {
+    recordLineno(funcLitExp.line);
     uint32_t protoIdx = compileFunctionProto(funcLitExp.params, funcLitExp.body.get(), false);
     pushOpcode(Opcode::LoadConst);
     push4B(makeConstIdx(CompileValue(new CompileFunction{protoIdx})));

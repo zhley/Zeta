@@ -1,7 +1,12 @@
 
 fn main(){
-    var func = fn () {
-        func();
-    };
-    func();
+    var i = 0;
+    var s = "Hello, World!";
+    // intern(i);
+    print(s > i);
+    while(i < 10){
+        print(i);
+        print("\n");
+        i = i + 1;
+    }
 }

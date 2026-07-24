@@ -3,6 +3,7 @@
 #include "bytecode.h"
 #include "visitor.h"
 
+#include <cassert>
 #include <cstdint>
 #include <cstring>
 #include <memory>
@@ -83,6 +84,7 @@ private:
     Module* module = nullptr;
     std::unordered_map<std::string, std::string> aliasToModule; 
     
+    uint32_t lineno = 1;
     struct FuncState {
         Proto* proto = nullptr;
         bool inMethod = false;
@@ -172,6 +174,14 @@ private:
             }
         }
         return nullptr;
+    }
+
+    void recordLineno(uint32_t nodeLineno){
+        assert(curFunc);
+        if(lineno != nodeLineno) {
+            curFunc->proto->lineInfo.push_back({curFunc->proto->bytecode.size(), nodeLineno});
+            lineno = nodeLineno;
+        }
     }
 
     std::unique_ptr<CompileValue> getValue(const AST::LiteralExp* exp);

@@ -42,6 +42,7 @@ public:
     };
     struct Error{
         enum Type{ RuntimeError, VMError } type;
+        uint32_t line;
         std::string message;
     };
     // for each module. Compile-time data -> Runtime data
@@ -107,7 +108,23 @@ private:
     void popFrame();
 
     static void defaultErrorHandler(const Error& error) {
-        std::cout << std::format("{}: {}\n", error.type == Error::RuntimeError ? "Runtime Error" : "VM Error", error.message);
+        std::cout << std::format("[{}][line {}]: {}\n", error.type == Error::RuntimeError ? "Runtime Error" : "VM Error", error.line, error.message);
+    }
+
+    static uint32_t getLine(const Routine* routine, uint32_t ip) {
+        if(routine->lineInfo.empty()) return 0;
+        int left = 0, right = routine->lineInfo.size() - 1;
+        while(left <= right) {
+            int mid = left + (right - left) / 2;
+            if(ip >= routine->lineInfo[mid].first && ip < routine->lineInfo[mid + 1].first) {
+                return routine->lineInfo[mid].second;
+            } else if(ip < routine->lineInfo[mid].first) {
+                right = mid - 1;
+            } else {
+                left = mid + 1;
+            }
+        }
+        return left;
     }
 };
 

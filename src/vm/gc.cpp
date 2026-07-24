@@ -18,7 +18,7 @@ GC::GC(VM* vm) : vm(vm), rememberedSet(512) {
     heapSize = vm->config.initHeapSize * 1024;
     heap = std::malloc(heapSize);
     if (!heap) {
-        vm->errorHandler({VM::Error::VMError, "Failed to allocate heap memory"});
+        vm->errorHandler({VM::Error::VMError, 0, "Failed to allocate heap memory"});
         return;
     }
     heapEnd = static_cast<char*>(heap) + heapSize;
@@ -126,7 +126,7 @@ Object* GC::allocateInOld(int size) {
         if(curOldPtr > (char*)oldEnd) {
             curOldPtr = (char*)curOldPtr - size;
             if(!growHeap(size * (ZETA_GC_YOUNG_SCALE + ZETA_GC_OLD_SCALE) / ZETA_GC_OLD_SCALE)) {
-                vm->errorHandler({VM::Error::VMError, "Out of memory"}); // TODO: 详细一点
+                vm->errorHandler({VM::Error::VMError, 0, "Out of memory"}); // TODO: 详细一点
                 return nullptr;
             }
             ptr = curOldPtr;

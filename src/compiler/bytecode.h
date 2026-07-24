@@ -211,6 +211,7 @@ struct CompileValue{
 struct Proto {
     uint32_t index;
     std::vector<uint8_t> bytecode;
+    std::vector<std::pair<uint32_t, uint32_t>> lineInfo; // <bytecode_offset, line_number>
     std::vector<CompileValue> constants;
     int arity = 0;
     int localCount = 0;

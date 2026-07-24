@@ -67,6 +67,7 @@ struct Value{
 
 struct Routine{
     std::vector<uint8_t> bytecode;
+    std::vector<std::pair<uint32_t, uint32_t>> lineInfo;
     std::vector<Value> constants;
     uint32_t arity;
     uint32_t localCount;
