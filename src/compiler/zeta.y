@@ -28,6 +28,12 @@
         using MapEntryList = std::vector<std::pair<std::string, std::unique_ptr<Zeta::AST::Exp>>>;
         using ParamList = std::vector<std::string>;
     }
+
+    #define SET_POS(node, loc) \
+        do { \
+            (node)->line = (loc).begin.line; \
+            (node)->column = (loc).begin.column; \
+        } while(0)
 }
 
 %code top{
@@ -40,12 +46,14 @@
 }
 
 %language "c++"
+%locations
 %define api.namespace {Zeta}
 %define api.parser.class {Parser}
 %define api.value.type variant
 %define api.token.constructor
 %define parse.error verbose
 %parse-param { std::unique_ptr<Zeta::AST::Program>& root }
+%token END 0
 %token <int64_t> INT
 %token <double> FLOAT
 %token <bool> BOOL
@@ -89,14 +97,14 @@
 %type <std::pair<std::string, std::unique_ptr<Zeta::AST::Exp>>> MapElem
 
 %%
-Program: ImportList DecList { auto p = std::make_unique<Program>(); p->imports = std::move($1); p->decs = std::move($2); $$ = std::move(p); root = std::move($$); }
+Program: ImportList DecList { auto p = std::make_unique<Program>(); SET_POS(p, @$); p->imports = std::move($1); p->decs = std::move($2); $$ = std::move(p); root = std::move($$); }
     ;
 
 ImportList: ImportList Import { $1.push_back(std::move($2)); $$ = std::move($1); }
     | { $$ = Zeta::ParserTypes::ImportList{}; }
     ;
-Import: IMPORT STR SEMI { auto t = std::make_unique<Import>(); t->path = std::move($2); $$ = std::move(t); }
-    | IMPORT STR AS ID SEMI { auto t = std::make_unique<Import>(); t->path = std::move($2); t->alias = std::move($4); $$ = std::move(t); }
+Import: IMPORT STR SEMI { auto t = std::make_unique<Import>(); SET_POS(t, @$); t->path = std::move($2); $$ = std::move(t); }
+    | IMPORT STR AS ID SEMI { auto t = std::make_unique<Import>(); SET_POS(t, @$); t->path = std::move($2); t->alias = std::move($4); $$ = std::move(t); }
     ;
 
 DecList: DecList VarDec SEMI { for(auto& d: $2) $1.push_back(std::unique_ptr<Dec>(std::move(d))); $$ = std::move($1); }
@@ -112,7 +120,7 @@ VarList: VarList COMMA Var { $1.push_back(std::move($3)); $$ = std::move($1); }
     | Var { Zeta::ParserTypes::VarDecList t; t.push_back(std::move($1)); $$ = std::move(t); }
     ;
 Var: ID { auto t = std::make_unique<VarDec>(); t->name = std::move($1); t->isMutable = true; $$ = std::move(t); }
-    | ID ASSIGN Exp { auto t = std::make_unique<VarDec>(); t->name = std::move($1); t->isMutable = true; t->init = std::move($3); $$ = std::move(t); if($2 != AS_ASSIGN) { Zeta::Parser::error("Initialization only allowed with '='"); } }
+    | ID ASSIGN Exp { auto t = std::make_unique<VarDec>(); t->name = std::move($1); t->isMutable = true; t->init = std::move($3); $$ = std::move(t); if($2 != AS_ASSIGN) { Zeta::Parser::error(@2, "Initialization only allowed with '='"); } }
     ;
 
 FuncDec: FN ID LP ParamList RP BlockStmt { auto f = std::make_unique<FuncDec>(); f->name = std::move($2); f->params = std::move($4); $6->isFuncBody = true; f->body = std::move($6); $$ = std::move(f); }
@@ -215,8 +223,8 @@ FuncLit: FN LP ParamList RP BlockStmt { auto f = std::make_unique<FuncLitExp>();
 
 %%
 
-void Zeta::Parser::error(const std::string& msg) {
-    REPORT_SYNTAX_ERROR(yylineno, yycolumn, "{}", msg);
+void Zeta::Parser::error(const location_type& loc, const std::string& msg) {
+    REPORT_SYNTAX_ERROR(loc.begin.line, loc.begin.column, "{}", msg);
 }
 
 Zeta::AST::AssignStmt::Op toAssignOp(AssignOp assignOp) {

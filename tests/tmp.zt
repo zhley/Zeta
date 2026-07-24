@@ -1,10 +1,7 @@
 
 fn main(){
-    var a = "a";
-    a = a + "b";
-    if(intern(a) is "ab"){
-        print("intern: pass\n");
-    } else {
-        print("intern: fail\n");
-    }
+    var func = fn () {
+        func();
+    };
+    func();
 }

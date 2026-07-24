@@ -19,6 +19,13 @@
     #define YY_USER_ACTION yycolumn += yyleng;
 
     #define YY_DECL Zeta::Parser::symbol_type yylex()
+
+    static Zeta::Parser::location_type mkLoc() {
+        Zeta::Parser::location_type loc;
+        loc.begin.line = yylineno;
+        loc.begin.column = yycolumn - yyleng;
+        return loc;
+    }
 %}
 
 NEWLINE     \n
@@ -82,59 +89,61 @@ COMMMENT    (\/\/.*)|(\/\*([^*]|\*+[^\/])*\*\/)
 {BLANK}     {}
 {COMMMENT}  {}
 
-{VAR}       { return Zeta::Parser::make_VAR(); }
-{LET}       { return Zeta::Parser::make_LET(); }
-{FN}        { return Zeta::Parser::make_FN(); }
-{RETURN}    { return Zeta::Parser::make_RETURN(); }
-{IF}        { return Zeta::Parser::make_IF(); }
-{ELSE}      { return Zeta::Parser::make_ELSE(); }
-{WHILE}     { return Zeta::Parser::make_WHILE(); }
-{FOR}       { return Zeta::Parser::make_FOR(); }
-{BREAK}     { return Zeta::Parser::make_BREAK(); }
-{CONTINUE}  { return Zeta::Parser::make_CONTINUE(); }
-{CLASS}     { return Zeta::Parser::make_CLASS(); }
-{EXTENDS}   { return Zeta::Parser::make_EXTENDS(); }
-{THIS}      { return Zeta::Parser::make_THIS(); }
-{IMPORT}    { return Zeta::Parser::make_IMPORT(); }
-{AS}        { return Zeta::Parser::make_AS(); }
+{VAR}       { return Zeta::Parser::make_VAR(mkLoc()); }
+{LET}       { return Zeta::Parser::make_LET(mkLoc()); }
+{FN}        { return Zeta::Parser::make_FN(mkLoc()); }
+{RETURN}    { return Zeta::Parser::make_RETURN(mkLoc()); }
+{IF}        { return Zeta::Parser::make_IF(mkLoc()); }
+{ELSE}      { return Zeta::Parser::make_ELSE(mkLoc()); }
+{WHILE}     { return Zeta::Parser::make_WHILE(mkLoc()); }
+{FOR}       { return Zeta::Parser::make_FOR(mkLoc()); }
+{BREAK}     { return Zeta::Parser::make_BREAK(mkLoc()); }
+{CONTINUE}  { return Zeta::Parser::make_CONTINUE(mkLoc()); }
+{CLASS}     { return Zeta::Parser::make_CLASS(mkLoc()); }
+{EXTENDS}   { return Zeta::Parser::make_EXTENDS(mkLoc()); }
+{THIS}      { return Zeta::Parser::make_THIS(mkLoc()); }
+{IMPORT}    { return Zeta::Parser::make_IMPORT(mkLoc()); }
+{AS}        { return Zeta::Parser::make_AS(mkLoc()); }
 
-{RELOP}     { return Zeta::Parser::make_RELOP(textToRelop(yytext)); }
-{AND}       { return Zeta::Parser::make_AND(); }
-{OR}        { return Zeta::Parser::make_OR(); }
-{LSHIFT}    { return Zeta::Parser::make_LSHIFT(); }
-{RSHIFT}    { return Zeta::Parser::make_RSHIFT(); }
-{SEMI}      { return Zeta::Parser::make_SEMI(); }
-{DOT}       { return Zeta::Parser::make_DOT(); }
-{COMMA}     { return Zeta::Parser::make_COMMA(); }
-{COLON}     { return Zeta::Parser::make_COLON(); }
-{QMARK}     { return Zeta::Parser::make_QMARK(); }
-{LP}        { return Zeta::Parser::make_LP(); }
-{RP}        { return Zeta::Parser::make_RP(); }
-{LB}        { return Zeta::Parser::make_LB(); }
-{RB}        { return Zeta::Parser::make_RB(); }
-{LC}        { return Zeta::Parser::make_LC(); }
-{RC}        { return Zeta::Parser::make_RC(); }
-{ASSIGN}    { return Zeta::Parser::make_ASSIGN(textToAssignOp(yytext)); }
-{PLUS}      { return Zeta::Parser::make_PLUS(); }
-{MINUS}     { return Zeta::Parser::make_MINUS(); }
-{STAR}      { return Zeta::Parser::make_STAR(); }
-{DIV}       { return Zeta::Parser::make_DIV(); }
-{MOD}       { return Zeta::Parser::make_MOD(); }
-{NOT}       { return Zeta::Parser::make_NOT(); }
-{BITAND}    { return Zeta::Parser::make_BITAND(); }
-{BITOR}     { return Zeta::Parser::make_BITOR(); }
-{BITXOR}    { return Zeta::Parser::make_BITXOR(); }
-{BITNOT}    { return Zeta::Parser::make_BITNOT(); }
+{RELOP}     { return Zeta::Parser::make_RELOP(textToRelop(yytext), mkLoc()); }
+{AND}       { return Zeta::Parser::make_AND(mkLoc()); }
+{OR}        { return Zeta::Parser::make_OR(mkLoc()); }
+{LSHIFT}    { return Zeta::Parser::make_LSHIFT(mkLoc()); }
+{RSHIFT}    { return Zeta::Parser::make_RSHIFT(mkLoc()); }
+{SEMI}      { return Zeta::Parser::make_SEMI(mkLoc()); }
+{DOT}       { return Zeta::Parser::make_DOT(mkLoc()); }
+{COMMA}     { return Zeta::Parser::make_COMMA(mkLoc()); }
+{COLON}     { return Zeta::Parser::make_COLON(mkLoc()); }
+{QMARK}     { return Zeta::Parser::make_QMARK(mkLoc()); }
+{LP}        { return Zeta::Parser::make_LP(mkLoc()); }
+{RP}        { return Zeta::Parser::make_RP(mkLoc()); }
+{LB}        { return Zeta::Parser::make_LB(mkLoc()); }
+{RB}        { return Zeta::Parser::make_RB(mkLoc()); }
+{LC}        { return Zeta::Parser::make_LC(mkLoc()); }
+{RC}        { return Zeta::Parser::make_RC(mkLoc()); }
+{ASSIGN}    { return Zeta::Parser::make_ASSIGN(textToAssignOp(yytext), mkLoc()); }
+{PLUS}      { return Zeta::Parser::make_PLUS(mkLoc()); }
+{MINUS}     { return Zeta::Parser::make_MINUS(mkLoc()); }
+{STAR}      { return Zeta::Parser::make_STAR(mkLoc()); }
+{DIV}       { return Zeta::Parser::make_DIV(mkLoc()); }
+{MOD}       { return Zeta::Parser::make_MOD(mkLoc()); }
+{NOT}       { return Zeta::Parser::make_NOT(mkLoc()); }
+{BITAND}    { return Zeta::Parser::make_BITAND(mkLoc()); }
+{BITOR}     { return Zeta::Parser::make_BITOR(mkLoc()); }
+{BITXOR}    { return Zeta::Parser::make_BITXOR(mkLoc()); }
+{BITNOT}    { return Zeta::Parser::make_BITNOT(mkLoc()); }
 
-{BOOL}      { return Zeta::Parser::make_BOOL(yytext[0] == 't'); }
-{NULL_}     { return Zeta::Parser::make_NULL_(); }
-{INT}       { return Zeta::Parser::make_INT(textToInt(yytext)); }
-{FLOAT}     { return Zeta::Parser::make_FLOAT(textToFloat(yytext)); }
-{STR}       { return Zeta::Parser::make_STR(textToStr(yytext)); }
+{BOOL}      { return Zeta::Parser::make_BOOL(yytext[0] == 't', mkLoc()); }
+{NULL_}     { return Zeta::Parser::make_NULL_(mkLoc()); }
+{INT}       { return Zeta::Parser::make_INT(textToInt(yytext), mkLoc()); }
+{FLOAT}     { return Zeta::Parser::make_FLOAT(textToFloat(yytext), mkLoc()); }
+{STR}       { return Zeta::Parser::make_STR(textToStr(yytext), mkLoc()); }
 
-{ID}        { return Zeta::Parser::make_ID(std::string(yytext)); }
+{ID}        { return Zeta::Parser::make_ID(std::string(yytext), mkLoc()); }
 
-.           { REPORT_LEXICAL_ERROR(yylineno, yycolumn, "Misterious character: '{}'", yytext); return Zeta::Parser::make_YYUNDEF(); }
+<<EOF>>     { return Zeta::Parser::make_END(mkLoc()); }
+
+.           { REPORT_LEXICAL_ERROR(yylineno, yycolumn, "Misterious character: '{}'", yytext); return Zeta::Parser::make_YYUNDEF(mkLoc()); }
 
 %%
 
