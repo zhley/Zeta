@@ -541,6 +541,22 @@ void Translator::visit(AST::CallExp& callExp) {
     }
 }
 
+void Translator::visit(AST::SuperCallExp& superCallExp) {
+    recordLineno(superCallExp.line);
+    if(!curFunc->inMethod){
+        REPORT_SEMANTIC_ERROR(superCallExp.line, superCallExp.column, "super() can only be used in methods");
+    }
+    for(auto& arg : superCallExp.args){
+        arg->accept(*this);
+    }
+    pushOpcode(Opcode::LoadVar);
+    push4B(0); // "this" is always at slot 0
+    uint32_t funcIdx = makeConstIdx(CompileValue(superCallExp.methodName));
+    pushOpcode(Opcode::SuperCall);
+    push1B(static_cast<uint8_t>(superCallExp.args.size()));
+    push4B(funcIdx);
+}
+
 void Translator::visit(AST::MemberAccessExp& memberAccessExp) {
     recordLineno(memberAccessExp.line);
     std::string moduleName;
@@ -862,6 +878,12 @@ int Translator::calcMaxStackSize(const std::vector<uint8_t>& bytecode) {
                 size = 5;
                 break;
             case Opcode::CallMethod: {
+                uint8_t argCount = bytecode[pc + 1];
+                delta = -static_cast<int>(argCount);
+                size = 6;
+                break;
+            }
+            case Opcode::SuperCall: {
                 uint8_t argCount = bytecode[pc + 1];
                 delta = -static_cast<int>(argCount);
                 size = 6;

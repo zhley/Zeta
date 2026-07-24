@@ -64,6 +64,7 @@ public:
     void visit(AST::BinaryExp& binaryExp) override;
     void visit(AST::UnaryExp& unaryExp) override;
     void visit(AST::CallExp& callExp) override;
+    void visit(AST::SuperCallExp& superCallExp) override;
     void visit(AST::MemberAccessExp& memberAccessExp) override;
     void visit(AST::IndexAccessExp& indexAccessExp) override;
     void visit(AST::IdentifierExp& identifierExp) override;

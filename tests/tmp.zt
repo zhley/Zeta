@@ -1,12 +1,51 @@
 
-fn main(){
-    var i = 0;
-    var s = "Hello, World!";
-    // intern(i);
-    print(s > i);
-    while(i < 10){
-        print(i);
-        print("\n");
-        i = i + 1;
+class A {
+    var name = "A";
+    var age = 10;
+
+    fn say(){
+        print("Hello from A\n");
     }
+
+    fn walk(){
+        print("A is walking\n");
+    }
+}
+
+class B extends A {
+    var name = "B";
+    var house = "B house";
+    var car = "B car";
+
+    fn say(){
+        print("Hello from B\n");
+    }
+
+    fn test(){
+        this.say();
+        super.say();
+        this.walk();
+        super.walk();
+    }
+}
+
+fn main(){
+    var a = A();
+    print(a.name);
+    print("\n");
+    print(a.age);
+    print("\n");
+    a.say();
+
+    var b = B();
+    print(b.name);
+    print("\n");
+    print(b.age);
+    print("\n");
+    print(b.house);
+    print("\n");
+    print(b.car);
+    print("\n");
+    b.say();
+    b.test();
 }

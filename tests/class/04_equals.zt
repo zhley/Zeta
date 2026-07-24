@@ -2,7 +2,7 @@ class Vec2 {
     var x = 0;
     var y = 0;
 
-    fn Vec2(vx, vy) {
+    fn _init(vx, vy) {
         this.x = vx;
         this.y = vy;
         return this;

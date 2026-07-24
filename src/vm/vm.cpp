@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <system_error>
 #include <format>
 
@@ -882,7 +883,7 @@ Value VM::execute() {
                 } else if(callee.type == Value::Type::Object && callee.ptrValue->type == Object::Type::Class) {
                     Class* cls = static_cast<Class*>(callee.ptrValue);
                     Instance* instance = gc->allocate<Instance>(gc.get(), cls);
-                    auto constructor = cls->methods->get(cls->name);
+                    auto constructor = cls->methods->get(STRINGS._init);
                     if(constructor.has_value()) {
                         Value constructorVal = constructor.value();
                         assert(constructorVal.type == Value::Type::Object && constructorVal.ptrValue->type == Object::Type::Function);
@@ -1030,9 +1031,17 @@ Value VM::execute() {
                         }
                         case Object::Type::Instance: {
                             Instance* instance = static_cast<Instance*>(objVal.ptrValue);
-                            auto methodValOpt = instance->cls->methods->get(methodName);
+                            Class* cls = instance->cls;
+                            std::optional<Value> methodValOpt;
+                            while(cls) {
+                                methodValOpt = cls->methods->get(methodName);
+                                if(methodValOpt.has_value()) {
+                                    break;
+                                }
+                                cls = cls->base;
+                            }
                             if(!methodValOpt.has_value()) {
-                                errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), std::format("CallMethod: method \"{}\" not found in class \"{}\"", methodName->data, instance->cls->name->data)});
+                                errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), std::format("CallMethod: method \"{}\" not found in class \"{}\" or its superclasses", methodName->data, instance->cls->name->data)});
                                 return Value::Error;
                             }
                             Value methodVal = methodValOpt.value();
@@ -1063,6 +1072,53 @@ Value VM::execute() {
                         }
                     }
                 }
+                break;
+            }
+            case Opcode::SuperCall: {
+                uint8_t argCount;
+                READ_BYTE(argCount);
+                Value objVal = POP();
+                uint32_t nameIndex;
+                READ_UINT32(nameIndex);
+                assert(nameIndex < curRoutine->constants.size());
+                Value nameVal = curRoutine->constants[nameIndex];
+                assert(nameVal.type == Value::Type::String);
+                String* methodName = nameVal.strValue;
+                assert(objVal.type == Value::Type::Object && objVal.ptrValue->type == Object::Type::Instance);
+                Instance* instance = static_cast<Instance*>(objVal.ptrValue);
+                Class* superClass = instance->cls->base;
+                std::optional<Value> methodValOpt;
+                while(superClass) {
+                    methodValOpt = superClass->methods->get(methodName);
+                    if(methodValOpt.has_value()) {
+                        break;
+                    }
+                    superClass = superClass->base;
+                }
+                if(!methodValOpt.has_value()) {
+                    errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), std::format("SuperCall: method \"{}\" not found in superclass of class \"{}\"", methodName->data, instance->cls->name->data)});
+                    return Value::Error;
+                }
+                Value methodVal = methodValOpt.value();
+                assert(methodVal.type == Value::Type::Object && methodVal.ptrValue->type == Object::Type::Function);
+                Function* func = static_cast<Function*>(methodVal.ptrValue);
+                Routine* routine = func->routine;
+                StackFrame newFrame;
+                newFrame.routine = routine;
+                newFrame.base = stack.top;
+                newFrame.top = newFrame.base + routine->localCount;
+                newFrame.ip = 0;
+                if(argCount != routine->arity - 1) {
+                    errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), std::format("Super method expects {} arguments, but {} were provided", routine->arity - 1, argCount)});
+                    return Value::Error;
+                }
+                newFrame.base[0] = objVal; // push 'this' as the first argument
+                for(int i = routine->arity - 1; i >= 1; i--) {
+                    newFrame.base[i] = POP();
+                }
+                pushFrame(newFrame);
+                curFrame = &stackFrames.back();
+                curRoutine = curFrame->routine;
                 break;
             }
             case Opcode::IndexGet: {

@@ -84,6 +84,7 @@ private:
         String* _iter;
         String* _next;
         String* _equals;
+        String* _init;
         String* size;
         String* add;
         String* len;
@@ -92,6 +93,7 @@ private:
         internString("_iter"),
         internString("_next"),
         internString("_equals"),
+        internString("_init"),
         internString("size"),
         internString("add"),
         internString("len")

@@ -24,6 +24,7 @@ namespace AST {
     class BinaryExp;
     class UnaryExp;
     class CallExp;
+    class SuperCallExp;
     class MemberAccessExp;
     class IndexAccessExp;
     class IdentifierExp;
@@ -61,6 +62,7 @@ public:
     virtual void visit(AST::BinaryExp& binaryExp) = 0;
     virtual void visit(AST::UnaryExp& unaryExp) = 0;
     virtual void visit(AST::CallExp& callExp) = 0;
+    virtual void visit(AST::SuperCallExp& superCallExp) = 0;
     virtual void visit(AST::MemberAccessExp& memberAccessExp) = 0;
     virtual void visit(AST::IndexAccessExp& indexAccessExp) = 0;
     virtual void visit(AST::IdentifierExp& identifierExp) = 0;

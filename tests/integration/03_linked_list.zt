@@ -4,7 +4,7 @@ class Node {
     var value = null;
     var next = null;
 
-    fn Node(v) {
+    fn _init(v) {
         this.value = v;
         this.next = null;
         return this;

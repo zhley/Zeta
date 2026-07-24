@@ -3,7 +3,7 @@
 class Calculator {
     var value = 0;
 
-    fn Calculator(init) {
+    fn _init(init) {
         this.value = init;
         return this;
     }

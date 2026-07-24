@@ -81,6 +81,7 @@ EXTENDS     extends
 THIS        this
 IMPORT      import
 AS          as
+SUPER       super
 
 COMMMENT    (\/\/.*)|(\/\*([^*]|\*+[^\/])*\*\/)
 
@@ -104,6 +105,7 @@ COMMMENT    (\/\/.*)|(\/\*([^*]|\*+[^\/])*\*\/)
 {THIS}      { return Zeta::Parser::make_THIS(mkLoc()); }
 {IMPORT}    { return Zeta::Parser::make_IMPORT(mkLoc()); }
 {AS}        { return Zeta::Parser::make_AS(mkLoc()); }
+{SUPER}     { return Zeta::Parser::make_SUPER(mkLoc()); }
 
 {RELOP}     { return Zeta::Parser::make_RELOP(textToRelop(yytext), mkLoc()); }
 {AND}       { return Zeta::Parser::make_AND(mkLoc()); }

@@ -170,9 +170,15 @@ Class::Class(GC* gc, String* name, Class* base, Map* fields, Map* methods) : Obj
 Instance::Instance(GC* gc, Class* cls) : Object(Object::Type::Instance) {
     gc->writeBarrier(this, (Object**)(&this->cls), cls);
     Map* fields = gc->allocate<Map>(gc, cls->fields->size);
-    cls->fields->forEach([&fields](String* key, const Value& value){
-        fields->set(key, value);
-    });
+    Class* classes = cls;
+    while(classes) {
+        classes->fields->forEach([&fields](String* key, const Value& value){
+            if(!fields->contains(key)) {
+                fields->set(key, value);
+            }
+        });
+        classes = classes->base;
+    }
     gc->writeBarrier(this, (Object**)(&this->fields), fields);
 }
 

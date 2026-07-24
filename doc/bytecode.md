@@ -35,8 +35,9 @@
 | **GetField** | `0x40` | `uint32_t nameIdx` | 弹出实例对象，从常量池索引 `nameIdx` 取出字段名，在实例的字段字典中查找该字段的值并压栈；若不存在则抛出运行时错误. |
 | **SetField** | `0x41` | `uint32_t nameIdx` | 弹出值, 弹出实例，从常量池索引 `nameIdx` 取字段名，将值存入实例的字段字典。若该字段不存在则会自动插入. |
 | **CallMethod** | `0x42` | `uint8_t cnt`, `uint32_t nameIdx` | 弹出实例对象，从常量池索引 `nameIdx` 取方法名，弹出 `cnt` 个参数, 调用该实例的方法（动态查找）. |
-| **IndexGet** | `0x43` | 无 | 弹出索引，弹出数组（或映射），压入 `container[index]`。对于映射，键必须是字符串；对于数组，索引为整数。 |
-| **IndexSet** | `0x44` | 无 | 弹出值, 弹出索引，弹出容器，设置 `container[index] = value`。 |
+| **SuperCall** | `0x43` | `uint8_t cnt`, `uint32_t nameIdx` | 弹出实例对象，从常量池索引 `nameIdx` 取方法名，弹出 `cnt` 个参数, 从该实例的父类或祖先类中查找方法并调用. |
+| **IndexGet** | `0x44` | 无 | 弹出索引，弹出数组（或映射），压入 `container[index]`。对于映射，键必须是字符串；对于数组，索引为整数。 |
+| **IndexSet** | `0x45` | 无 | 弹出值, 弹出索引，弹出容器，设置 `container[index] = value`。 |
 | **Pop** | `0x50` | 无 | 弹出栈顶值并丢弃。 |
 | **Dup** | `0x51` | 无 | 复制栈顶值并压栈（栈顶不变，新值压入）。 |
 | **CallBuiltin** | `0x52` | `uint8_t builtin_id` | 调用内置函数（C++ 实现），不经过函数对象查找，直接根据 `builtin_id` 分发到对应实现。参数从栈顶取（参数个数由内置函数决定）。 |

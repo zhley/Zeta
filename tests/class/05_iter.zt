@@ -2,7 +2,7 @@ class Range {
     var start = 0;
     var end = 0;
 
-    fn Range(s, e) {
+    fn _init(s, e) {
         this.start = s;
         this.end = e;
         return this;
@@ -17,7 +17,7 @@ class RangeIter {
     var current = 0;
     var end = 0;
 
-    fn RangeIter(c, e) {
+    fn _init(c, e) {
         this.current = c;
         this.end = e;
         return this;

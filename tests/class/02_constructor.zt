@@ -3,7 +3,7 @@ class Vec3 {
     var y = 0;
     var z = 0;
 
-    fn Vec3(vx, vy, vz) {
+    fn _init(vx, vy, vz) {
         this.x = vx;
         this.y = vy;
         this.z = vz;

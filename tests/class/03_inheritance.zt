@@ -1,7 +1,7 @@
 class Animal {
     var name = "";
 
-    fn Animal(n) {
+    fn _init(n) {
         this.name = n;
         return this;
     }
@@ -14,7 +14,7 @@ class Animal {
 class Dog extends Animal {
     var breed = "";
 
-    fn Dog(n, b) {
+    fn _init(n, b) {
         this.name = n;
         this.breed = b;
         return this;

@@ -61,7 +61,7 @@
 %token <AssignOp> ASSIGN
 %token <std::string> ID STR
 %token NULL_
-%token VAR LET FN RETURN IF ELSE WHILE FOR BREAK CONTINUE CLASS EXTENDS THIS IMPORT AS
+%token VAR LET FN RETURN IF ELSE WHILE FOR BREAK CONTINUE CLASS EXTENDS THIS IMPORT AS SUPER
 %token AND OR LSHIFT RSHIFT SEMI DOT COMMA COLON QMARK LP RP LB RB LC RC PLUS MINUS STAR DIV MOD NOT BITAND BITOR BITXOR BITNOT
 
 %right ASSIGN 
@@ -186,6 +186,8 @@ Exp: Exp QMARK Exp COLON Exp { auto e = std::make_unique<ConditionalExp>(); SET_
     | Exp LB Exp RB { auto e = std::make_unique<IndexAccessExp>(); SET_POS(e, @$); e->object = std::move($1); e->index = std::move($3); $$ = std::move(e); }
     | ID LP ArgList RP { auto e = std::make_unique<CallExp>(); SET_POS(e, @$); e->funcName = std::move($1); e->args = std::move($3); $$ = std::move(e); }
     | ID LP RP { auto e = std::make_unique<CallExp>(); SET_POS(e, @$); e->funcName = std::move($1); $$ = std::move(e); }
+    | SUPER DOT ID LP ArgList RP { auto e = std::make_unique<SuperCallExp>(); SET_POS(e, @$); e->methodName = std::move($3); e->args = std::move($5); $$ = std::move(e); }
+    | SUPER DOT ID LP RP { auto e = std::make_unique<SuperCallExp>(); SET_POS(e, @$); e->methodName = std::move($3); $$ = std::move(e); }
     | ID { auto e = std::make_unique<IdentifierExp>(); SET_POS(e, @$); e->name = std::move($1); $$ = std::move(e); }
     | Literal { $$ = std::move($1); }
     | THIS { auto e = std::make_unique<ThisExp>(); SET_POS(e, @$); $$ = std::move(e); }

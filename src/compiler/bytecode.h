@@ -57,8 +57,9 @@ enum class Opcode : uint8_t {
     GetField    = 0x40, 
     SetField    = 0x41,
     CallMethod  = 0x42,
-    IndexGet    = 0x43,
-    IndexSet    = 0x44,
+    SuperCall   = 0x43,
+    IndexGet    = 0x44,
+    IndexSet    = 0x45,
     // Misc
     Pop         = 0x50,
     Dup         = 0x51,

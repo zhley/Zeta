@@ -162,6 +162,7 @@ public:
         Binary,
         Unary,
         Call,
+        SuperCall,
         MemberAccess,
         IndexAccess,
         Identifier,
@@ -216,6 +217,13 @@ public:
     std::vector<std::unique_ptr<Exp>> args;
 
     CallExp() { type = ExpType::Call; }
+};
+
+class SuperCallExp: public Exp {
+public:
+    ACCEPT
+    std::string methodName;
+    std::vector<std::unique_ptr<Exp>> args;
 };
 
 class MemberAccessExp: public Exp {
