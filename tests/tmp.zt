@@ -1,5 +1,9 @@
 class A{
     var a;
+
+    fn say(){
+        println("Hello");
+    }
 }
 
 fn main(){
@@ -28,4 +32,8 @@ fn main(){
     println(str(1.5));
     println(float(h));
     println(float(i));
+
+    var obj = A();
+    obj.say();
+    A.say(obj);
 }

@@ -1066,6 +1066,34 @@ Value VM::execute() {
                             curRoutine = curFrame->routine;
                             break;
                         }
+                        case Object::Type::Class: {
+                            Class* cls = static_cast<Class*>(objVal.ptrValue);
+                            auto methodValOpt = cls->methods->get(methodName);
+                            if(!methodValOpt.has_value()) {
+                                errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), std::format("CallMethod: method \"{}\" not found in class \"{}\"", methodName->data, static_cast<Class*>(objVal.ptrValue)->name->data)});
+                                return Value::Error;
+                            }
+                            Value methodVal = methodValOpt.value();
+                            assert(methodVal.type == Value::Type::Object && methodVal.ptrValue->type == Object::Type::Function);
+                            Function* func = static_cast<Function*>(methodVal.ptrValue);
+                            Routine* routine = func->routine;
+                            StackFrame newFrame;
+                            newFrame.routine = routine;
+                            newFrame.base = stack.top;
+                            newFrame.top = newFrame.base + routine->localCount;
+                            newFrame.ip = 0;
+                            if(argCount != routine->arity) {
+                                errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), std::format("Method expects {} arguments (the first is 'this'), but {} were provided", routine->arity, argCount)});
+                                return Value::Error;
+                            }
+                            for(int i = routine->arity - 1; i >= 0; i--) {
+                                newFrame.base[i] = POP();
+                            }
+                            pushFrame(newFrame);
+                            curFrame = &stackFrames.back();
+                            curRoutine = curFrame->routine;
+                            break;
+                        }
                         default: {
                             errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), "CallMethod: object must be an array, map, string or class instance"});
                             return Value::Error;
