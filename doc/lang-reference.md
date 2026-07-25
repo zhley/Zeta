@@ -456,7 +456,7 @@ class Point {
     var x = 0;
     var y = 0;
 
-    fn init(thisX, thisY) {
+    fn _init(thisX, thisY) {
         this.x = thisX;
         this.y = thisY;
         return this;
@@ -464,13 +464,14 @@ class Point {
 }
 ```
 
-- 类的成员可以是字段（`var` / `let`）和方法（`fn`）。
+- 类的成员可以是字段（`var`）和方法（`fn`）。
+- 类字段只能使用 `var` 修饰.
 - 字段的初始值必须是常量表达式。
 - 类体内不允许声明嵌套类。
 
 ### 8.2 构造函数
 
-当调用一个类（像调用函数一样）时，将创建该类的实例，并调用与类同名的构造方法：
+当调用一个类（像调用函数一样）时，将创建该类的实例，并调用 `_init` 方法（若定义了）：
 
 ```zeta
 var p = Point(3, 4);
@@ -478,9 +479,9 @@ var p = Point(3, 4);
 
 流程如下：
 1. 用字段默认值创建一个新实例。
-2. 如果类定义了与类同名的构造方法，则调用该方法——其中 `this` 被绑定到新实例，第一个参数为 `this`，其余为用户传入的参数。
-3. 构造方法应显式 `return this;`。
-4. 若没有构造方法，则直接返回新实例。
+2. 如果类定义了 `_init` 方法，则调用该方法——其中 `this` 被绑定到新实例，第一个参数为 `this`，其余为用户传入的参数。
+3. `_init` 方法应显式 `return this;`。
+4. 若没有 `_init` 方法，则直接返回新实例。
 
 ### 8.3 继承
 
@@ -488,7 +489,7 @@ var p = Point(3, 4);
 class Point3D extends Point {
     var z = 0;
 
-    fn init(x, y, z) {
+    fn _init(x, y, z) {
         this.x = x;
         this.y = y;
         this.z = z;
@@ -530,7 +531,7 @@ class Range {
     var start = 0;
     var end = 0;
 
-    fn init(start, end) {
+    fn _init(start, end) {
         this.start = start;
         this.end = end;
         return this;
@@ -545,7 +546,7 @@ class RangeIter {
     var current = 0;
     var end = 0;
 
-    fn init(current, end) {
+    fn _init(current, end) {
         this.current = current;
         this.end = end;
         return this;
@@ -575,7 +576,7 @@ class Vec2 {
     var x = 0;
     var y = 0;
 
-    fn init(x, y) {
+    fn _init(x, y) {
         this.x = x;
         this.y = y;
         return this;
@@ -633,7 +634,8 @@ import "bar.zt" as bar;   // 导入并起别名，通过 bar.name 访问
 
 | 函数 | 签名 | 说明 |
 |------|------|------|
-| `print` | `print(val)` | 将值打印到标准输出。对象类型显示为 `<array>`、`<map>`、`<function>` 等标签；StrObj 打印其字符串内容 |
+| `print` | `print(val)` | 将值打印到标准输出。返回 `null`。 |
+| `println` | `println(val)` | 将值打印到标准输出，末尾追加换行。返回 `null`。 |
 | `input` | `input()` | 从标准输入读取一个字符串，返回 `StrObj` |
 | `iter` | `iter(container)` | 获取数组、映射或实例的迭代器。对于实例，调用 `_iter()` 方法 |
 | `next` | `next(iter)` | 获取迭代器的下一个值。数组返回元素值，映射返回键。若迭代完毕返回 `Error` |
@@ -641,7 +643,11 @@ import "bar.zt" as bar;   // 导入并起别名，通过 bar.name 访问
 | `map` | `map(capacity)` | 创建指定初始容量的新映射 |
 | `error` | `error(code)` | 返回携带整数错误码 `code` 的 `Error` 值 |
 | `check` | `check(val)` | 若 `val` 不是 `Error` 类型返回 `true`，否则返回 `false` |
-| `intern` | `intern(strObj)` | 将 `StrObj` 驻留为 `String`（存入 VM 字符串表）。用于需要驻留字符串的场景（如 Map 键访问） |
+| `intern` | `intern(strObj)` | 将 `StrObj` 驻留为 `String`。用于需要驻留字符串的场景（如 Map 键访问） |
+| `type` | `type(val)` | 返回 `val` 的类型名称字符串（`"null"` / `"int"` / `"float"` / `"bool"` / `"string"` / `"array"` / `"map"` / `"function"` / `"class"` / `"instance"` / `"iterator"` / `"error"`） |
+| `int` | `int(val)` | 将 `val` 转换为 Int 并返回 |
+| `float` | `float(val)` | 将 `val` 转换为 Float 并返回 |
+| `str` | `str(val)` | 将 `val` 转换为字符串（StrObj）并返回 |
 
 > 自定义函数名不能与内置函数同名，否则编译报错。
 
@@ -783,7 +789,7 @@ print(s1 is s3);                      // true（同为驻留 String，相同内�
 
 Zeta 编译为自定义字节码。字节码指令的完整说明见 [bytecode.md](bytecode.md)。
 
-指令概览（47 条指令）：
+指令概览（48 条指令）：
 
 | 类别 | 指令 |
 |------|------|
@@ -793,7 +799,7 @@ Zeta 编译为自定义字节码。字节码指令的完整说明见 [bytecode.m
 | 逻辑 | `Not` |
 | 比较 | `Eq`, `Neq`, `Lt`, `Gt`, `Le`, `Ge`, `Is` |
 | 控制流 | `Jump`, `JumpIfFalse`, `JumpIfTrue`, `Ret`, `Call` |
-| 对象 | `GetField`, `SetField`, `CallMethod`, `IndexGet`, `IndexSet` |
+| 对象 | `GetField`, `SetField`, `CallMethod`, `SuperCall`, `IndexGet`, `IndexSet` |
 | 杂项 | `Pop`, `Dup`, `CallBuiltin`, `Nop`, `Halt` |
 
 ---
@@ -855,5 +861,6 @@ Exp          → Exp "?" Exp ":" Exp
 Literal      → INT | FLOAT | BOOL | "null" | STR
              | "[" [ElemList] "]"            // 数组字面量
              | "{" [MapElemList] "}"          // 映射字面量
+             | "{" ":" "}"                   // 空映射字面量
              | "fn" "(" [ParamList] ")" BlockStmt  // 函数字面量
 ```

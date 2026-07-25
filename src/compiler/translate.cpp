@@ -180,6 +180,9 @@ void Translator::visit(AST::ClassDec& classDec) {
         if(member->type == AST::Dec::DecType::Var){
             auto* varDec = static_cast<AST::VarDec*>(member.get());
             std::unique_ptr<CompileValue> value = nullptr;
+            if(!varDec->isMutable){
+                REPORT_SEMANTIC_ERROR(varDec->line, varDec->column, "Instance variable '{}' in class '{}' must be mutable (use 'var' instead of 'let')", varDec->name, classDec.name);
+            }
             if(varDec->init){
                 if(varDec->init->type == AST::Exp::ExpType::Literal){
                     value = getValue(static_cast<AST::LiteralExp*>(varDec->init.get()));

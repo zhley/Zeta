@@ -1,5 +1,6 @@
 class A{
     var a;
+    let b;
 
     fn say(){
         println("Hello");

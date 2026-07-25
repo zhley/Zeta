@@ -8,40 +8,41 @@
 | **StoreGlobal** | `0x03` | `uint32_t slot` | 弹出栈顶值，存入全局变量表索引 `slot`。 |
 | **LoadVar** | `0x04` | `uint32_t slot` | 将当前栈帧局部变量槽 `slot` 的值压栈。 |
 | **StoreVar** | `0x05` | `uint32_t slot` | 弹出栈顶值，存入当前栈帧局部变量槽 `slot`。 |
-| **Add** | `0x10` | 无 | 弹出 `b, a`，计算 `a + b`，结果压栈。 |
+| **Add** | `0x10` | 无 | 弹出 `b, a`，计算 `a + b`，结果压栈。支持 Int/Float 混合以及字符串拼接。 |
 | **Sub** | `0x11` | 无 | 弹出 `b, a`，计算 `a - b`，结果压栈。 |
 | **Mul** | `0x12` | 无 | 弹出 `b, a`，计算 `a * b`，结果压栈。 |
 | **Div** | `0x13` | 无 | 弹出 `b, a`，计算 `a / b`，结果压栈。 |
 | **Mod** | `0x14` | 无 | 弹出 `b, a`，计算 `a % b`，结果压栈。 |
 | **Neg** | `0x15` | 无 | 弹出 `a`，计算 `-a`，结果压栈。 |
 | **BitAnd** | `0x16` | 无 | 弹出 `b, a`，计算 `a & b`，结果压栈。 |
-| **BitOr** | `0x17` | 无 | 弹出 `b, a`，计算 `a | b`，结果压栈。 |
+| **BitOr** | `0x17` | 无 | 弹出 `b, a`，计算 `a \| b`，结果压栈。 |
 | **BitXor** | `0x18` | 无 | 弹出 `b, a`，计算 `a ^ b`，结果压栈。 |
 | **BitNot** | `0x19` | 无 | 弹出 `a`，计算 `~a`，结果压栈。 |
 | **Shl** | `0x1A` | 无 | 弹出 `b, a`，计算 `a << b`，结果压栈。 |
 | **Shr** | `0x1B` | 无 | 弹出 `b, a`，计算 `a >> b`，结果压栈。 |
-| **Eq** | `0x20` | 无 | 弹出 `b, a`，比较是否相等，压入布尔值。 |
-| **Neq** | `0x21` | 无 | 弹出 `b, a`，比较是否不等，压入布尔值。 |
+| **Not** | `0x1C` | 无 | 弹出 `a`，按真值规则计算逻辑非，结果压栈。 |
+| **Eq** | `0x20` | 无 | 弹出 `b, a`，按值相等规则比较，压入布尔值。支持 Int/Float 跨类型数值比较、字符串内容比较、实例 `_equals` 委托。 |
+| **Neq** | `0x21` | 无 | 弹出 `b, a`，按值相等规则比较不等，压入布尔值。 |
 | **Lt** | `0x22` | 无 | 弹出 `b, a`，压入 `a < b` 的结果。 |
 | **Gt** | `0x23` | 无 | 弹出 `b, a`，压入 `a > b` 的结果。 |
 | **Le** | `0x24` | 无 | 弹出 `b, a`，压入 `a <= b` 的结果。 |
 | **Ge** | `0x25` | 无 | 弹出 `b, a`，压入 `a >= b` 的结果。 |
-| **Is** | `0x26` | 无 | 弹出 `b, a`，压入 `a is b` 的结果, 严格相等。 |
-| **Jump** | `0x30` | `uint32_t offset` | 无条件跳转，跳转到字节码索引 `offset` |
-| **JumpIfFalse** | `0x31` | `uint32_t offset` | 弹出栈顶值，若为 `false`、`null` 或数值 0，则跳转 `offset`；否则继续。 |
-| **JumpIfTrue** | `0x32` | `uint32_t offset` | 弹出栈顶值，若为非零值，则跳转 `offset`；否则继续。 |
-| **Ret** | `0x33` | 无 | 从当前函数返回。将栈顶值压入调用者操作数栈 |
-| **Call** | `0x34` | `uint8_t cnt` | 调用函数。栈顶为函数对象, 其下为 `cnt` 个参数。 |
-| **GetField** | `0x40` | `uint32_t nameIdx` | 弹出实例对象，从常量池索引 `nameIdx` 取出字段名，在实例的字段字典中查找该字段的值并压栈；若不存在则抛出运行时错误. |
-| **SetField** | `0x41` | `uint32_t nameIdx` | 弹出值, 弹出实例，从常量池索引 `nameIdx` 取字段名，将值存入实例的字段字典。若该字段不存在则会自动插入. |
-| **CallMethod** | `0x42` | `uint8_t cnt`, `uint32_t nameIdx` | 弹出实例对象，从常量池索引 `nameIdx` 取方法名，弹出 `cnt` 个参数, 调用该实例的方法（动态查找）. |
-| **SuperCall** | `0x43` | `uint8_t cnt`, `uint32_t nameIdx` | 弹出实例对象，从常量池索引 `nameIdx` 取方法名，弹出 `cnt` 个参数, 从该实例的父类或祖先类中查找方法并调用. |
-| **IndexGet** | `0x44` | 无 | 弹出索引，弹出数组（或映射），压入 `container[index]`。对于映射，键必须是字符串；对于数组，索引为整数。 |
-| **IndexSet** | `0x45` | 无 | 弹出值, 弹出索引，弹出容器，设置 `container[index] = value`。 |
+| **Is** | `0x26` | 无 | 弹出 `b, a`，压入 `a is b` 的结果（严格标识比较，类型 + 值/指针完全相同）。 |
+| **Jump** | `0x30` | `uint32_t offset` | 无条件跳转，跳转到字节码索引 `offset`。 |
+| **JumpIfFalse** | `0x31` | `uint32_t offset` | 弹出栈顶值，按真值规则判断（null/0/0.0/false 为假），若为假则跳转 `offset`。 |
+| **JumpIfTrue** | `0x32` | `uint32_t offset` | 弹出栈顶值，按真值规则判断，若为真则跳转 `offset`。 |
+| **Ret** | `0x33` | 无 | 从当前函数返回，将栈顶值压入调用者的操作数栈。 |
+| **Call** | `0x34` | `uint8_t cnt` | 调用函数。栈顶为函数对象（或类），其下为 `cnt` 个参数。若栈顶为类则触发构造实例流程。 |
+| **GetField** | `0x40` | `uint32_t nameIdx` | 弹出实例对象，从常量池索引 `nameIdx` 取出字段名，在实例的字段字典中查找该字段的值并压栈。 |
+| **SetField** | `0x41` | `uint32_t nameIdx` | 弹出值、弹出实例，从常量池索引 `nameIdx` 取字段名，将值存入实例的字段字典。若字段不存在则自动创建。 |
+| **CallMethod** | `0x42` | `uint8_t cnt`, `uint32_t nameIdx` | 弹出实例/数组/映射/字符串，从常量池索引 `nameIdx` 取方法名，弹出 `cnt` 个参数，调用对应方法。对数组/映射/字符串的内置方法（`size`/`add`/`len`）直接由 VM 实现。 |
+| **SuperCall** | `0x43` | `uint8_t cnt`, `uint32_t nameIdx` | 弹出实例对象，从常量池索引 `nameIdx` 取方法名，弹出 `cnt` 个参数，从该实例的父类或祖先类中查找方法并调用。 |
+| **IndexGet** | `0x44` | 无 | 弹出索引、弹出容器（数组或映射），压入 `container[index]`。数组索引为整数，映射键为驻留字符串。 |
+| **IndexSet** | `0x45` | 无 | 弹出值、弹出索引、弹出容器，设置 `container[index] = value`。 |
 | **Pop** | `0x50` | 无 | 弹出栈顶值并丢弃。 |
 | **Dup** | `0x51` | 无 | 复制栈顶值并压栈（栈顶不变，新值压入）。 |
-| **CallBuiltin** | `0x52` | `uint8_t builtin_id` | 调用内置函数（C++ 实现），不经过函数对象查找，直接根据 `builtin_id` 分发到对应实现。参数从栈顶取（参数个数由内置函数决定）。 |
-| **Halt** | `0xFF` | 无 | 停止虚拟机执行，用于异常退出. |
+| **CallBuiltin** | `0x52` | `uint8_t builtin_id` | 调用内置函数（C++ 实现），不经过函数对象查找。 |
+| **Halt** | `0xFF` | 无 | 停止虚拟机执行，用于异常退出。 |
 
 **说明**：
 - 所有多字节操作数采用小端序存储。
@@ -52,13 +53,19 @@ foo(a, b, c, d):
 函数调用传参不能超过255
 
 内置函数:
-| 内置函数 | id | 函数签名 | 描述 |
+| 内置函数 | id | 函数签名 | 说明 |
 |----|----|----|----|
-| **GetIter** | `0x00` | `iter(arr)` | 弹出可迭代对象 `arr`, 压入对应的迭代器. |
-| **IterNext** | `0x01` | `next(it)` | 弹出迭代器 `it`, 压入 `it.next()`. |
-| **NewArray** | `0x02` | `array(size)` | 弹出数组大小 `size`, 压入数组. |
-| **NewMap** | `0x03` | `map(size)` | 弹出映射大小 `size`, 压入映射(初始大小为0, 根据 `size` 分配合适的容量). |
-| **Print** | `0x04` | `print(val)` | 弹出 `val`, 在控制台打印 `val`. |
-| **Input** | `0x05` | `input()` | 控制台接收控制台输入字符串 `str`, 压入 `str`. |
-| **Error** | `0x06` | `error(code)` | 弹出 `code`, 压入错误码为 `code` 的 `Error` 类型值. |
-| **Check** | `0x07` | `check(val)` | 弹出 `val`, 如果 `val` 是 `Error` 类型, 压入 `false`, 否则压入 `true`.|
+| **GetIter** | `0x00` | `iter(container)` | 弹出可迭代对象，压入对应的迭代器。对于类实例，调用其 `_iter()` 方法。 |
+| **IterNext** | `0x01` | `next(iter)` | 弹出迭代器，压入下一个元素。数组返回元素值，映射返回键。若迭代完毕返回 `Error`。 |
+| **NewArray** | `0x02` | `array(size)` | 弹出大小，创建新数组并压栈（元素初始为 `null`）。 |
+| **NewMap** | `0x03` | `map(capacity)` | 弹出容量，创建新映射并压栈。 |
+| **Print** | `0x04` | `print(val)` | 弹出 `val`，打印到标准输出。StrObj 打印内容，对象打印 `<array>`/`<map>` 等标签。**返回 `null`**。 |
+| **Println** | `0x05` | `println(val)` | 同 `print`，但在末尾追加换行符。 |
+| **Input** | `0x06` | `input()` | 从标准输入读取字符串，压入 `StrObj`。 |
+| **Error** | `0x07` | `error(code)` | 弹出 `code`(Int)，压入错误码为 `code` 的 `Error` 类型值。 |
+| **Check** | `0x08` | `check(val)` | 弹出 `val`，若为 `Error` 类型压入 `false`，否则压入 `true`。 |
+| **Intern** | `0x09` | `intern(strObj)` | 弹出 `StrObj`，将其驻留为 `String` 并压栈。用于后续作为 Map 键访问。 |
+| **Type** | `0x0A` | `type(val)` | 弹出 `val`，压入其类型名称字符串（`"null"`/`"int"`/`"float"`/`"bool"`/`"string"` 等）。 |
+| **Int** | `0x0B` | `int(val)` | 弹出 `val`，转换为 Int 并压栈。 |
+| **Float** | `0x0C` | `float(val)` | 弹出 `val`，转换为 Float 并压栈。 |
+| **Str** | `0x0D` | `str(val)` | 弹出 `val`，转换为字符串（StrObj）并压栈。 |
