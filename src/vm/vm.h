@@ -88,6 +88,24 @@ private:
         String* size;
         String* add;
         String* len;
+        String* Null;
+        String* Int;
+        String* Float;
+        String* Bool;
+        String* String_;
+        String* Object;
+        String* Error;
+        String* Block;
+        String* Array;
+        String* Map;
+        String* Function;
+        String* Class;
+        String* Instance;
+        String* Iterator;
+        String* StrObj;
+        String* true_;
+        String* false_;
+        String* null;
     };
     const Strings STRINGS = {
         internString("_iter"),
@@ -96,7 +114,25 @@ private:
         internString("_init"),
         internString("size"),
         internString("add"),
-        internString("len")
+        internString("len"),
+        internString("Null"),
+        internString("Int"),
+        internString("Float"),
+        internString("Bool"),
+        internString("String"),
+        internString("Object"),
+        internString("Error"),
+        internString("Block"),
+        internString("Array"),
+        internString("Map"),
+        internString("Function"),
+        internString("Class"),
+        internString("Instance"),
+        internString("Iterator"),
+        internString("StrObj"),
+        internString("true"),
+        internString("false"),
+        internString("null")
     };
 
     void importModule(const std::filesystem::path& path);

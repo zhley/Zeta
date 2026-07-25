@@ -1,51 +1,31 @@
-
-class A {
-    var name = "A";
-    var age = 10;
-
-    fn say(){
-        print("Hello from A\n");
-    }
-
-    fn walk(){
-        print("A is walking\n");
-    }
-}
-
-class B extends A {
-    var name = "B";
-    var house = "B house";
-    var car = "B car";
-
-    fn say(){
-        print("Hello from B\n");
-    }
-
-    fn test(){
-        this.say();
-        super.say();
-        this.walk();
-        super.walk();
-    }
+class A{
+    var a;
 }
 
 fn main(){
-    var a = A();
-    print(a.name);
-    print("\n");
-    print(a.age);
-    print("\n");
-    a.say();
+    var a = 1;
+    var b = 2.0;
+    var c = "Hello";
+    var d = true;
+    var e = null;
+    var f = main;
+    var g = A;
+    var h = "2e-2";
+    var i = "1" + h;
 
-    var b = B();
-    print(b.name);
-    print("\n");
-    print(b.age);
-    print("\n");
-    print(b.house);
-    print("\n");
-    print(b.car);
-    print("\n");
-    b.say();
-    b.test();
+    println(type(a));
+    println(type(b));
+    println(type(c));
+    println(type(d));
+    println(type(e));
+    println(type(f));
+    println(type(g));
+    println(type(h));
+    println(type(i));
+
+    println(int(1.5));
+    println(float(1));
+    println(str(1.5));
+    println(float(h));
+    println(float(i));
 }

@@ -1200,6 +1200,7 @@ Value VM::execute() {
                 PUSH(*(curFrame->top - 1));
                 break;
             }
+            // TODO: 内置函数内部错误有些是可恢复的, 应该返回错误码而不是报运行时错误.
             case Opcode::CallBuiltin: {
                 uint8_t builtinId;
                 READ_BYTE(builtinId);
@@ -1337,6 +1338,38 @@ Value VM::execute() {
                         }
                         break;
                     }
+                    case Builtin::Println: {
+                        Value val = POP();
+                        PUSH(Value::Null); // println does not return a value, so we push null to maintain stack balance
+                        switch(val.type) {
+                            case Value::Type::Null: std::cout << "null"; break;
+                            case Value::Type::Bool: std::cout << (val.boolValue ? "true" : "false"); break;
+                            case Value::Type::Int: std::cout << val.intValue; break;
+                            case Value::Type::Float: std::cout << val.floatValue; break;
+                            case Value::Type::String: std::cout << val.strValue->data; break;
+                            case Value::Type::Object: {
+                                switch(val.ptrValue->type) {
+                                    case Object::Type::Array: std::cout << "<array>"; break;
+                                    case Object::Type::Map: std::cout << "<map>"; break;
+                                    case Object::Type::Function: std::cout << "<function>"; break;
+                                    case Object::Type::Class: std::cout << "<class>"; break;
+                                    case Object::Type::Instance: std::cout << "<instance>"; break;
+                                    case Object::Type::Iterator: std::cout << "<iterator>"; break;
+                                    case Object::Type::StrObj: {
+                                        StrObj* strObj = static_cast<StrObj*>(val.ptrValue);
+                                        std::cout << (const char*)strObj->data->getData();
+                                        break;
+                                    }
+                                    default: assert(false); break;
+                                }
+                                break;
+                            }
+                            case Value::Type::Error: std::cout << "<error>"; break;
+                            default: assert(false); break;
+                        }
+                        std::cout << "\n";
+                        break;
+                    }
                     case Builtin::Input: {
                         std::string input;
                         std::cin >> input;
@@ -1367,6 +1400,96 @@ Value VM::execute() {
                         }
                         String* internedStr = internString(static_cast<char*>(static_cast<StrObj*>(strVal.ptrValue)->data->getData()));
                         PUSH(Value(internedStr));
+                        break;
+                    }
+                    case Builtin::Type: {
+                        Value val = POP();
+                        switch(val.type) {
+                            case Value::Type::Null: PUSH(Value(STRINGS.Null)); break;
+                            case Value::Type::Bool: PUSH(Value(STRINGS.Bool)); break;
+                            case Value::Type::Int: PUSH(Value(STRINGS.Int)); break;
+                            case Value::Type::Float: PUSH(Value(STRINGS.Float)); break;
+                            case Value::Type::String: PUSH(Value(STRINGS.String_)); break;
+                            case Value::Type::Object: {
+                                switch(val.ptrValue->type) {
+                                    case Object::Type::Array: PUSH(Value(STRINGS.Array)); break;
+                                    case Object::Type::Map: PUSH(Value(STRINGS.Map)); break;
+                                    case Object::Type::Function: PUSH(Value(STRINGS.Function)); break;
+                                    case Object::Type::Class: PUSH(Value(STRINGS.Class)); break;
+                                    case Object::Type::Instance: PUSH(Value(STRINGS.Instance)); break;
+                                    case Object::Type::Iterator: PUSH(Value(STRINGS.Iterator)); break;
+                                    case Object::Type::StrObj: PUSH(Value(STRINGS.StrObj)); break; 
+                                    default: assert(false); break;
+                                }
+                                break;
+                            }
+                            case Value::Type::Error: PUSH(Value(STRINGS.Error)); break;
+                            default: assert(false); break;
+                        }
+                        break;
+                    }
+                    case Builtin::Int: {
+                        Value val = POP();
+                        if(val.type == Value::Type::Int) {
+                            PUSH(val);
+                        } else if(val.type == Value::Type::Float) {
+                            PUSH(Value(static_cast<int64_t>(val.floatValue)));
+                        } else if(val.type == Value::Type::Bool) {
+                            PUSH(Value(static_cast<int64_t>(val.boolValue ? 1 : 0)));
+                        } else if(val.type == Value::Type::String || (val.type == Value::Type::Object && val.ptrValue->type == Object::Type::StrObj)) {
+                            StrView strView = val.asString();
+                            try {
+                                PUSH(Value(static_cast<int64_t>(std::stoll(std::string(strView.data, strView.length)))));
+                            } catch(const std::exception&) {
+                                errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), "Int: invalid string format"});
+                                return Value::Error;
+                            }
+                        } else {
+                            errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), "Int: unexpected type"});
+                            return Value::Error;
+                        }
+                        break;
+                    }
+                    case Builtin::Float: {
+                        Value val = POP();
+                        if(val.type == Value::Type::Float) {
+                            PUSH(val);
+                        } else if(val.type == Value::Type::Int) {
+                            PUSH(Value(static_cast<double>(val.intValue)));
+                        } else if(val.type == Value::Type::Bool) {
+                            PUSH(Value(static_cast<double>(val.boolValue ? 1 : 0)));
+                        } else if(val.type == Value::Type::String || (val.type == Value::Type::Object && val.ptrValue->type == Object::Type::StrObj)) {
+                            StrView strView = val.asString();
+                            try {
+                                PUSH(Value(std::stod(std::string(strView.data, strView.length))));
+                            } catch(const std::exception&) {
+                                errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), "Float: invalid string format"});
+                                return Value::Error;
+                            }
+                        } else {
+                            errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), "Float: unexpected type"});
+                            return Value::Error;
+                        }
+                        break;
+                    }
+                    case Builtin::Str: {
+                        Value val = POP();
+                        if(val.type == Value::Type::Int) {
+                            std::string str = std::to_string(val.intValue);
+                            StrObj* strObj = gc->allocate<StrObj>(gc.get(), str.c_str(), str.size());
+                            PUSH(Value(strObj));
+                        } else if(val.type == Value::Type::Float) {
+                            std::string str = std::to_string(val.floatValue);
+                            StrObj* strObj = gc->allocate<StrObj>(gc.get(), str.c_str(), str.size());
+                            PUSH(Value(strObj));
+                        } else if(val.type == Value::Type::Bool) {
+                            PUSH(Value(val.boolValue ? STRINGS.true_ : STRINGS.false_));
+                        } else if(val.type == Value::Type::Null) {
+                            PUSH(Value(STRINGS.null));
+                        } else {
+                            errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), "Str: unexpected type"});
+                            return Value::Error;
+                        }
                         break;
                     }
                     default: {

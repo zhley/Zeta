@@ -190,7 +190,7 @@ void Translator::visit(AST::ClassDec& classDec) {
             if(compileClass->fields.find(varDec->name) != compileClass->fields.end()){
                 REPORT_SEMANTIC_ERROR(varDec->line, varDec->column, "Duplicate instance member '{}' in class '{}'", varDec->name, classDec.name);
             }
-            compileClass->fields[varDec->name] = std::move(*value);
+            compileClass->fields[varDec->name] = value ? std::move(*value) : CompileValue();
         } else if(member->type == AST::Dec::DecType::Func){
             auto* funcDec = static_cast<AST::FuncDec*>(member.get());
             uint32_t protoIdx = compileFunctionProto(funcDec->params, funcDec->body.get(), true);

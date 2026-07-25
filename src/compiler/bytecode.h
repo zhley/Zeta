@@ -74,10 +74,15 @@ enum class Builtin : uint8_t {
     NewArray    = 0x02,
     NewMap      = 0x03,
     Print       = 0x04,
-    Input       = 0x05,
-    Error       = 0x06,
-    Check       = 0x07,
-    Intern      = 0x08
+    Println     = 0x05,
+    Input       = 0x06,
+    Error       = 0x07,
+    Check       = 0x08,
+    Intern      = 0x09,
+    Type        = 0x0A,
+    Int         = 0x0B,
+    Float       = 0x0C,
+    Str         = 0x0D
 };
 
 struct BuiltinDesc {
@@ -93,10 +98,15 @@ inline constexpr BuiltinDesc builtinTable[] = {
     {Builtin::NewArray, "array", 0},
     {Builtin::NewMap, "map", 0},
     {Builtin::Print, "print", 0},
+    {Builtin::Println, "println", 0},
     {Builtin::Input, "input", 1},
     {Builtin::Error, "error", 0},
     {Builtin::Check, "check", 0},
     {Builtin::Intern, "intern", 0},
+    {Builtin::Type, "type", 0},
+    {Builtin::Int, "int", 0},
+    {Builtin::Float, "float", 0},
+    {Builtin::Str, "str", 0}
 };
 inline constexpr int builtinTableSize = sizeof(builtinTable) / sizeof(BuiltinDesc);
 
