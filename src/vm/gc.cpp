@@ -185,6 +185,12 @@ bool GC::growHeap(int minSize) {
             }
         }
     }
+    for(auto& tmpRoot: vm->tempRoots) {
+        if(tmpRoot->type == Value::Type::Object && inHeap(tmpRoot->ptrValue)) {
+            assert(isOld(tmpRoot->ptrValue));
+            tmpRoot->ptrValue = (Object*)((char*)tmpRoot->ptrValue + offset);
+        }
+    }
     assert(rememberedSet.empty());
     int totalOldSize = (char*)curOldPtr - (char*)oldStart;
     std::memcpy(newOldStart, oldStart, totalOldSize);
@@ -226,6 +232,11 @@ void GC::minorGC() {
             if(v.type == Value::Type::Object && isYoung(v.ptrValue)) {
                 roots.push_back(&v.ptrValue);
             }
+        }
+    }
+    for(auto& tmpRoot: vm->tempRoots) {
+        if(tmpRoot->type == Value::Type::Object && isYoung(tmpRoot->ptrValue)) {
+            roots.push_back(&tmpRoot->ptrValue);
         }
     }
 
@@ -349,6 +360,15 @@ void GC::fullGC(){
                     v.ptrValue->gcWord.marked = true;
                     worklist.push_back(v.ptrValue);
                 }
+            }
+        }
+    }
+    for(auto& tmpRoot: vm->tempRoots) {
+        if(tmpRoot->type == Value::Type::Object) {
+            roots.push_back(&tmpRoot->ptrValue);
+            if(!tmpRoot->ptrValue->gcWord.marked) {
+                tmpRoot->ptrValue->gcWord.marked = true;
+                worklist.push_back(tmpRoot->ptrValue);
             }
         }
     }

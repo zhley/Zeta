@@ -6,6 +6,7 @@
 
 #include <cassert>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -47,60 +48,165 @@ VM 可以显式加载多个模块, 在显式加载模块时会自动加载import
 
 动态模块加载先不做, 如果最后有外部符号未处理直接报错.
 
-callFunction接口只能调用显式加载的模块中定义的函数, 换句话说, VM 自动加载的模块对外部不可见.
-
 对于未指定模块名的外部符号, 按照导入的顺序查找. 如果有多个模块都定义了该符号, 则使用第一个模块中的定义, 不建议开发者依赖这一特性, 这种情况应该使用别名来避免.
 */
 
-void VM::loadModule(const std::string& filePath) {
+std::string VM::loadModule(const std::string& filePath) {
     std::error_code ec;
     std::filesystem::path path = std::filesystem::canonical(filePath, ec);
     if(ec) {
         errorHandler({Error::Type::VMError, 0, std::format("Invalid module file path: \"{}\" <{}>", filePath, ec.message())});
-        return;
+        return "";
     } else if(!std::filesystem::is_regular_file(path)) {
         errorHandler({Error::Type::VMError, 0, std::format("\"{}\" is not a regular file", filePath)});
-        return;
+        return "";
     }
     importModule(path);
-    publicModules.push_back(path.string());
+    return path.string();
 }
 
 Value VM::callFunction(const std::string& moduleName, const std::string& funcName, int argc, Value* args) {
-    auto it = std::find(publicModules.begin(), publicModules.end(), moduleName);
-    if(it == publicModules.end()) {
-        errorHandler({Error::Type::RuntimeError, 0, std::format("Module \"{}\" not loaded", moduleName)});
-        return Value::Error;
-    }
-    const auto& moduleInfo = loadedModules[moduleName];
-    auto symIt = moduleInfo.symbolMap.find(funcName);
-    if(symIt == moduleInfo.symbolMap.end()) {
-        errorHandler({Error::Type::RuntimeError, 0, std::format("Function \"{}\" not found in module \"{}\"", funcName, moduleName)});
-        return Value::Error;
-    }
-    Value& funcVal = global[symIt->second];
-    if(funcVal.type != Value::Type::Function) {
+    Value funcVal = getGlobal(moduleName, funcName);
+    if(funcVal.type == Value::Type::NativeFunc) {
+        return funcVal.nativeFuncValue(argc, args);
+    } else if(funcVal.type == Value::Type::Function) {
+        return callFunction(funcVal.funcValue, argc, args);
+    } else {
         errorHandler({Error::Type::RuntimeError, 0, std::format("\"{}\" in module \"{}\" is not a function", funcName, moduleName)});
         return Value::Error;
     }
-    return callFunction(funcVal.funcValue, argc, args);
 }
 
-Value VM::callFunction(const std::string& funcName, int argc, Value* args) {
-    for(const auto& modulePath : publicModules) {
-        const auto& moduleInfo = loadedModules[modulePath];
-        auto it = moduleInfo.symbolMap.find(funcName);
-        if(it != moduleInfo.symbolMap.end()) {
-            uint32_t globalIndex = it->second;
-            Value& funcVal = global[globalIndex];
-            if(funcVal.type != Value::Type::Function) {
-                errorHandler({Error::Type::RuntimeError, 0, std::format("\"{}\" in module \"{}\" is not a function", funcName, modulePath)});
+// args[0] is the instance itself, args[1..argc-1] are the actual arguments
+Value VM::callMethod(Value instance, const std::string& methodName, int argc, Value* args) {
+    if(instance.type != Value::Type::Object || instance.ptrValue->type != Object::Type::Instance) {
+        errorHandler({Error::Type::RuntimeError, 0, "callMethod() expects an instance"});
+        return Value::Error;
+    }
+    Instance* inst = static_cast<Instance*>(instance.ptrValue);
+    Class* cls = inst->cls;
+    String* methodNameStr = internString(methodName);
+    while(cls) {
+        auto methodValOpt = cls->methods->get(methodNameStr);
+        if(methodValOpt.has_value()) {
+            Value methodVal = methodValOpt.value();
+            if(methodVal.type == Value::Type::NativeFunc) {
+                return methodVal.nativeFuncValue(argc, args);
+            } else if(methodVal.type == Value::Type::Function) {
+                return callFunction(methodVal.funcValue, argc, args);
+            } else {
+                errorHandler({Error::Type::RuntimeError, 0, std::format("\"{}\" is not a function", methodName)});
                 return Value::Error;
             }
-            return callFunction(funcVal.funcValue, argc, args);
+        }
+        cls = cls->base;
+    }
+    errorHandler({Error::Type::RuntimeError, 0, std::format("Method \"{}\" not found in class \"{}\" or its ancestors", methodName, inst->cls->name->data)});
+    return Value::Error;
+}
+
+// if this instance needs to be held long-term, call pushTempRoot to store it in the temporary root set, otherwise it may be collected by GC.
+Value VM::instantiate(const std::string& moduleName, const std::string& className, int argc, Value* args) {
+    Value classVal = getGlobal(moduleName, className);
+    if(classVal.type != Value::Type::Object || classVal.ptrValue->type != Object::Type::Class) {
+        errorHandler({Error::Type::RuntimeError, 0, std::format("\"{}\" in module \"{}\" is not a class", className, moduleName)});
+        return Value::Error;
+    }
+    Class* cls = static_cast<Class*>(classVal.ptrValue);
+    Instance* instance = gc->allocate<Instance>(gc.get(), cls);
+    // call constructor if exists
+    auto ctorValOpt = cls->methods->get(STRINGS._init);
+    if(ctorValOpt.has_value()) {
+        Value ctorVal = ctorValOpt.value();
+        assert(ctorVal.type == Value::Type::Function);
+        Value* newArgs = static_cast<Value*>(std::malloc((argc + 1) * sizeof(Value)));
+        newArgs[0] = Value(instance);
+        std::memcpy(newArgs + 1, args, argc * sizeof(Value));
+        callFunction(ctorVal.funcValue, argc + 1, newArgs);
+        std::free(newArgs);
+    }
+    return Value(instance);
+}
+
+Value* VM::pushTempRoot(Value value) {
+    tempRoots.push_back(std::make_unique<Value>(value));
+    return tempRoots.back().get();
+}
+
+void VM::popTempRoot(Value* value) {
+    auto it = std::find_if(tempRoots.begin(), tempRoots.end(), [value](const std::unique_ptr<Value>& ptr) {
+        return ptr.get() == value;
+    });
+    assert(it != tempRoots.end());
+    std::swap(*it, tempRoots.back());
+    tempRoots.pop_back();
+}
+
+void VM::registerFunction(const std::string& name, NativeFunction func) {
+    String* nameStr = internString(name);
+    uint32_t index = global.size();
+    global.push_back(Value(func));
+    registeredSyms[name] = index;
+}
+
+void VM::registerClass(const std::string& name, const std::vector<std::pair<std::string, Value>>& fields, const std::vector<std::pair<std::string, NativeFunction>>& methods) {
+    String* nameStr = internString(name);
+    Map* fieldMap = gc->allocate<Map>(gc.get(), fields.size());
+    for(const auto& [fieldName, fieldVal] : fields) {
+        fieldMap->set(internString(fieldName), fieldVal);
+    }
+    Map* methodMap = gc->allocate<Map>(gc.get(), methods.size());
+    for(const auto& [methodName, methodFunc] : methods) {
+        methodMap->set(internString(methodName), Value(methodFunc));
+    }
+    Class* cls = gc->allocate<Class>(gc.get(), nameStr, nullptr, fieldMap, methodMap);
+    uint32_t index = global.size();
+    global.push_back(Value(cls));
+    registeredSyms[name] = index;
+}
+
+Value VM::wrapPointer(void* ptr, Value class_) {
+    if(class_.type != Value::Type::Object || class_.ptrValue->type != Object::Type::Class) {
+        errorHandler({Error::Type::RuntimeError, 0, "wrapPointer() expects a Class object"});
+        return Value::Error;
+    }
+    Class* cls = static_cast<Class*>(class_.ptrValue);
+    Instance* instance = gc->allocate<Instance>(gc.get(), cls);
+    instance->fields->set(STRINGS._cpp_ptr, Value((int64_t)ptr));
+    return Value(instance);
+}
+
+void* VM::unwrapPointer(Value obj) {
+    if(obj.type != Value::Type::Object || obj.ptrValue->type != Object::Type::Instance) {
+        errorHandler({Error::Type::RuntimeError, 0, "unwrapPointer() expects an Instance object"});
+        return nullptr;
+    }
+    Instance* instance = static_cast<Instance*>(obj.ptrValue);
+    auto ptrValOpt = instance->fields->get(STRINGS._cpp_ptr);
+    if(!ptrValOpt.has_value() || ptrValOpt.value().type != Value::Type::Int) {
+        errorHandler({Error::Type::RuntimeError, 0, "unwrapPointer() expects an Instance with a _cpp_ptr field of type Int"});
+        return nullptr;
+    }
+    return (void*)(ptrValOpt.value().intValue);
+}
+
+Value VM::getGlobal(const std::string& moduleName, const std::string& globalName) {
+    if(moduleName.empty()) {
+        auto it = registeredSyms.find(globalName);
+        if(it != registeredSyms.end()) {
+            return global[it->second];
+        }
+    } else {
+        auto it = loadedModules.find(moduleName);
+        if(it != loadedModules.end()) {
+            const ModuleInfo& moduleInfo = it->second;
+            auto symIt = moduleInfo.symbolMap.find(globalName);
+            if(symIt != moduleInfo.symbolMap.end()) {
+                return global[symIt->second];
+            }
         }
     }
-    errorHandler({Error::Type::RuntimeError, 0, std::format("Function \"{}\" not found in any loaded module", funcName)});
+    errorHandler({Error::Type::RuntimeError, 0, std::format("Global symbol \"{}\" not found in module \"{}\"", globalName, moduleName.empty() ? "<registered>" : moduleName)});
     return Value::Error;
 }
 
@@ -226,6 +332,11 @@ void VM::importModule(const std::filesystem::path& path) {
                     break;
                 }
             }
+            auto symIt = registeredSyms.find(extSym.name);
+            if(symIt != registeredSyms.end()) {
+                index = symIt->second;
+                found = true;
+            }
             if(!found) {
                 errorHandler({Error::Type::VMError, 0, std::format("Failed to resolve external symbol: \"{}\" in module \"{}\"", extSym.name, pathStr)});
                 return;
@@ -271,6 +382,11 @@ void VM::importModule(const std::filesystem::path& path) {
                         found = true;
                         break;
                     }
+                }
+                auto symIt = registeredSyms.find(patch.baseClassNames.second);
+                if(symIt != registeredSyms.end()) {
+                    baseIdx = symIt->second;
+                    found = true;
                 }
                 if(!found) {
                     errorHandler({Error::Type::VMError, 0, std::format("Failed to resolve base class: \"{}\" for class \"{}\" in module \"{}\"", patch.baseClassNames.second, patch.className, pathStr)});

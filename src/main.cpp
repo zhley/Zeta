@@ -10,7 +10,7 @@ int main(int argc, char* argv[]) {
     }
 
     Zeta::VM vm;
-    vm.loadModule(argv[1]);
-    Zeta::Value v = vm.callFunction("main", 0, nullptr);
+    std::string moduleName = vm.loadModule(argv[1]);
+    Zeta::Value v = vm.callFunction(moduleName, "main", 0, nullptr);
     return 0;
 }

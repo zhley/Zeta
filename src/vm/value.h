@@ -59,7 +59,6 @@ struct Value{
     explicit Value(NativeFunction func) : type(Type::NativeFunc), nativeFuncValue(func) {}
     explicit Value(Object* obj) : type(Type::Object), ptrValue(obj) {}
     Value(Type t, uint64_t v) : type(t), val(v) {}
-    Value(const Value& other) : type(other.type), val(other.val) {}
 
     // strict equality check
     bool operator==(const Value& other) const {

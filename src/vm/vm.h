@@ -3,6 +3,7 @@
 #include "value.h"
 #include "gc.h"
 
+#include <cstdint>
 #include <iostream>
 #include <unordered_map>
 #include <vector>
@@ -15,6 +16,10 @@
 #define ZETA_DEFAULT_STACK_SIZE 1024
 #define ZETA_DEFAULT_INIT_HEAP_SIZE 1024
 #define ZETA_DEFAULT_MAX_HEAP_SIZE -1
+
+// TODO: 模块名去掉后缀, 设计一个字节码文件格式, 支持先编译成字节码文件, 然后再加载字节码文件
+
+// TODO: !!!目前的代码存在瞬时对象丢失的风险, 连续两次 allocate, 第一次 allocate 出的对象由于没来得及保存到根集, 可能在第二次 allocate 时触发GC被立即回收.
 
 namespace Zeta {
 
@@ -61,9 +66,20 @@ public:
 
     void setErrorHandler(const ErrorHandler& handler) { errorHandler = handler; }
 
-    void loadModule(const std::string& filePath);
+    std::string loadModule(const std::string& filePath);
+
     Value callFunction(const std::string& moduleName, const std::string& funcName, int argc, Value* args);
-    Value callFunction(const std::string& funcName, int argc, Value* args); 
+    Value callMethod(Value instance, const std::string& methodName, int argc, Value* args);
+    Value instantiate(const std::string& moduleName, const std::string& className, int argc, Value* args);
+    Value* pushTempRoot(Value value);
+    void popTempRoot(Value* value);
+    void registerFunction(const std::string& name, NativeFunction func);
+    void registerClass(const std::string& name, const std::vector<std::pair<std::string, Value>>& fields, const std::vector<std::pair<std::string, NativeFunction>>& methods);
+    Value wrapPointer(void* ptr, Value class_);
+    void* unwrapPointer(Value obj);
+    Value getGlobal(const std::string& moduleName, const std::string& globalName);
+
+    String* internString(const std::string& str);
 
 private:
     Config config;
@@ -75,10 +91,41 @@ private:
     std::unordered_map<std::string, std::unique_ptr<String>> stringTable; // for string interning.
 
     std::vector<StackFrame> stackFrames;
-    std::vector<std::string> publicModules; // the list of modules that are explicitly loaded by the user, in order of loading
     std::unordered_map<std::string, ModuleInfo> loadedModules; // module path -> module info
+    std::unordered_map<std::string, uint32_t> registeredSyms;
     std::vector<std::unique_ptr<Routine>> routines; // [module1.protos[0], module1.protos[1], ..., module2.protos[0], ...]
+    std::vector<std::unique_ptr<Value>> tempRoots;
 
+    void importModule(const std::filesystem::path& path);
+    std::filesystem::path searchModuleFile(const std::filesystem::path& basePath, const std::string& moduleName);
+    
+    Value callFunction(Routine* func, int argc, Value* args);
+    Value execute();
+
+    void pushFrame(const StackFrame& frame);
+    void popFrame();
+
+    static void defaultErrorHandler(const Error& error) {
+        std::cout << std::format("[{}][line {}]: {}\n", error.type == Error::RuntimeError ? "Runtime Error" : "VM Error", error.line, error.message);
+    }
+
+    static uint32_t getLine(const Routine* routine, uint32_t ip) {
+        if(routine->lineInfo.empty()) return 0;
+        int left = 0, right = routine->lineInfo.size() - 1;
+        while(left <= right) {
+            int mid = left + (right - left) / 2;
+            if(ip >= routine->lineInfo[mid].first && ip < routine->lineInfo[mid + 1].first) {
+                return routine->lineInfo[mid].second;
+            } else if(ip < routine->lineInfo[mid].first) {
+                right = mid - 1;
+            } else {
+                left = mid + 1;
+            }
+        }
+        return left;
+    }
+
+public:
     // literal strings
     struct Strings {
         String* _iter;
@@ -106,6 +153,7 @@ private:
         String* true_;
         String* false_;
         String* null;
+        String* _cpp_ptr;
     };
     const Strings STRINGS = {
         internString("_iter"),
@@ -132,38 +180,9 @@ private:
         internString("StrObj"),
         internString("true"),
         internString("false"),
-        internString("null")
+        internString("null"),
+        internString("_cpp_ptr")
     };
-
-    void importModule(const std::filesystem::path& path);
-    std::filesystem::path searchModuleFile(const std::filesystem::path& basePath, const std::string& moduleName);
-    
-    Value callFunction(Routine* func, int argc, Value* args);
-    Value execute();
-
-    String* internString(const std::string& str);
-    void pushFrame(const StackFrame& frame);
-    void popFrame();
-
-    static void defaultErrorHandler(const Error& error) {
-        std::cout << std::format("[{}][line {}]: {}\n", error.type == Error::RuntimeError ? "Runtime Error" : "VM Error", error.line, error.message);
-    }
-
-    static uint32_t getLine(const Routine* routine, uint32_t ip) {
-        if(routine->lineInfo.empty()) return 0;
-        int left = 0, right = routine->lineInfo.size() - 1;
-        while(left <= right) {
-            int mid = left + (right - left) / 2;
-            if(ip >= routine->lineInfo[mid].first && ip < routine->lineInfo[mid + 1].first) {
-                return routine->lineInfo[mid].second;
-            } else if(ip < routine->lineInfo[mid].first) {
-                right = mid - 1;
-            } else {
-                left = mid + 1;
-            }
-        }
-        return left;
-    }
 };
 
 }
