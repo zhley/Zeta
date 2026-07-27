@@ -79,12 +79,11 @@ Value VM::callFunction(const std::string& moduleName, const std::string& funcNam
         return Value::Error;
     }
     Value& funcVal = global[symIt->second];
-    if(funcVal.type != Value::Type::Object || funcVal.ptrValue->type != Object::Type::Function) {
+    if(funcVal.type != Value::Type::Function) {
         errorHandler({Error::Type::RuntimeError, 0, std::format("\"{}\" in module \"{}\" is not a function", funcName, moduleName)});
         return Value::Error;
     }
-    Function* func = static_cast<Function*>(funcVal.ptrValue);
-    return callFunction(func, argc, args);
+    return callFunction(funcVal.funcValue, argc, args);
 }
 
 Value VM::callFunction(const std::string& funcName, int argc, Value* args) {
@@ -94,12 +93,11 @@ Value VM::callFunction(const std::string& funcName, int argc, Value* args) {
         if(it != moduleInfo.symbolMap.end()) {
             uint32_t globalIndex = it->second;
             Value& funcVal = global[globalIndex];
-            if(funcVal.type != Value::Type::Object || funcVal.ptrValue->type != Object::Type::Function) {
+            if(funcVal.type != Value::Type::Function) {
                 errorHandler({Error::Type::RuntimeError, 0, std::format("\"{}\" in module \"{}\" is not a function", funcName, modulePath)});
                 return Value::Error;
             }
-            Function* func = static_cast<Function*>(funcVal.ptrValue);
-            return callFunction(func, argc, args);
+            return callFunction(funcVal.funcValue, argc, args);
         }
     }
     errorHandler({Error::Type::RuntimeError, 0, std::format("Function \"{}\" not found in any loaded module", funcName)});
@@ -150,8 +148,7 @@ void VM::importModule(const std::filesystem::path& path) {
             case CompileValue::Type::Function: {
                 uint32_t routineIndex = moduleInfo.protoBaseIndex + compileValue.funcValue->protoIndex;
                 assert(routineIndex < routines.size());
-                Function* func = gc->allocate<Function>();
-                func->routine = routines[routineIndex].get();
+                Routine* func = routines[routineIndex].get();
                 return Value(func);
             }
             case CompileValue::Type::Class: {
@@ -167,8 +164,7 @@ void VM::importModule(const std::filesystem::path& path) {
                 for(const auto& [methodName, methodVal] : compileValue.classValue->methods) {
                     uint32_t routineIndex = moduleInfo.protoBaseIndex + methodVal.protoIndex;
                     assert(routineIndex < routines.size());
-                    Function* func = gc->allocate<Function>();
-                    func->routine = routines[routineIndex].get();
+                    Routine* func = routines[routineIndex].get();
                     methods->set(internString(methodName), Value(func));
                 }
                 Class* cls = gc->allocate<Class>(gc.get(), name, nullptr, fields, methods);
@@ -328,16 +324,15 @@ std::filesystem::path VM::searchModuleFile(const std::filesystem::path& basePath
     return {};
 }
 
-Value VM::callFunction(Function* func, int argc, Value* args) {
-    Routine* routine = func->routine;
-    if(argc != routine->arity) {
-        errorHandler({Error::Type::RuntimeError, 0, std::format("Function expects {} arguments, but {} were provided", routine->arity, argc)});
+Value VM::callFunction(Routine* func, int argc, Value* args) {
+    if(argc != func->arity) {
+        errorHandler({Error::Type::RuntimeError, 0, std::format("Function expects {} arguments, but {} were provided", func->arity, argc)});
         return Value::Error;
     }
     StackFrame frame;
-    frame.routine = routine;
+    frame.routine = func;
     frame.base = stack.top;
-    frame.top = stack.top + routine->localCount;
+    frame.top = stack.top + func->localCount;
     frame.ip = 0;
     pushFrame(frame);
     for(int i = 0; i < argc; i++) {
@@ -631,9 +626,9 @@ Value VM::execute() {
                                 PUSH(Value(false));
                             } else {
                                 Value equalsMethodVal = equalsMethodOpt.value();
-                                assert(equalsMethodVal.type == Value::Type::Object && equalsMethodVal.ptrValue->type == Object::Type::Function);
-                                Function* func = static_cast<Function*>(equalsMethodVal.ptrValue);
-                                if(func->routine->arity != 2) {
+                                assert(equalsMethodVal.type == Value::Type::Function);
+                                Routine* func = equalsMethodVal.funcValue;
+                                if(func->arity != 2) {
                                     errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), std::format("Eq: _equals method of class \"{}\" should have 2 arguments", aInst->cls->name->data)});
                                     return Value::Error;
                                 }
@@ -716,9 +711,9 @@ Value VM::execute() {
                                 PUSH(Value(true));
                             } else {
                                 Value equalsMethodVal = equalsMethodOpt.value();
-                                assert(equalsMethodVal.type == Value::Type::Object && equalsMethodVal.ptrValue->type == Object::Type::Function);
-                                Function* func = static_cast<Function*>(equalsMethodVal.ptrValue);
-                                if(func->routine->arity != 2) {
+                                assert(equalsMethodVal.type == Value::Type::Function);
+                                Routine* func = equalsMethodVal.funcValue;
+                                if(func->arity != 2) {
                                     errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), std::format("Neq: _equals method of class \"{}\" should have 2 arguments", aInst->cls->name->data)});
                                     return Value::Error;
                                 }
@@ -862,9 +857,8 @@ Value VM::execute() {
                 uint8_t argCount;
                 READ_BYTE(argCount);
                 Value callee = POP();
-                if(callee.type == Value::Type::Object && callee.ptrValue->type == Object::Type::Function) {
-                    Function* func = static_cast<Function*>(callee.ptrValue);
-                    Routine* routine = func->routine;
+                if(callee.type == Value::Type::Function) {
+                    Routine* routine = callee.funcValue;
                     StackFrame newFrame;
                     newFrame.routine = routine;
                     newFrame.base = stack.top;
@@ -886,9 +880,8 @@ Value VM::execute() {
                     auto constructor = cls->methods->get(STRINGS._init);
                     if(constructor.has_value()) {
                         Value constructorVal = constructor.value();
-                        assert(constructorVal.type == Value::Type::Object && constructorVal.ptrValue->type == Object::Type::Function);
-                        Function* func = static_cast<Function*>(constructorVal.ptrValue);
-                        Routine* routine = func->routine;
+                        assert(constructorVal.type == Value::Type::Function);
+                        Routine* routine = constructorVal.funcValue;
                         StackFrame newFrame;
                         newFrame.routine = routine;
                         newFrame.base = stack.top;
@@ -1045,9 +1038,8 @@ Value VM::execute() {
                                 return Value::Error;
                             }
                             Value methodVal = methodValOpt.value();
-                            assert(methodVal.type == Value::Type::Object && methodVal.ptrValue->type == Object::Type::Function);
-                            Function* func = static_cast<Function*>(methodVal.ptrValue);
-                            Routine* routine = func->routine;
+                            assert(methodVal.type == Value::Type::Function);
+                            Routine* routine = methodVal.funcValue;
                             StackFrame newFrame;
                             newFrame.routine = routine;
                             newFrame.base = stack.top;
@@ -1074,9 +1066,8 @@ Value VM::execute() {
                                 return Value::Error;
                             }
                             Value methodVal = methodValOpt.value();
-                            assert(methodVal.type == Value::Type::Object && methodVal.ptrValue->type == Object::Type::Function);
-                            Function* func = static_cast<Function*>(methodVal.ptrValue);
-                            Routine* routine = func->routine;
+                            assert(methodVal.type == Value::Type::Function);
+                            Routine* routine = methodVal.funcValue;
                             StackFrame newFrame;
                             newFrame.routine = routine;
                             newFrame.base = stack.top;
@@ -1128,9 +1119,8 @@ Value VM::execute() {
                     return Value::Error;
                 }
                 Value methodVal = methodValOpt.value();
-                assert(methodVal.type == Value::Type::Object && methodVal.ptrValue->type == Object::Type::Function);
-                Function* func = static_cast<Function*>(methodVal.ptrValue);
-                Routine* routine = func->routine;
+                assert(methodVal.type == Value::Type::Function);
+                Routine* routine = methodVal.funcValue;
                 StackFrame newFrame;
                 newFrame.routine = routine;
                 newFrame.base = stack.top;
@@ -1255,9 +1245,8 @@ Value VM::execute() {
                                 return Value::Error;
                             }
                             Value iterMethodVal = iterMethodOpt.value();
-                            assert(iterMethodVal.type == Value::Type::Object && iterMethodVal.ptrValue->type == Object::Type::Function);
-                            Function* func = static_cast<Function*>(iterMethodVal.ptrValue);
-                            Routine* routine = func->routine;
+                            assert(iterMethodVal.type == Value::Type::Function);
+                            Routine* routine = iterMethodVal.funcValue;
                             StackFrame newFrame;
                             newFrame.routine = routine;
                             newFrame.base = stack.top;
@@ -1295,9 +1284,8 @@ Value VM::execute() {
                                 return Value::Error;
                             }
                             Value nextMethodVal = nextMethodOpt.value();
-                            assert(nextMethodVal.type == Value::Type::Object && nextMethodVal.ptrValue->type == Object::Type::Function);
-                            Function* func = static_cast<Function*>(nextMethodVal.ptrValue);
-                            Routine* routine = func->routine;
+                            assert(nextMethodVal.type == Value::Type::Function);
+                            Routine* routine = nextMethodVal.funcValue;
                             StackFrame newFrame;
                             newFrame.routine = routine;
                             newFrame.base = stack.top;
@@ -1344,11 +1332,11 @@ Value VM::execute() {
                             case Value::Type::Int: std::cout << val.intValue; break;
                             case Value::Type::Float: std::cout << val.floatValue; break;
                             case Value::Type::String: std::cout << val.strValue->data; break;
+                            case Value::Type::Function: std::cout << "<function>"; break;
                             case Value::Type::Object: {
                                 switch(val.ptrValue->type) {
                                     case Object::Type::Array: std::cout << "<array>"; break;
                                     case Object::Type::Map: std::cout << "<map>"; break;
-                                    case Object::Type::Function: std::cout << "<function>"; break;
                                     case Object::Type::Class: std::cout << "<class>"; break;
                                     case Object::Type::Instance: std::cout << "<instance>"; break;
                                     case Object::Type::Iterator: std::cout << "<iterator>"; break;
@@ -1375,11 +1363,11 @@ Value VM::execute() {
                             case Value::Type::Int: std::cout << val.intValue; break;
                             case Value::Type::Float: std::cout << val.floatValue; break;
                             case Value::Type::String: std::cout << val.strValue->data; break;
+                            case Value::Type::Function: std::cout << "<function>"; break;
                             case Value::Type::Object: {
                                 switch(val.ptrValue->type) {
                                     case Object::Type::Array: std::cout << "<array>"; break;
                                     case Object::Type::Map: std::cout << "<map>"; break;
-                                    case Object::Type::Function: std::cout << "<function>"; break;
                                     case Object::Type::Class: std::cout << "<class>"; break;
                                     case Object::Type::Instance: std::cout << "<instance>"; break;
                                     case Object::Type::Iterator: std::cout << "<iterator>"; break;
@@ -1438,11 +1426,11 @@ Value VM::execute() {
                             case Value::Type::Int: PUSH(Value(STRINGS.Int)); break;
                             case Value::Type::Float: PUSH(Value(STRINGS.Float)); break;
                             case Value::Type::String: PUSH(Value(STRINGS.String_)); break;
+                            case Value::Type::Function: PUSH(Value(STRINGS.Function)); break;
                             case Value::Type::Object: {
                                 switch(val.ptrValue->type) {
                                     case Object::Type::Array: PUSH(Value(STRINGS.Array)); break;
                                     case Object::Type::Map: PUSH(Value(STRINGS.Map)); break;
-                                    case Object::Type::Function: PUSH(Value(STRINGS.Function)); break;
                                     case Object::Type::Class: PUSH(Value(STRINGS.Class)); break;
                                     case Object::Type::Instance: PUSH(Value(STRINGS.Instance)); break;
                                     case Object::Type::Iterator: PUSH(Value(STRINGS.Iterator)); break;

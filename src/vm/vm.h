@@ -138,7 +138,7 @@ private:
     void importModule(const std::filesystem::path& path);
     std::filesystem::path searchModuleFile(const std::filesystem::path& basePath, const std::string& moduleName);
     
-    Value callFunction(Function* func, int argc, Value* args);
+    Value callFunction(Routine* func, int argc, Value* args);
     Value execute();
 
     String* internString(const std::string& str);

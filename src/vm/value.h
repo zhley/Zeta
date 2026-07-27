@@ -14,11 +14,15 @@ namespace Zeta {
 struct Object;
 struct String;
 struct GC;
+struct Routine;
+struct Value;
 
 struct StrView {
     const char* data;
     uint32_t length;
 };
+
+using NativeFunction = Value(*)(int argc, Value* argv);
 
 struct Value{
     static const Value Null;
@@ -30,6 +34,8 @@ struct Value{
         Float,
         Bool,
         String, // interned string
+        Function,
+        NativeFunc,
         Object,
         Error // flag for error, val is error code
     } type = Type::Null;
@@ -37,8 +43,10 @@ struct Value{
         int64_t intValue;
         bool boolValue;
         double floatValue;
-        Object* ptrValue;
         String* strValue;
+        Routine* funcValue;
+        NativeFunction nativeFuncValue;
+        Object* ptrValue;
         uint64_t val;
     };
 
@@ -46,8 +54,10 @@ struct Value{
     explicit Value(int64_t i) : type(Type::Int), intValue(i) {}
     explicit Value(double f) : type(Type::Float), floatValue(f) {}
     explicit Value(bool b) : type(Type::Bool), boolValue(b) {}
-    explicit Value(Object* obj) : type(Type::Object), ptrValue(obj) {}
     explicit Value(String* str) : type(Type::String), strValue(str) {}
+    explicit Value(Routine* routine) : type(Type::Function), funcValue(routine) {}
+    explicit Value(NativeFunction func) : type(Type::NativeFunc), nativeFuncValue(func) {}
+    explicit Value(Object* obj) : type(Type::Object), ptrValue(obj) {}
     Value(Type t, uint64_t v) : type(t), val(v) {}
     Value(const Value& other) : type(other.type), val(other.val) {}
 
@@ -80,7 +90,6 @@ struct Object {
         Block, // 8 bytes head + (size - 8) bytes data
         Array,
         Map,
-        Function,
         Class,
         Instance, 
         Iterator,
@@ -203,13 +212,6 @@ private:
     void rehash(uint32_t newCapacity);
 };
 
-struct Function : public Object {
-    Routine* routine;
-
-    Function() : Object(Type::Function), routine(nullptr) {}
-    Function(Routine* r) : Object(Type::Function), routine(r) {}
-};
-
 struct Class : public Object {
     String* name;
     Class* base;
@@ -270,7 +272,6 @@ inline int Object::getSize() const {
         case Object::Type::Block:       return static_cast<const Block*>(this)->size + sizeof(Block);
         case Object::Type::Array:       return sizeof(Array);
         case Object::Type::Map:         return sizeof(Map);
-        case Object::Type::Function:    return sizeof(Function);
         case Object::Type::Class:       return sizeof(Class);
         case Object::Type::Instance:    return sizeof(Instance);
         case Object::Type::Iterator:    return sizeof(Iterator);
@@ -307,7 +308,6 @@ inline void Object::trace(F&& f) {
             });
             break;
         }
-        case Object::Type::Function: break;
         case Object::Type::Class: {
             Class* cls = static_cast<Class*>(this);
             f((Object**)(&(cls->base)));
@@ -341,12 +341,13 @@ inline Value::operator bool() const  {
         case Type::Float: return static_cast<bool>(floatValue);
         case Type::Bool: return boolValue;
         case Type::String: return strValue != nullptr && strValue->length > 0;
+        case Type::Function: return true;
+        case Type::NativeFunc: return true;
         case Type::Object: {
             switch(ptrValue->type) {
                 case Object::Type::Block: return true;
                 case Object::Type::Array: return static_cast<Array*>(ptrValue)->size > 0;
                 case Object::Type::Map: return static_cast<Map*>(ptrValue)->size > 0;
-                case Object::Type::Function: return true;
                 case Object::Type::Class: return true;
                 case Object::Type::Instance: return true;
                 case Object::Type::Iterator: return true;
