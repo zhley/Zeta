@@ -39,15 +39,27 @@ GC::GC(VM* vm) : vm(vm), rememberedSet(512) {
     curEdenPtr = edenStart;
     curOldPtr = oldStart;
     curFromPtr = fromStart;
+
+    temp = std::malloc(ZETA_GC_TEMP_SIZE);
+    if (!temp) {
+        vm->errorHandler({VM::Error::VMError, 0, "Failed to allocate temp memory"});
+        return;
+    }
+    tempEnd = static_cast<char*>(temp) + ZETA_GC_TEMP_SIZE;
+    curTempPtr = temp;
 }
 
 GC::~GC() {
     std::free(heap);
+    std::free(temp);
 }
 
 Block* GC::allocateBlock(int size) {
     size = ALIGN8(size);
     Object* obj = allocateImpl(sizeof(Block) + size);
+    obj->age = 0;
+    obj->gcWord.marked = false;
+    obj->gcWord.forward = 0;
     Block* block = new (obj) Block(size);
     return block;
 }
@@ -94,6 +106,10 @@ bool GC::inHeap(void* ptr) {
     return ptr >= heap && ptr < heapEnd;
 }
 
+bool GC::inTemp(void* ptr) {
+    return ptr >= temp && ptr < tempEnd;
+}
+
 Object* GC::allocateImpl(int size) {
     // 8 bytes alignment
     size = ALIGN8(size);
@@ -105,12 +121,16 @@ Object* GC::allocateImpl(int size) {
     void* ptr = curEdenPtr;
     curEdenPtr = (char*)curEdenPtr + size;
     if(curEdenPtr > (char*)edenEnd) {
-        minorGC();
-        ptr = curEdenPtr;
-        curEdenPtr = (char*)(curEdenPtr) + size;
-        if(curEdenPtr > (char*)edenEnd) {
-            curEdenPtr = (char*)(curEdenPtr) - size; // undo the bump
+        if(locked) {
             return allocateInOld(size);
+        } else{
+            minorGC();
+            ptr = curEdenPtr;
+            curEdenPtr = (char*)(curEdenPtr) + size;
+            if(curEdenPtr > (char*)edenEnd) {
+                curEdenPtr = (char*)(curEdenPtr) - size; // undo the bump
+                return allocateInOld(size);
+            }
         }
     }
     return (Object*)ptr;
@@ -120,18 +140,28 @@ Object* GC::allocateInOld(int size) {
     void* ptr = curOldPtr;
     curOldPtr = (char*)curOldPtr + size;
     if(curOldPtr > (char*)oldEnd) {
-        fullGC();
-        ptr = curOldPtr;
-        curOldPtr = (char*)curOldPtr + size;
-        if(curOldPtr > (char*)oldEnd) {
-            curOldPtr = (char*)curOldPtr - size;
-            if(!growHeap(size * (ZETA_GC_YOUNG_SCALE + ZETA_GC_OLD_SCALE) / ZETA_GC_OLD_SCALE)) {
-                vm->errorHandler({VM::Error::VMError, 0, "Out of memory"}); // TODO: 详细一点
-                return nullptr;
-            }
+        if(locked){
+            ptr = curTempPtr;
+            curTempPtr = (char*)curTempPtr + size;
+            assert(curTempPtr <= (char*)tempEnd);
+            // if(curTempPtr > (char*)tempEnd) {
+            //     vm->errorHandler({VM::Error::VMError, 0, "Out of memory"}); // TODO: 详细一点
+            //     return nullptr;
+            // }
+        } else {
+            fullGC();
             ptr = curOldPtr;
             curOldPtr = (char*)curOldPtr + size;
-            assert(curOldPtr <= (char*)oldEnd);
+            if(curOldPtr > (char*)oldEnd) {
+                curOldPtr = (char*)curOldPtr - size;
+                if(!growHeap(size * (ZETA_GC_YOUNG_SCALE + ZETA_GC_OLD_SCALE) / ZETA_GC_OLD_SCALE)) {
+                    vm->errorHandler({VM::Error::VMError, 0, "Out of memory"}); // TODO: 详细一点
+                    return nullptr;
+                }
+                ptr = curOldPtr;
+                curOldPtr = (char*)curOldPtr + size;
+                assert(curOldPtr <= (char*)oldEnd);
+            }
         }
     }
     return (Object*)ptr;
@@ -170,27 +200,12 @@ bool GC::growHeap(int minSize) {
         });
         ptr += obj->getSize();
     }
-    for(auto& gv: vm->global) {
-        if(gv.type == Value::Type::Object && inHeap(gv.ptrValue)) {
-            assert(isOld(gv.ptrValue));
-            gv.ptrValue = (Object*)((char*)gv.ptrValue + offset);
+    forEachRoot([this, &offset](Value& v){
+        if(v.type == Value::Type::Object && inHeap(v.ptrValue)) {
+            assert(isOld(v.ptrValue));
+            v.ptrValue = (Object*)((char*)v.ptrValue + offset);
         }
-    }
-    for(auto& frame: vm->stackFrames) {
-        for(int i = 0; i < frame.routine->localCount + frame.routine->maxStackSize; ++i) {
-            Value& v = frame.base[i];
-            if(v.type == Value::Type::Object && inHeap(v.ptrValue)) {
-                assert(isOld(v.ptrValue));
-                v.ptrValue = (Object*)((char*)v.ptrValue + offset);
-            }
-        }
-    }
-    for(auto& tmpRoot: vm->tempRoots) {
-        if(tmpRoot->type == Value::Type::Object && inHeap(tmpRoot->ptrValue)) {
-            assert(isOld(tmpRoot->ptrValue));
-            tmpRoot->ptrValue = (Object*)((char*)tmpRoot->ptrValue + offset);
-        }
-    }
+    });
     assert(rememberedSet.empty());
     int totalOldSize = (char*)curOldPtr - (char*)oldStart;
     std::memcpy(newOldStart, oldStart, totalOldSize);
@@ -218,27 +233,15 @@ bool GC::growHeap(int minSize) {
 }
 
 void GC::minorGC() {
+    assert(!locked);
     std::vector<Object*> worklist;
     // get root
     std::vector<Object**> roots;
-    for(auto& gv: vm->global) {
-        if(gv.type == Value::Type::Object && isYoung(gv.ptrValue)) {
-            roots.push_back(&gv.ptrValue);
+    forEachRoot([this, &roots, &worklist](Value& v){
+        if(v.type == Value::Type::Object && isYoung(v.ptrValue)) {
+            roots.push_back(&v.ptrValue);
         }
-    }
-    for(auto& frame: vm->stackFrames) {
-        for(int i = 0; i < frame.routine->localCount + frame.routine->maxStackSize; ++i) {
-            Value& v = frame.base[i];
-            if(v.type == Value::Type::Object && isYoung(v.ptrValue)) {
-                roots.push_back(&v.ptrValue);
-            }
-        }
-    }
-    for(auto& tmpRoot: vm->tempRoots) {
-        if(tmpRoot->type == Value::Type::Object && isYoung(tmpRoot->ptrValue)) {
-            roots.push_back(&tmpRoot->ptrValue);
-        }
-    }
+    });
 
     // mark and copy
     for(auto& root: roots) {
@@ -335,43 +338,22 @@ void GC::minorGC() {
     curFromPtr = toEndPtr;
 }
 
-// TODO: 需要考虑一下对驻留字符串的引用是否需要特殊处理
 // recycle the entire heap.
 void GC::fullGC(){
+    assert(!locked);
     std::vector<Object*> worklist;
     std::vector<Object**> roots;
 
     // collect and mark
-    for(auto& gv : vm->global){
-        if(gv.type == Value::Type::Object){
-            roots.push_back(&gv.ptrValue);
-            if(!gv.ptrValue->gcWord.marked){
-                gv.ptrValue->gcWord.marked = true;
-                worklist.push_back(gv.ptrValue);
+    forEachRoot([&roots, &worklist](Value& v){
+        if(v.type == Value::Type::Object) {
+            roots.push_back(&v.ptrValue);
+            if(!v.ptrValue->gcWord.marked) {
+                v.ptrValue->gcWord.marked = true;
+                worklist.push_back(v.ptrValue);
             }
         }
-    }
-    for(auto& frame : vm->stackFrames){
-        for(int i = 0; i < frame.routine->localCount + frame.routine->maxStackSize; ++i){
-            Value& v = frame.base[i];
-            if (v.type == Value::Type::Object) {
-                roots.push_back(&v.ptrValue);
-                if(!v.ptrValue->gcWord.marked){
-                    v.ptrValue->gcWord.marked = true;
-                    worklist.push_back(v.ptrValue);
-                }
-            }
-        }
-    }
-    for(auto& tmpRoot: vm->tempRoots) {
-        if(tmpRoot->type == Value::Type::Object) {
-            roots.push_back(&tmpRoot->ptrValue);
-            if(!tmpRoot->ptrValue->gcWord.marked) {
-                tmpRoot->ptrValue->gcWord.marked = true;
-                worklist.push_back(tmpRoot->ptrValue);
-            }
-        }
-    }
+    });
     int p = 0;
     while(p < worklist.size()){
         Object* obj = worklist[p];
@@ -387,9 +369,52 @@ void GC::fullGC(){
 
     // set forwarding
     std::sort(worklist.begin(), worklist.end(), [this](Object* a, Object* b){
+        if(!inTemp(a) && inTemp(b)) return true;
         if(isOld(a) && isYoung(b)) return true;
         return a < b;
     });
+    int totalSize = 0;
+    for(auto& obj : worklist){
+        totalSize += obj->getSize();
+    }
+    void* prevHeap = heap;
+    if((char*)oldStart + totalSize > (char*)oldEnd){
+        // grow heap
+        int minSize = ALIGN8(totalSize * (ZETA_GC_YOUNG_SCALE + ZETA_GC_OLD_SCALE) / ZETA_GC_OLD_SCALE);
+        bool unlimited = (maxHeapSize == -1);
+        if(!unlimited && heapSize >= maxHeapSize) {
+            vm->errorHandler({VM::Error::VMError, 0, "Out of memory"}); // TODO: 详细一点
+            return;
+        }
+        int newSize = heapSize * 2;
+        if(newSize < heapSize + minSize) {
+            newSize = heapSize + minSize + 1024 * 1024; // at least 1 MiB more
+        }
+        if(!unlimited && newSize > maxHeapSize) {
+            newSize = maxHeapSize;
+        }
+        if(newSize < heapSize + minSize) {
+            vm->errorHandler({VM::Error::VMError, 0, "Out of memory"}); // TODO: 详细一点
+            return;
+        }
+        void* newHeap = std::malloc(newSize);
+        int newYoungSize = ALIGN8(newSize * ZETA_GC_YOUNG_SCALE / (ZETA_GC_YOUNG_SCALE + ZETA_GC_OLD_SCALE));
+        int newHalfSurvivorSize = ALIGN8(newYoungSize * ZETA_GC_SURVIVOR_SCALE / (ZETA_GC_EDEN_SCALE + ZETA_GC_SURVIVOR_SCALE) / 2);
+        int newEdenSize = newYoungSize - newHalfSurvivorSize * 2;
+        heapSize = newSize;
+        heap = newHeap;
+        heapEnd = (char*)heap + heapSize;
+        youngStart = heap;
+        youngEnd = (char*)youngStart + newYoungSize;
+        edenStart = youngStart;
+        edenEnd = (char*)edenStart + newEdenSize;
+        fromStart = edenEnd;
+        fromEnd = (char*)fromStart + newHalfSurvivorSize;
+        toStart = fromEnd;
+        toEnd = youngEnd;
+        oldStart = youngEnd;
+        oldEnd = heapEnd;
+    }
     char* compactPtr = (char*)oldStart;
     for(auto& obj : worklist){
         int size = obj->getSize();
@@ -418,6 +443,31 @@ void GC::fullGC(){
     curEdenPtr = edenStart;
     curFromPtr = fromStart;
     rememberedSet.clear();
+
+    if(prevHeap != heap) {
+        std::free(prevHeap);
+    }
+}
+
+template<typename F>
+requires std::is_invocable_v<F, Value&>
+void GC::forEachRoot(F&& f) {
+    for(auto& routine : vm->routines) {
+        for(auto& constVal : routine->constants) {
+            f(constVal);
+        }
+    }
+    for(auto& gv : vm->global) {
+        f(gv);
+    }
+    for(auto& frame : vm->stackFrames) {
+        for(Value* ptr = frame.base; ptr < frame.top; ++ptr) {
+            f(*ptr);
+        }
+    }
+    for(auto& tmpRoot : vm->tempRoots) {
+        f(*tmpRoot);
+    }
 }
 
 }

@@ -155,6 +155,10 @@ private:
 |         eden           |     from(to)   |     to(from)   |        old         |
 +------------------------+----------------+----------------+--------------------+
 
+备注:
+ - 从分配一个对象, 到将其存储到根集或者其他已存储对象对象的字段中, 如果该过程中可能产生其他对象的分配, 
+   则必须将该过程包裹在 lock() 和 unlock() 之间, 否则刚分配出的对象可能会被立即回收.
+
 */
 
 // fixed configuration
@@ -164,6 +168,7 @@ private:
 #define ZETA_GC_SURVIVOR_SCALE 2
 #define ZETA_GC_AGE_THRESHOLD 10
 #define ZETA_GC_BIG_OBJECT 512
+#define ZETA_GC_TEMP_SIZE 16384 // 16 KiB
 
 class GC {
 public:
@@ -183,6 +188,17 @@ public:
     Block* allocateBlock(int size);
     void writeBarrier(Object* src, Object** field, Object* value); // must be called when src->field = value.
     void writeBarrier(Object* src, Value* field, Value value);
+
+    void lock(){
+        ++locked;
+    }
+    void unlock(){
+        --locked;
+        if(locked == 0 && curTempPtr != temp) {
+            fullGC();
+            curTempPtr = temp;
+        }
+    }
 
 private:
     VM* vm;
@@ -209,12 +225,18 @@ private:
 
     PointerHashSet rememberedSet; // the location of the field in old generation that points to young generation
 
+    void* temp;
+    void* tempEnd;
+    void* curTempPtr;
+    int locked = false;
+
     bool isYoung(void* obj);
     bool isOld(void* obj);
     bool inEden(void* obj);
     bool inFrom(void* obj);
     bool inTo(void* obj);
     bool inHeap(void* ptr);
+    bool inTemp(void* ptr);
 
     Object* allocateImpl(int size);
     Object* allocateInOld(int size);
@@ -222,6 +244,10 @@ private:
 
     void minorGC(); // for young generation
     void fullGC(); // for the entire heap
+
+    template<typename F>
+    requires std::is_invocable_v<F, Value&>
+    void forEachRoot(F&& f);
 };
 
 }

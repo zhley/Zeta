@@ -106,40 +106,42 @@ Value VM::callMethod(Value instance, const std::string& methodName, int argc, Va
 }
 
 // if this instance needs to be held long-term, call pushTempRoot to store it in the temporary root set, otherwise it may be collected by GC.
-Value VM::instantiate(const std::string& moduleName, const std::string& className, int argc, Value* args) {
+Value* VM::instantiate(const std::string& moduleName, const std::string& className, int argc, Value* args) {
     Value classVal = getGlobal(moduleName, className);
     if(classVal.type != Value::Type::Object || classVal.ptrValue->type != Object::Type::Class) {
         errorHandler({Error::Type::RuntimeError, 0, std::format("\"{}\" in module \"{}\" is not a class", className, moduleName)});
-        return Value::Error;
+        return nullptr;
     }
     Class* cls = static_cast<Class*>(classVal.ptrValue);
+    gc->lock();
     Instance* instance = gc->allocate<Instance>(gc.get(), cls);
+    tempRoots.push_back(std::make_unique<Value>(instance));
+    Value* instancePtr = tempRoots.back().get();
+    gc->unlock();
     // call constructor if exists
     auto ctorValOpt = cls->methods->get(STRINGS._init);
     if(ctorValOpt.has_value()) {
         Value ctorVal = ctorValOpt.value();
         assert(ctorVal.type == Value::Type::Function);
         Value* newArgs = static_cast<Value*>(std::malloc((argc + 1) * sizeof(Value)));
-        newArgs[0] = Value(instance);
+        newArgs[0] = *instancePtr;
         std::memcpy(newArgs + 1, args, argc * sizeof(Value));
         callFunction(ctorVal.funcValue, argc + 1, newArgs);
         std::free(newArgs);
     }
-    return Value(instance);
+    return instancePtr;
 }
 
-Value* VM::pushTempRoot(Value value) {
-    tempRoots.push_back(std::make_unique<Value>(value));
-    return tempRoots.back().get();
-}
-
-void VM::popTempRoot(Value* value) {
-    auto it = std::find_if(tempRoots.begin(), tempRoots.end(), [value](const std::unique_ptr<Value>& ptr) {
-        return ptr.get() == value;
+void VM::discardInstance(Value* instance) {
+    auto it = std::find_if(tempRoots.begin(), tempRoots.end(), [instance](const std::unique_ptr<Value>& ptr) {
+        return ptr.get() == instance;
     });
-    assert(it != tempRoots.end());
-    std::swap(*it, tempRoots.back());
-    tempRoots.pop_back();
+    if(it != tempRoots.end()) {
+        std::swap(*it, tempRoots.back());
+        tempRoots.pop_back();
+    } else {
+        errorHandler({Error::Type::RuntimeError, 0, "discardInstance() called on a non-temp-root instance"});
+    }
 }
 
 void VM::registerFunction(const std::string& name, NativeFunction func) {
@@ -151,6 +153,7 @@ void VM::registerFunction(const std::string& name, NativeFunction func) {
 
 void VM::registerClass(const std::string& name, const std::vector<std::pair<std::string, Value>>& fields, const std::vector<std::pair<std::string, NativeFunction>>& methods) {
     String* nameStr = internString(name);
+    gc->lock();
     Map* fieldMap = gc->allocate<Map>(gc.get(), fields.size());
     for(const auto& [fieldName, fieldVal] : fields) {
         fieldMap->set(internString(fieldName), fieldVal);
@@ -162,18 +165,23 @@ void VM::registerClass(const std::string& name, const std::vector<std::pair<std:
     Class* cls = gc->allocate<Class>(gc.get(), nameStr, nullptr, fieldMap, methodMap);
     uint32_t index = global.size();
     global.push_back(Value(cls));
+    gc->unlock();
     registeredSyms[name] = index;
 }
 
-Value VM::wrapPointer(void* ptr, Value class_) {
+Value* VM::wrapPointer(void* ptr, Value class_) {
     if(class_.type != Value::Type::Object || class_.ptrValue->type != Object::Type::Class) {
         errorHandler({Error::Type::RuntimeError, 0, "wrapPointer() expects a Class object"});
-        return Value::Error;
+        return nullptr;
     }
     Class* cls = static_cast<Class*>(class_.ptrValue);
+    gc->lock();
     Instance* instance = gc->allocate<Instance>(gc.get(), cls);
+    tempRoots.push_back(std::make_unique<Value>(instance));
+    Value* instancePtr = tempRoots.back().get();
     instance->fields->set(STRINGS._cpp_ptr, Value((int64_t)ptr));
-    return Value(instance);
+    gc->unlock();
+    return instancePtr;
 }
 
 void* VM::unwrapPointer(Value obj) {
@@ -294,13 +302,17 @@ void VM::importModule(const std::filesystem::path& path) {
         auto& proto = module->protos[i];
         auto& routine = routines[moduleInfo.protoBaseIndex + i];
         for(const auto& constVal : proto->constants) {
+            gc->lock();
             routine->constants.push_back(makeValue(makeValue, constVal));
+            gc->unlock();
         }
     }
 
     for(const auto& [symName, sym] : module->globalSyms) {
         uint32_t index = global.size();
+        gc->lock();
         global.push_back(makeValue(makeValue, sym.initValue));
+        gc->unlock();
         moduleInfo.symbolMap[symName] = index;
         for(const auto& pos : sym.relocations) {
             uint32_t routineIndex = moduleInfo.getRoutineIndex(pos.protoIndex);
@@ -528,8 +540,10 @@ Value VM::execute() {
                         break;
                     }
                 } else if(a.isString() && b.isString()) {
+                    gc->lock();
                     StrObj* str = gc->allocate<StrObj>(gc.get(), a.asString(), b.asString());
                     PUSH(Value(str));
+                    gc->unlock();
                     break;
                 }
                 errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), "Unsupported operand types for Add"});
@@ -992,6 +1006,7 @@ Value VM::execute() {
                     curRoutine = curFrame->routine;
                 } else if(callee.type == Value::Type::Object && callee.ptrValue->type == Object::Type::Class) {
                     Class* cls = static_cast<Class*>(callee.ptrValue);
+                    gc->lock();
                     Instance* instance = gc->allocate<Instance>(gc.get(), cls);
                     auto constructor = cls->methods->get(STRINGS._init);
                     if(constructor.has_value()) {
@@ -1008,6 +1023,7 @@ Value VM::execute() {
                             return Value::Error;
                         }
                         newFrame.base[0] = Value(instance); // push 'this' as the first argument
+                        gc->unlock();
                         for(int i = routine->arity - 1; i >= 1; i--) {
                             newFrame.base[i] = POP();
                         }
@@ -1016,6 +1032,7 @@ Value VM::execute() {
                         curRoutine = curFrame->routine;
                     } else {
                         PUSH(Value(instance));
+                        gc->unlock();
                     }
                 } else {
                     errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), "Call: callee must be a function"});
@@ -1347,12 +1364,16 @@ Value VM::execute() {
                         }
                         if(objVal.ptrValue->type == Object::Type::Array) {
                             Array* arr = static_cast<Array*>(objVal.ptrValue);
+                            gc->lock();
                             Iterator* iter = gc->allocate<Iterator>(gc.get(), arr);
                             PUSH(Value(iter));
+                            gc->unlock();
                         } else if(objVal.ptrValue->type == Object::Type::Map) {
                             Map* map = static_cast<Map*>(objVal.ptrValue);
+                            gc->lock();
                             Iterator* iter = gc->allocate<Iterator>(gc.get(), map);
                             PUSH(Value(iter));
+                            gc->unlock();
                         } else if (objVal.ptrValue->type == Object::Type::Instance) {
                             Instance* instance = static_cast<Instance*>(objVal.ptrValue);
                             auto iterMethodOpt = instance->cls->methods->get(STRINGS._iter);
@@ -1426,8 +1447,10 @@ Value VM::execute() {
                         assert(sizeVal.type == Value::Type::Int);
                         int64_t size = sizeVal.intValue;
                         assert(size >= 0);
+                        gc->lock();
                         Array* arr = gc->allocate<Array>(gc.get(), static_cast<uint32_t>(size));
                         PUSH(Value(arr));
+                        gc->unlock();
                         break;
                     }
                     case Builtin::NewMap: {
@@ -1435,8 +1458,10 @@ Value VM::execute() {
                         assert(sizeVal.type == Value::Type::Int);
                         int64_t size = sizeVal.intValue;
                         assert(size >= 0);
+                        gc->lock();
                         Map* map = gc->allocate<Map>(gc.get(), static_cast<uint32_t>(size));
                         PUSH(Value(map));
+                        gc->unlock();
                         break;
                     }
                     case Builtin::Print: {
@@ -1505,8 +1530,10 @@ Value VM::execute() {
                     case Builtin::Input: {
                         std::string input;
                         std::cin >> input;
+                        gc->lock();
                         StrObj* str = gc->allocate<StrObj>(gc.get(), input.c_str(), input.size());
                         PUSH(Value(str));
+                        gc->unlock();
                         break;
                     }
                     case Builtin::Error: {
@@ -1608,12 +1635,16 @@ Value VM::execute() {
                         Value val = POP();
                         if(val.type == Value::Type::Int) {
                             std::string str = std::to_string(val.intValue);
+                            gc->lock();
                             StrObj* strObj = gc->allocate<StrObj>(gc.get(), str.c_str(), str.size());
                             PUSH(Value(strObj));
+                            gc->unlock();
                         } else if(val.type == Value::Type::Float) {
                             std::string str = std::to_string(val.floatValue);
+                            gc->lock();
                             StrObj* strObj = gc->allocate<StrObj>(gc.get(), str.c_str(), str.size());
                             PUSH(Value(strObj));
+                            gc->unlock();
                         } else if(val.type == Value::Type::Bool) {
                             PUSH(Value(val.boolValue ? STRINGS.true_ : STRINGS.false_));
                         } else if(val.type == Value::Type::Null) {

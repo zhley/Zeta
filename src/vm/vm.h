@@ -70,12 +70,11 @@ public:
 
     Value callFunction(const std::string& moduleName, const std::string& funcName, int argc, Value* args);
     Value callMethod(Value instance, const std::string& methodName, int argc, Value* args);
-    Value instantiate(const std::string& moduleName, const std::string& className, int argc, Value* args);
-    Value* pushTempRoot(Value value);
-    void popTempRoot(Value* value);
+    Value* instantiate(const std::string& moduleName, const std::string& className, int argc, Value* args);
+    void discardInstance(Value* instance);
     void registerFunction(const std::string& name, NativeFunction func);
     void registerClass(const std::string& name, const std::vector<std::pair<std::string, Value>>& fields, const std::vector<std::pair<std::string, NativeFunction>>& methods);
-    Value wrapPointer(void* ptr, Value class_);
+    Value* wrapPointer(void* ptr, Value class_);
     void* unwrapPointer(Value obj);
     Value getGlobal(const std::string& moduleName, const std::string& globalName);
 
