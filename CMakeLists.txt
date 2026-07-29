@@ -24,11 +24,52 @@ BISON_TARGET(Parser src/compiler/zeta.y ${PARSER_OUTPUT}
 
 add_flex_bison_dependency(Scanner Parser)
 
-file(GLOB_RECURSE ZETA_SRC
-    src/*.cpp
-    src/*.h
+file(GLOB CORE_SRC
+    src/compiler/*.cpp
+    src/compiler/*.h
+    src/utils/*.cpp
+    src/utils/*.h
+    src/vm/*.cpp
+    src/vm/*.h
 )
 
-add_executable(zeta ${ZETA_SRC} ${LEXER_OUTPUT} ${PARSER_OUTPUT})
-target_include_directories(zeta PRIVATE ${GEN_DIR} src)
+set(LIB_SRC ${CORE_SRC} ${LEXER_OUTPUT} ${PARSER_OUTPUT})
+set(APP_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp)
 
+add_library(zeta_core STATIC ${LIB_SRC})
+target_include_directories(zeta_core PRIVATE ${GEN_DIR} src)
+
+set(PUBLIC_INCLUDE_DIR ${CMAKE_BINARY_DIR}/include)
+file(MAKE_DIRECTORY ${PUBLIC_INCLUDE_DIR})
+set(PUBLIC_HEADERS
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/compiler/ast.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/compiler/bytecode.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/compiler/compiler.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/compiler/error.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/compiler/translate.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/compiler/visitor.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/utils/utils.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/vm/vm.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/vm/value.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/vm/gc.h
+)
+set(PUBLIC_HEADER_BASE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+foreach(HEADER ${PUBLIC_HEADERS})
+    file(RELATIVE_PATH REL_PATH ${PUBLIC_HEADER_BASE} ${HEADER})
+    set(DEST_FILE ${PUBLIC_INCLUDE_DIR}/${REL_PATH})
+    get_filename_component(DEST_DIR ${DEST_FILE} DIRECTORY)
+    add_custom_command(
+        OUTPUT ${DEST_FILE}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${DEST_DIR}
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${HEADER} ${DEST_FILE}
+        DEPENDS ${HEADER}
+        COMMENT "Copying public header: ${REL_PATH}"
+    )
+    target_sources(zeta_core PRIVATE ${DEST_FILE})
+endforeach()
+
+target_include_directories(zeta_core PUBLIC ${PUBLIC_INCLUDE_DIR})
+
+add_executable(zeta ${APP_SRC})
+target_link_libraries(zeta zeta_core)

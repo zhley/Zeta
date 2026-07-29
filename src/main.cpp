@@ -1,5 +1,4 @@
 #include "vm/vm.h"
-#include "log.h"
 
 #include <iostream>
 
