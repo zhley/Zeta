@@ -139,9 +139,12 @@ void Translator::visit(AST::VarDec& varDec) {
         }
         if(varDec.init){
             varDec.init->accept(*this);
-            pushOpcode(Opcode::StoreVar);
-            push4B(index);
+        } else {
+            pushOpcode(Opcode::LoadConst);
+            push4B(makeConstIdx(CompileValue()));
         }
+        pushOpcode(Opcode::StoreVar);
+        push4B(index);
     }
 }
 

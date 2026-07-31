@@ -87,7 +87,7 @@ enum class Builtin : uint8_t {
 
 struct BuiltinDesc {
     Builtin id;
-    std::string funcName;
+    const char* funcName;
     int stackDelta;
 };
 
@@ -399,7 +399,7 @@ inline void printBytecode(const std::vector<uint8_t>& bytecode){
                 uint8_t id = readByte(ip);
                 const char* name = "???";
                 for (const auto& bd : builtinTable) {
-                    if (static_cast<uint8_t>(bd.id) == id) { name = bd.funcName.c_str(); break; }
+                    if (static_cast<uint8_t>(bd.id) == id) { name = bd.funcName; break; }
                 }
                 std::cout << std::format("CallBuiltin {}\n", name);
                 break;

@@ -1,5 +1,5 @@
 %option yylineno
-%option noyywrap
+%option noyywrap never-interactive nounistd
 
 %{
     #include "syntax.tab.hpp"

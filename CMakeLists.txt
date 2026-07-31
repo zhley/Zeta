@@ -9,8 +9,18 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
-find_package(FLEX REQUIRED)
-find_package(BISON REQUIRED)
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
+
+if(WIN32)
+    set(WINFLEXBISON_DIR ${CMAKE_SOURCE_DIR}/tools/win_flex_bison)
+    find_program(FLEX_EXECUTABLE win_flex.exe PATHS ${WINFLEXBISON_DIR} NO_DEFAULT_PATH REQUIRED)
+    find_program(BISON_EXECUTABLE win_bison.exe PATHS ${WINFLEXBISON_DIR} NO_DEFAULT_PATH REQUIRED)
+else()
+    find_program(FLEX_EXECUTABLE flex REQUIRED)
+    find_program(BISON_EXECUTABLE bison REQUIRED)
+endif()
 
 set(GEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/gen)
 file(MAKE_DIRECTORY ${GEN_DIR})
@@ -18,19 +28,26 @@ set(LEXER_OUTPUT ${GEN_DIR}/lex.yy.cpp)
 set(PARSER_OUTPUT ${GEN_DIR}/syntax.tab.cpp)
 set(PARSER_HEADER ${GEN_DIR}/syntax.tab.hpp)
 
-FLEX_TARGET(Scanner src/compiler/zeta.l ${LEXER_OUTPUT})
-BISON_TARGET(Parser src/compiler/zeta.y ${PARSER_OUTPUT}
-    COMPILE_FLAGS "-d --defines=${PARSER_HEADER}")
+add_custom_command(
+    OUTPUT ${LEXER_OUTPUT}
+    COMMAND ${FLEX_EXECUTABLE} -o ${LEXER_OUTPUT} ${CMAKE_CURRENT_SOURCE_DIR}/src/compiler/zeta.l
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/compiler/zeta.l
+    COMMENT "Running Flex to generate lexer"
+    VERBATIM
+)
 
-add_flex_bison_dependency(Scanner Parser)
+add_custom_command(
+    OUTPUT ${PARSER_OUTPUT} ${PARSER_HEADER}
+    COMMAND ${BISON_EXECUTABLE} -d --defines=${PARSER_HEADER} -o ${PARSER_OUTPUT} ${CMAKE_CURRENT_SOURCE_DIR}/src/compiler/zeta.y
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/src/compiler/zeta.y
+    COMMENT "Running Bison to generate parser"
+    VERBATIM
+)
 
 file(GLOB CORE_SRC
     src/compiler/*.cpp
-    src/compiler/*.h
     src/utils/*.cpp
-    src/utils/*.h
     src/vm/*.cpp
-    src/vm/*.h
 )
 
 set(LIB_SRC ${CORE_SRC} ${LEXER_OUTPUT} ${PARSER_OUTPUT})
@@ -38,6 +55,7 @@ set(APP_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp)
 
 add_library(zeta_core STATIC ${LIB_SRC})
 target_include_directories(zeta_core PRIVATE ${GEN_DIR} src)
+target_compile_options(zeta_core PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/Zc:__cplusplus>)
 
 set(PUBLIC_INCLUDE_DIR ${CMAKE_BINARY_DIR}/include)
 file(MAKE_DIRECTORY ${PUBLIC_INCLUDE_DIR})
