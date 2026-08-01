@@ -1,4 +1,4 @@
-#include "vm/vm.h"
+#include "zeta/vm/vm.h"
 
 #include <iostream>
 
