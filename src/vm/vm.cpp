@@ -10,8 +10,8 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
-#include <system_error>
 #include <format>
+#include <utility>
 
 // NOTE: VM 不会校验编译模块的合法性, 假设所有输入的模块都是合法的, 任何不合预期的模块输入都使用断言终止
 
@@ -51,18 +51,10 @@ VM 可以显式加载多个模块, 在显式加载模块时会自动加载import
 对于未指定模块名的外部符号, 按照导入的顺序查找. 如果有多个模块都定义了该符号, 则使用第一个模块中的定义, 不建议开发者依赖这一特性, 这种情况应该使用别名来避免.
 */
 
-std::string VM::loadModule(const std::string& filePath) {
-    std::error_code ec;
-    std::filesystem::path path = std::filesystem::canonical(filePath, ec);
-    if(ec) {
-        errorHandler({Error::Type::VMError, 0, std::format("Invalid module file path: \"{}\" <{}>", filePath, ec.message())});
-        return "";
-    } else if(!std::filesystem::is_regular_file(path)) {
-        errorHandler({Error::Type::VMError, 0, std::format("\"{}\" is not a regular file", filePath)});
-        return "";
-    }
-    importModule(path);
-    return path.string();
+// NOTE: import 应该写模块名而非路径 比如 import "/lib/zeta/math" 而不是 import "/lib/zeta/math.zt". 导入时会优先找 "lib/zeta/math.ztc", 再找 "lib/zeta/math.zt", 如果写的是"math.zt", 会找"math.zt.zt"
+
+void VM::loadModule(const Module* module) {
+    importModule(module);
 }
 
 Value VM::callFunction(const std::string& moduleName, const std::string& funcName, int argc, Value* args) {
@@ -218,18 +210,12 @@ Value VM::getGlobal(const std::string& moduleName, const std::string& globalName
     return Value::Error;
 }
 
-void VM::importModule(const std::filesystem::path& path) {
-    std::string pathStr = path.string();
-    if(loadedModules.find(pathStr) != loadedModules.end()) {
+void VM::importModule(const Module* module) {
+    const std::string& moduleName = module->name; 
+    if(loadedModules.find(moduleName) != loadedModules.end()) {
         return;
     }
-    std::string compileError;
-    std::unique_ptr<Module> module = compileModule(pathStr, &compileError);
-    if(!module) {
-        errorHandler({Error::Type::VMError, 0, "Failed to compile module: " + pathStr + "\n" + compileError});
-        return;
-    }
-    ModuleInfo& moduleInfo = loadedModules[pathStr];
+    ModuleInfo& moduleInfo = loadedModules[moduleName];
     moduleInfo.protoBaseIndex = routines.size();
 
     struct BaseClassPatch{
@@ -291,8 +277,8 @@ void VM::importModule(const std::filesystem::path& path) {
 
     for(auto& proto : module->protos) {
         auto routine = std::make_unique<Routine>();
-        routine->bytecode = std::move(proto->bytecode);
-        routine->lineInfo = std::move(proto->lineInfo);
+        routine->bytecode = proto->bytecode;
+        routine->lineInfo = proto->lineInfo;
         routine->arity = proto->arity;
         routine->localCount = proto->localCount;
         routine->maxStackSize = proto->maxStackSize;
@@ -321,21 +307,21 @@ void VM::importModule(const std::filesystem::path& path) {
             std::memcpy(routines[routineIndex]->bytecode.data() + offset, &index, 4);
         }
     }
-    std::vector<std::pair<std::string, std::string>> nameToPath;
+    std::vector<std::pair<std::string, std::string>> nameToFullname;
     for(const auto& import : module->imports) {
-        std::filesystem::path importPath = searchModuleFile(path, import);
-        if(importPath.empty()) {
-            errorHandler({Error::Type::VMError, 0, std::format("Failed to find imported module: \"{}\" imported by \"{}\"", import, pathStr)});
+        auto importPath = searchModuleFile(moduleName, import);
+        if(importPath.second.empty()) {
+            errorHandler({Error::Type::VMError, 0, std::format("Failed to find imported module: \"{}\" imported by \"{}\"", import, moduleName)});
             return;
         }
-        nameToPath.push_back({import, importPath.string()});
-        importModule(importPath);
+        nameToFullname.push_back({import, std::filesystem::path(importPath.second).replace_extension("").string()});
+        importModule(importPath.second, importPath.first);
     }
     for(const auto& extSym : module->externalSyms) {
         uint32_t index;
         if(extSym.moduleName.empty()) {
             bool found = false;
-            for(const auto& [import, importPath] : nameToPath) {
+            for(const auto& [import, importPath] : nameToFullname) {
                 const auto& symMap = loadedModules[importPath].symbolMap;
                 auto symIt = symMap.find(extSym.name);
                 if(symIt != symMap.end()) {
@@ -350,18 +336,18 @@ void VM::importModule(const std::filesystem::path& path) {
                 found = true;
             }
             if(!found) {
-                errorHandler({Error::Type::VMError, 0, std::format("Failed to resolve external symbol: \"{}\" in module \"{}\"", extSym.name, pathStr)});
+                errorHandler({Error::Type::VMError, 0, std::format("Failed to resolve external symbol: \"{}\" in module \"{}\"", extSym.name, moduleName)});
                 return;
             }
         } else {
-            auto it = std::find_if(nameToPath.begin(), nameToPath.end(), [&extSym](const std::pair<std::string, std::string>& p) {
+            auto it = std::find_if(nameToFullname.begin(), nameToFullname.end(), [&extSym](const std::pair<std::string, std::string>& p) {
                 return p.first == extSym.moduleName;
             });
-            assert(it != nameToPath.end());
+            assert(it != nameToFullname.end());
             const auto& symMap = loadedModules[it->second].symbolMap;
             auto symIt = symMap.find(extSym.name);
             if(symIt == symMap.end()) {
-                errorHandler({Error::Type::VMError, 0, std::format("Failed to resolve external symbol: \"{}\" in module \"{}\", module \"{}\" does not define the symbol", extSym.name, pathStr, extSym.moduleName)});
+                errorHandler({Error::Type::VMError, 0, std::format("Failed to resolve external symbol: \"{}\" in module \"{}\", module \"{}\" does not define the symbol", extSym.name, moduleName, extSym.moduleName)});
                 return;
             }
             index = symIt->second;
@@ -386,7 +372,7 @@ void VM::importModule(const std::filesystem::path& path) {
                 baseIdx = it->second;
             } else {
                 bool found = false;
-                for(const auto& [import, importPath] : nameToPath) {
+                for(const auto& [import, importPath] : nameToFullname) {
                     const auto& symMap = loadedModules[importPath].symbolMap;
                     auto symIt = symMap.find(patch.baseClassNames.second);
                     if(symIt != symMap.end()) {
@@ -401,19 +387,19 @@ void VM::importModule(const std::filesystem::path& path) {
                     found = true;
                 }
                 if(!found) {
-                    errorHandler({Error::Type::VMError, 0, std::format("Failed to resolve base class: \"{}\" for class \"{}\" in module \"{}\"", patch.baseClassNames.second, patch.className, pathStr)});
+                    errorHandler({Error::Type::VMError, 0, std::format("Failed to resolve base class: \"{}\" for class \"{}\" in module \"{}\"", patch.baseClassNames.second, patch.className, moduleName)});
                     return;
                 }
             }
         } else {
-            auto it = std::find_if(nameToPath.begin(), nameToPath.end(), [&patch](const std::pair<std::string, std::string>& p) {
+            auto it = std::find_if(nameToFullname.begin(), nameToFullname.end(), [&patch](const std::pair<std::string, std::string>& p) {
                 return p.first == patch.baseClassNames.first;
             });
-            assert(it != nameToPath.end());
+            assert(it != nameToFullname.end());
             const auto& symMap = loadedModules[it->second].symbolMap;
             auto symIt = symMap.find(patch.baseClassNames.second);
             if(symIt == symMap.end()) {
-                errorHandler({Error::Type::VMError, 0, std::format("Failed to resolve base class: \"{}\" for class \"{}\" in module \"{}\", module \"{}\" does not define the class", patch.baseClassNames.second, patch.className, pathStr, patch.baseClassNames.first)});
+                errorHandler({Error::Type::VMError, 0, std::format("Failed to resolve base class: \"{}\" for class \"{}\" in module \"{}\", module \"{}\" does not define the class", patch.baseClassNames.second, patch.className, moduleName, patch.baseClassNames.first)});
                 return;
             }
             baseIdx = symIt->second;
@@ -424,29 +410,64 @@ void VM::importModule(const std::filesystem::path& path) {
     }
 }
 
-std::filesystem::path VM::searchModuleFile(const std::filesystem::path& basePath, const std::string& moduleName) {
+void VM::importModule(const std::filesystem::path& path, bool isSrcFile) {
+    std::unique_ptr<Module> module;
+    std::string error;
+    if(isSrcFile){
+        module = compileModule(path.string(), &error);
+        if(!module) {
+            errorHandler({Error::Type::VMError, 0, std::format("Failed to compile module from source file {}: {}", path.string(), error)});
+            return;
+        }
+    } else {
+        module = deserializeModule(path.string(), &error);
+        if(!module) {
+            errorHandler({Error::Type::VMError, 0, std::format("Failed to deserialize module from {}: {}", path.string(), error)});
+            return;
+        }
+    }
+    importModule(module.get());
+}
+
+std::pair<bool, std::filesystem::path> VM::searchModuleFile(const std::filesystem::path& basePath, const std::string& moduleName) {
+    auto tryFindFile = [](const std::filesystem::path& path) -> std::pair<bool, std::filesystem::path> {
+        auto bcPath = std::filesystem::path(path).concat(ZETA_BC_EXT);
+        if(std::filesystem::exists(bcPath) && std::filesystem::is_regular_file(bcPath)) {
+            return {false, bcPath};
+        }
+        auto srcPath = std::filesystem::path(path).concat(ZETA_SRC_EXT);
+        if(std::filesystem::exists(srcPath) && std::filesystem::is_regular_file(srcPath)) {
+            return {true, srcPath};
+        }
+        return {false, std::filesystem::path()};
+    };
+
     // 1. based on the directory of the importing module
     std::filesystem::path candidate = (basePath.parent_path() / moduleName).lexically_normal();
-    if(std::filesystem::exists(candidate) && std::filesystem::is_regular_file(candidate)) {
-        return candidate;
+    auto result = tryFindFile(candidate);
+    if(!result.second.empty()) {
+        return result;
     }
     // 2. absolute path or relative to current working directory
     candidate = std::filesystem::path(moduleName);
     if(candidate.is_absolute()) {
-        if(std::filesystem::exists(candidate) && std::filesystem::is_regular_file(candidate)) {
-            return candidate;
+        result = tryFindFile(candidate);
+        if(!result.second.empty()) {
+            return result;
         }
     } else {
         candidate = (std::filesystem::current_path() / candidate).lexically_normal();
-        if(std::filesystem::exists(candidate) && std::filesystem::is_regular_file(candidate)) {
-            return candidate;
+        result = tryFindFile(candidate);
+        if(!result.second.empty()) {
+            return result;
         }
     }
     // 3. search in module search paths
     for(const auto& searchPath : config.moduleSearchPaths) {
         candidate = (std::filesystem::path(searchPath) / moduleName).lexically_normal();
-        if(std::filesystem::exists(candidate) && std::filesystem::is_regular_file(candidate)) {
-            return candidate;
+        result = tryFindFile(candidate);
+        if(!result.second.empty()) {
+            return result;
         }
     }
     return {};

@@ -16,6 +16,9 @@ struct CompileFunction;
 struct CompileClass;
 struct CompileValue;
 
+#define ZETA_SRC_EXT ".zt" // source file extension
+#define ZETA_BC_EXT ".ztc" // bytecode file extension
+
 // TODO: 加入一些 push 常量的指令提高效率, 比如PushInt, PushFloat, PushNull
 enum class Opcode : uint8_t {
     Nop         = 0x00,
@@ -123,15 +126,15 @@ struct CompileClass {
 
 struct CompileValue{
     enum class Type : uint8_t {
-        Null = 0x00,
-        Int,
-        Float,
-        Bool,
-        String,
-        Array,
-        Map,
-        Function,
-        Class
+        Null        = 0x00,
+        Int         = 0x01,
+        Float       = 0x02,
+        Bool        = 0x03,
+        String      = 0x04,
+        Array       = 0x05,
+        Map         = 0x06,
+        Function    = 0x07,
+        Class       = 0x08
     } type;
     union {
         int64_t intValue;
@@ -221,12 +224,12 @@ struct CompileValue{
 
 struct Proto {
     uint32_t index;
-    std::vector<uint8_t> bytecode;
-    std::vector<std::pair<uint32_t, uint32_t>> lineInfo; // <bytecode_offset, line_number>
-    std::vector<CompileValue> constants;
     int arity = 0;
     int localCount = 0;
     int maxStackSize = 0; // max operand stack size
+    std::vector<uint8_t> bytecode;
+    std::vector<CompileValue> constants;
+    std::vector<std::pair<uint32_t, uint32_t>> lineInfo; // <bytecode_offset, line_number>
 };
 
 struct Pos{
@@ -235,7 +238,7 @@ struct Pos{
 };
 
 struct Symbol{
-    bool valid = false;
+    bool valid = false; // internal use only in compiler
     bool isMutable;
     CompileValue initValue;
     std::vector<Pos> relocations;
@@ -252,12 +255,14 @@ struct ExtSymbol{
 };
 
 struct Module{
+    std::string name; // NOTE: 模块唯一标识符. 由得到该模块的文件路径去掉扩展名后得到, 例如 "/lib/zeta/math.zt" -> "/lib/zeta/math", "C:\\lib\\zeta\\math.ztc" -> "C:\\lib\\zeta\\math"
     std::vector<std::string> imports;
     std::unordered_map<std::string, Symbol> globalSyms;
     std::vector<ExtSymbol> externalSyms;
     std::vector<std::unique_ptr<Proto>> protos;
 };
 
+// TODO: temp
 inline void printBytecode(const std::vector<uint8_t>& bytecode){
     auto readUint32 = [&](uint32_t& ip) -> uint32_t {
         uint32_t v;

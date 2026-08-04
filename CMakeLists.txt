@@ -53,6 +53,12 @@ file(GLOB CORE_SRC
 set(LIB_SRC ${CORE_SRC} ${LEXER_OUTPUT} ${PARSER_OUTPUT})
 set(APP_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp)
 
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/config.h.in
+    ${GEN_DIR}/config.h
+    @ONLY
+)
+
 add_library(zeta_core STATIC ${LIB_SRC})
 target_include_directories(zeta_core PRIVATE ${GEN_DIR} src)
 target_compile_options(zeta_core PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/Zc:__cplusplus>)
@@ -77,15 +83,19 @@ foreach(HEADER ${PUBLIC_HEADERS})
     set(DEST_FILE ${PUBLIC_INCLUDE_DIR}/zeta/${REL_PATH})
     get_filename_component(DEST_DIR ${DEST_FILE} DIRECTORY)
     add_custom_command(
-        OUTPUT ${DEST_FILE}
+        TARGET zeta_core PRE_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory ${DEST_DIR}
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             ${HEADER} ${DEST_FILE}
         DEPENDS ${HEADER}
         COMMENT "Copying public header: ${REL_PATH}"
     )
-    target_sources(zeta_core PRIVATE ${DEST_FILE})
 endforeach()
+add_custom_command(
+    TARGET zeta_core PRE_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${GEN_DIR}/config.h ${PUBLIC_INCLUDE_DIR}/zeta/config.h
+    DEPENDS ${GEN_DIR}/config.h
+)
 
 target_include_directories(zeta_core PUBLIC ${PUBLIC_INCLUDE_DIR})
 

@@ -1,7 +1,7 @@
 // Main module that imports others
-import "tests/module/mod_a.zt" as a;
-import "tests/module/mod_b.zt" as b;
-import "tests/module/mod_c.zt";
+import "tests/module/mod_a" as a;
+import "tests/module/mod_b" as b;
+import "tests/module/mod_c";
 
 fn main() {
     var pass = 0;

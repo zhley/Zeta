@@ -1,40 +1,5 @@
-class A{
-    var a;
-    let b;
-
-    fn say(){
-        println("Hello");
-    }
-}
+import "tests/hex" as h;
 
 fn main(){
-    var a = 1;
-    var b = 2.0;
-    var c = "Hello";
-    var d = true;
-    var e = null;
-    var f = main;
-    var g = A;
-    var h = "2e-2";
-    var i = "1" + h;
-
-    println(type(a));
-    println(type(b));
-    println(type(c));
-    println(type(d));
-    println(type(e));
-    println(type(f));
-    println(type(g));
-    println(type(h));
-    println(type(i));
-
-    println(int(1.5));
-    println(float(1));
-    println(str(1.5));
-    println(float(h));
-    println(float(i));
-
-    var obj = A();
-    obj.say();
-    A.say(obj);
+    return h.PI;
 }

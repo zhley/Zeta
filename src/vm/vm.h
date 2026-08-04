@@ -19,9 +19,9 @@
 
 // TODO: 模块名去掉后缀, 设计一个字节码文件格式, 支持先编译成字节码文件, 然后再加载字节码文件
 
-// TODO: !!!目前的代码存在瞬时对象丢失的风险, 连续两次 allocate, 第一次 allocate 出的对象由于没来得及保存到根集, 可能在第二次 allocate 时触发GC被立即回收.
-
 namespace Zeta {
+
+class Module;
 
 class VM {
 public:
@@ -66,7 +66,7 @@ public:
 
     void setErrorHandler(const ErrorHandler& handler) { errorHandler = handler; }
 
-    std::string loadModule(const std::string& filePath);
+    void loadModule(const Module* module);
 
     Value callFunction(const std::string& moduleName, const std::string& funcName, int argc, Value* args);
     Value callMethod(Value instance, const std::string& methodName, int argc, Value* args);
@@ -95,8 +95,9 @@ private:
     std::vector<std::unique_ptr<Routine>> routines; // [module1.protos[0], module1.protos[1], ..., module2.protos[0], ...]
     std::vector<std::unique_ptr<Value>> tempRoots;
 
-    void importModule(const std::filesystem::path& path);
-    std::filesystem::path searchModuleFile(const std::filesystem::path& basePath, const std::string& moduleName);
+    void importModule(const Module* module);
+    void importModule(const std::filesystem::path& path, bool isSrcFile);
+    std::pair<bool, std::filesystem::path> searchModuleFile(const std::filesystem::path& basePath, const std::string& moduleName);
     
     Value callFunction(Routine* func, int argc, Value* args);
     Value execute();
