@@ -282,24 +282,34 @@ bool boolean(const Zeta::AST::LiteralExp* exp){
 
 std::unique_ptr<Zeta::AST::Exp> tryExpFold(std::unique_ptr<Zeta::AST::Exp> exp) {
     if(!exp) return nullptr;
-    auto makeInt = [](int64_t value) {
+    int line = exp->line;
+    int column = exp->column;
+    auto makeInt = [line, column](int64_t value) {
         auto out = std::make_unique<Zeta::AST::IntLitExp>();
         out->value = value;
+        out->line = line;
+        out->column = column;
         return out;
     };
-    auto makeFloat = [](double value) {
+    auto makeFloat = [line, column](double value) {
         auto out = std::make_unique<Zeta::AST::FloatLitExp>();
         out->value = value;
+        out->line = line;
+        out->column = column;
         return out;
     };
-    auto makeStr = [](std::string value) {
+    auto makeStr = [line, column](std::string value) {
         auto out = std::make_unique<Zeta::AST::StrLitExp>();
         out->value = std::move(value);
+        out->line = line;
+        out->column = column;
         return out;
     };
-    auto makeBool = [](bool value) {
+    auto makeBool = [line, column](bool value) {
         auto out = std::make_unique<Zeta::AST::BoolLitExp>();
         out->value = value;
+        out->line = line;
+        out->column = column;
         return out;
     };
     switch(exp->type) {

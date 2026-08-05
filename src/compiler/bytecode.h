@@ -85,7 +85,8 @@ enum class Builtin : uint8_t {
     Type        = 0x0A,
     Int         = 0x0B,
     Float       = 0x0C,
-    Str         = 0x0D
+    Str         = 0x0D,
+    Assert      = 0x0E
 };
 
 struct BuiltinDesc {
@@ -109,7 +110,8 @@ inline constexpr BuiltinDesc builtinTable[] = {
     {Builtin::Type, "type", 0},
     {Builtin::Int, "int", 0},
     {Builtin::Float, "float", 0},
-    {Builtin::Str, "str", 0}
+    {Builtin::Str, "str", 0},
+    {Builtin::Assert, "assert", 0}
 };
 inline constexpr int builtinTableSize = sizeof(builtinTable) / sizeof(BuiltinDesc);
 

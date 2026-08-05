@@ -1676,6 +1676,19 @@ Value VM::execute() {
                         }
                         break;
                     }
+                    case Builtin::Assert: {
+                        Value condition = POP();
+                        if(condition.type != Value::Type::Bool) {
+                            errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), "Assert: condition must be a boolean"});
+                            return Value::Error;
+                        }
+                        if(!condition.boolValue) {
+                            errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), "Assertion failed"});
+                            return Value::Error;
+                        }
+                        PUSH(Value::Null); 
+                        break;
+                    }
                     default: {
                         errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), std::format("Unknown builtin function: {:#04x}", builtinId)});
                         return Value::Error;
