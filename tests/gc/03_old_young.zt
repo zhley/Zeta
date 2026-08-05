@@ -1,0 +1,74 @@
+// GC: old-generation structures referencing young objects (the write
+// barrier / remembered-set path).
+//
+// The 100-element array's backing block is 800 B (> 512 B big-object
+// threshold), so it is allocated directly in the old generation: every
+// element store is an old->young write that goes through the remembered
+// set. Churn promotes the array object itself and ages every stored map;
+// the maps must survive solely via the remembered set. Later stores
+// exercise both the erase path (object -> non-object) and the re-insert
+// path (object -> object).
+
+fn churn(n) {
+    var i = 0;
+    while (i < n) {
+        var a = [i, i + 1, i + 2, i + 3];
+        var m = {x: i, y: str(i)};
+        var s = "garbage-" + str(i);
+        i = i + 1;
+    }
+}
+
+fn main() {
+    var keep = array(100);
+    var i = 0;
+    while (i < 100) {
+        keep[i] = {v: i, tag: "obj-" + str(i)};
+        i = i + 1;
+    }
+
+    // churn: promote keep and age the stored maps; any map lost here was
+    // reachable only through the remembered set
+    churn(40000);
+    i = 0;
+    while (i < 100) {
+        assert(keep[i]["v"] == i);
+        assert(keep[i]["tag"] == "obj-" + str(i));
+        i = i + 1;
+    }
+
+    // overwrite with fresh young objects, then churn again
+    i = 0;
+    while (i < 100) {
+        keep[i] = {v: i * 3, tag: "new-" + str(i)};
+        i = i + 1;
+    }
+    churn(40000);
+    i = 0;
+    while (i < 100) {
+        assert(keep[i]["v"] == i * 3);
+        assert(keep[i]["tag"] == "new-" + str(i));
+        i = i + 1;
+    }
+
+    // overwrite with non-objects: remembered-set erase path
+    i = 0;
+    while (i < 50) {
+        keep[i] = i;
+        i = i + 1;
+    }
+    churn(40000);
+    i = 0;
+    while (i < 50) {
+        assert(keep[i] == i);
+        i = i + 1;
+    }
+    i = 50;
+    while (i < 100) {
+        assert(keep[i]["v"] == i * 3);
+        i = i + 1;
+    }
+
+    print("gc_old_young: all passed\n");
+    return 0;
+}

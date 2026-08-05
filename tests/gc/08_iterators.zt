@@ -1,0 +1,63 @@
+// GC: iterators holding containers across collection cycles, including
+// churn inside iteration bodies and a manually driven iterator that
+// survives an entire churn phase.
+
+fn churn(n) {
+    var i = 0;
+    while (i < n) {
+        var a = [i, i + 1, i + 2, i + 3];
+        var m = {x: i, y: str(i)};
+        var s = "garbage-" + str(i);
+        i = i + 1;
+    }
+}
+
+fn main() {
+    var arr = array(0);
+    var i = 0;
+    while (i < 500) {
+        arr.add(i);
+        i = i + 1;
+    }
+
+    // for-in over an array with churn in the loop body
+    var sum = 0;
+    for (x : arr) {
+        sum = sum + x;
+        if (x % 100 == 0) {
+            churn(3000);
+        }
+    }
+    assert(sum == 124750);
+
+    // manual iterator object surviving an entire churn phase
+    var it = iter(arr);
+    churn(20000);
+    var sum2 = 0;
+    var v = next(it);
+    while (check(v)) {
+        sum2 = sum2 + v;
+        v = next(it);
+    }
+    assert(sum2 == 124750);
+
+    // nested for-in over map keys with churn per key
+    var m = {:};
+    i = 0;
+    while (i < 200) {
+        m[intern("k" + str(i))] = i;
+        i = i + 1;
+    }
+    var seen = 0;
+    var sum3 = 0;
+    for (k : m) {
+        churn(200);
+        seen = seen + 1;
+        sum3 = sum3 + m[k];
+    }
+    assert(seen == 200);
+    assert(sum3 == 19900);
+
+    print("gc_iterators: all passed\n");
+    return 0;
+}

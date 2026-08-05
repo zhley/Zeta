@@ -1,0 +1,42 @@
+// ARGS: -i 4 -m 1024
+// GC: heap growth. The retained array grows to ~160 KB, far beyond the
+// 4 KiB initial heap, forcing repeated full collections and growHeap();
+// every element must survive with correct content. With a 4 KiB heap the
+// survivor spaces are tiny, so nearly every minor collection overflows
+// into a full collection - this also stresses that fallback path.
+
+fn churn(n) {
+    var i = 0;
+    while (i < n) {
+        var a = [i, i + 1, i + 2];
+        var s = "grow-" + str(i);
+        i = i + 1;
+    }
+}
+
+fn main() {
+    var keep = array(0);
+    var sum = 0;
+    var i = 0;
+    while (i < 20000) {
+        keep.add(i);
+        sum = sum + i;
+        if (i % 500 == 0) {
+            churn(300);
+        }
+        i = i + 1;
+    }
+
+    // 19999 * 20000 / 2 = 199990000
+    assert(keep.size() == 20000);
+    var check = 0;
+    i = 0;
+    while (i < 20000) {
+        check = check + keep[i];
+        i = i + 1;
+    }
+    assert(check == 199990000);
+
+    print("gc_heap_growth: all passed\n");
+    return 0;
+}

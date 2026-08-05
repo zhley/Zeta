@@ -1,0 +1,43 @@
+// GC: mixed young-generation allocation churn under the default heap.
+// A small set of retained values (array, map, string) is updated while
+// bulk garbage is allocated; every retained value must stay correct.
+
+fn churn(n) {
+    var i = 0;
+    while (i < n) {
+        var a = [i, i + 1, i + 2, i + 3];
+        var m = {x: i, y: str(i)};
+        var s = "garbage-" + str(i);
+        i = i + 1;
+    }
+}
+
+fn main() {
+    var kept_arr = array(0);
+    var kept_map = {:};
+    var kept_str = "";
+    var i = 0;
+    while (i < 500) {
+        kept_arr.add(i);
+        kept_map[intern(str(i))] = i * 2;
+        kept_str = kept_str + "a";
+        if (i % 25 == 0) {
+            churn(2000);
+        }
+        i = i + 1;
+    }
+
+    // retained values survived the interleaved collections
+    assert(kept_arr.size() == 500);
+    assert(kept_map.size() == 500);
+    assert(kept_str.len() == 500);
+    i = 0;
+    while (i < 500) {
+        assert(kept_arr[i] == i);
+        assert(kept_map[intern(str(i))] == i * 2);
+        i = i + 1;
+    }
+
+    print("gc_young_churn: all passed\n");
+    return 0;
+}

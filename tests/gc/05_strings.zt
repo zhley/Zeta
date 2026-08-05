@@ -1,0 +1,69 @@
+// GC: GC-managed string objects (StrObj), string interning, and big
+// strings whose backing block (> 512 B) is allocated in the old
+// generation directly.
+
+fn churn(n) {
+    var i = 0;
+    while (i < n) {
+        var a = [i, i + 1, i + 2, i + 3];
+        var m = {x: i, y: str(i)};
+        var s = "garbage-" + str(i);
+        i = i + 1;
+    }
+}
+
+fn main() {
+    // grow a string across many concatenations, churning between them
+    var s = "";
+    var expected = "";
+    var i = 0;
+    while (i < 200) {
+        s = s + "abc";
+        expected = expected + "abc";
+        if (i % 20 == 0) {
+            churn(2000);
+        }
+        i = i + 1;
+    }
+    assert(s.len() == 600);
+    assert(s == expected);
+
+    // big string: backing block crosses the 512 B threshold and is
+    // allocated directly in the old generation
+    var big = "0123456789";
+    i = 0;
+    while (i < 80) {
+        big = big + "0123456789";
+        i = i + 1;
+    }
+    assert(big.len() == 810);
+    churn(20000);
+    assert(big.len() == 810);
+    assert(big == "012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789");
+
+    // interned strings: identity is preserved across collections
+    var k1 = intern("same-key");
+    var k2 = intern("same-key");
+    assert(k1 is k2);
+
+    // interned strings as map keys, with churn between stores
+    var m = {:};
+    i = 0;
+    while (i < 200) {
+        m[intern("key-" + str(i))] = i;
+        if (i % 20 == 0) {
+            churn(2000);
+        }
+        i = i + 1;
+    }
+    churn(20000);
+    assert(m.size() == 200);
+    i = 0;
+    while (i < 200) {
+        assert(m[intern("key-" + str(i))] == i);
+        i = i + 1;
+    }
+
+    print("gc_strings: all passed\n");
+    return 0;
+}

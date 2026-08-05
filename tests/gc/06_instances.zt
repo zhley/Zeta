@@ -1,0 +1,62 @@
+// GC: instance churn across inheritance; fields and method dispatch must
+// stay correct after many collection cycles.
+
+class Base {
+    var id = 0;
+    var name = "base";
+
+    fn label() {
+        return this.name + "#" + str(this.id);
+    }
+}
+
+class Derived extends Base {
+    var tag = null;
+
+    fn describe() {
+        return this.label() + "[" + this.tag + "]";
+    }
+}
+
+fn churn(n) {
+    var i = 0;
+    while (i < n) {
+        var a = [i, i + 1, i + 2, i + 3];
+        var m = {x: i, y: str(i)};
+        var s = "garbage-" + str(i);
+        i = i + 1;
+    }
+}
+
+fn main() {
+    // create 3000 instances, keep every 10th, let the rest die
+    var kept = array(0);
+    var i = 0;
+    while (i < 3000) {
+        var d = Derived();
+        d.id = i;
+        d.name = "node-" + str(i % 50);
+        d.tag = "tag-" + str(i);
+        if (i % 10 == 0) {
+            kept.add(d);
+        }
+        i = i + 1;
+    }
+    churn(20000);
+
+    // every retained instance must be intact: fields and inherited method
+    assert(kept.size() == 300);
+    i = 0;
+    while (i < 300) {
+        var src = i * 10;
+        var d = kept[i];
+        assert(d.id == src);
+        assert(d.name == "node-" + str(src % 50));
+        assert(d.tag == "tag-" + str(src));
+        assert(d.describe() == d.name + "#" + str(src) + "[" + d.tag + "]");
+        i = i + 1;
+    }
+
+    print("gc_instances: all passed\n");
+    return 0;
+}

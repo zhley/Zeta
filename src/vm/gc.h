@@ -177,6 +177,7 @@ public:
     GC(VM* vm);
     ~GC();
 
+    // TODO: 目前 OOM 分配失败的路径由于没做空指针检查, 程序会崩溃.
     template<typename T, typename... Args>
     requires (std::is_base_of_v<Object, T> && !std::is_same_v<T, Block>)
     T* allocate(Args&&... args) {

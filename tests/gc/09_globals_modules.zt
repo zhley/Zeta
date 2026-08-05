@@ -1,0 +1,51 @@
+// GC: module-level globals (own module and imported module) holding heap
+// objects must survive collection cycles.
+
+import "tests/gc/gc_mod" as m;
+
+// module-level global of this test itself
+var TOP = null;
+
+fn churn(n) {
+    var i = 0;
+    while (i < n) {
+        var a = [i, i + 1, i + 2, i + 3];
+        var m = {x: i, y: str(i)};
+        var s = "garbage-" + str(i);
+        i = i + 1;
+    }
+}
+
+fn main() {
+    var head = array(0);
+    var i = 0;
+    while (i < 200) {
+        head.add({n: i, s: "top-" + str(i)});
+        if (i % 20 == 0) {
+            churn(2000);
+        }
+        i = i + 1;
+    }
+    TOP = head;
+    m.store({v: 12345, name: "module-obj"});
+
+    churn(20000);
+
+    // own module global: same object, content intact
+    assert(TOP is head);
+    assert(TOP.size() == 200);
+    assert(TOP[50]["n"] == 50);
+    assert(TOP[199]["s"] == "top-199");
+
+    // imported module global: survives across the module boundary
+    assert(m.load()["v"] == 12345);
+    assert(m.load()["name"] == "module-obj");
+    var swapped = {v: 999, arr: [1, 2, 3]};
+    m.swap(swapped);
+    churn(20000);
+    assert(m.load() is swapped);
+    assert(m.load()["arr"][2] == 3);
+
+    print("gc_globals_modules: all passed\n");
+    return 0;
+}

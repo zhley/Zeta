@@ -1,0 +1,20 @@
+// ARGS: -i 8 -m 64
+// EXPECT: out_of_memory
+// GC: exceeding the max heap must produce a clean "Out of memory" VM
+// error, not a crash. All strings below are retained (~200 KB over a
+// 64 KiB max heap), which forces the OOM path.
+//
+// KNOWN-FAILING: the current GC null-dereferences on this path (the OOM
+// error handler prints, then the allocator returns null and the caller
+// crashes). This test is expected to go green after that bug is fixed.
+
+fn main() {
+    var keep = array(0);
+    var i = 0;
+    while (i < 2000) {
+        keep.add("payload-" + str(i) + "-xxxxxxxxxxxxxxxxxxxx");
+        i = i + 1;
+    }
+    print("gc_oom: unreachable\n");
+    return 0;
+}

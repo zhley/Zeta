@@ -56,14 +56,31 @@ tests/
 │   ├── mod_b.zt            # 被导入模块 B (依赖 A)
 │   ├── mod_c.zt            # 被导入模块 C (类导出)
 │   └── mod_main.zt         # 主模块 (导入 A, B, C)
-└── integration/            # 集成测试
-    ├── 01_fibonacci.zt     # 斐波那契 (迭代+递归)
-    ├── 02_sort.zt          # 冒泡排序
-    ├── 03_linked_list.zt   # 链表 (类实现)
-    ├── 04_count_words.zt   # 字符串和映射
-    ├── 05_calculator.zt    # 计算器 (方法链)
-    ├── 06_hanoi.zt         # 汉诺塔 (递归)
-    └── 07_prime.zt         # 埃氏筛 (数组)
+├── integration/            # 集成测试
+│   ├── 01_fibonacci.zt     # 斐波那契 (迭代+递归)
+│   ├── 02_sort.zt          # 冒泡排序
+│   ├── 03_linked_list.zt   # 链表 (类实现)
+│   ├── 04_count_words.zt   # 字符串和映射
+│   ├── 05_calculator.zt    # 计算器 (方法链)
+│   ├── 06_hanoi.zt         # 汉诺塔 (递归)
+│   └── 07_prime.zt         # 埃氏筛 (数组)
+└── gc/                     # GC 测试 (见下方 "GC 测试" 一节)
+    ├── 01_young_churn.zt   # 新生代分配压力下基本正确性
+    ├── 02_retained_structure.zt # 保留结构 (链表/树) 跨 GC 存活
+    ├── 03_old_young.zt     # 老年代对象引用新生代 (remembered set)
+    ├── 04_cycles.zt        # 循环引用图跨 GC 存活
+    ├── 05_strings.zt       # StrObj 拼接 / intern / 大字符串
+    ├── 06_instances.zt     # 继承实例 churn, 字段与方法分派
+    ├── 07_recursion.zt     # 深递归: 栈帧局部变量为根
+    ├── 08_iterators.zt     # 迭代器跨 GC 存活
+    ├── 09_globals_modules.zt # 模块级全局 (含跨模块) 跨 GC 存活
+    ├── 10_reclaim.zt       # 有界堆下回收验证 (-i 8 -m 128)
+    ├── 11_oom.zt           # 超限堆 → 干净 OOM 错误 (-i 8 -m 64, 已知失败)
+    ├── 12_heap_growth.zt   # 堆增长 (-i 4 -m 1024)
+    ├── 13_determinism.zt   # 不同堆配置下输出一致 (多参数对比)
+    ├── gc_mod.zt           # 09 的辅助模块 (不作为测试运行)
+    ├── run_gc.sh           # GC 测试运行脚本 (bash)
+    └── run_gc.ps1          # GC 测试运行脚本 (powershell)
 ```
 
 ## 运行测试
@@ -91,3 +108,52 @@ powershell -File tests/test.ps1
 - 所有断言通过后, 输出类似 `tests_name: all passed` 的汇总行。
 - `builtin/01_print.zt` 是人工检查输出的测试 (打印期望值对比); `builtin/07_input.zt` 读取标准输入, 需手动运行。
 - `super.method()` 的语义是"跳过当前方法所属的类, 从父类开始向上查找", 支持任意层数的继承链 (见 `class/06_super.zt`); 调用祖父类的方法也可以直接用类名调用, 如 `B.who(instance)`。
+
+## GC 测试 (`tests/gc/`)
+
+GC 测试是内存压力下的黑盒测试: 通过大量分配触发垃圾回收, 再校验保留数据的内容正确性。因为运行期错误 (包括 `assert` 失败) 后进程仍以 0 退出, 运行脚本以**输出是否包含 `all passed`** 判定成败, 而非退出码。
+
+### 文件头约定
+
+每个 `tests/gc/[0-9]*.zt` 可在文件开头声明 (均为 Zeta 注释, 故以 `//` 开头):
+
+- `// ARGS: <vm 参数> [;; <vm 参数> ...]`: 声明运行该测试的 VM 堆参数 (对应 `-i`/`-m` 等 CLI 选项)。多组参数以 `;;` 分隔; 此时脚本会每组各跑一次, 并检查**各组输出逐字节一致** (确定性检查: GC 调度不应影响结果)。无该注释时使用默认堆参数。
+- `// EXPECT: all_passed | out_of_memory`: 判定方式, 默认 `all_passed` (输出包含 "all passed")。`out_of_memory` 要求输出包含 "Out of memory" 且进程**未被信号杀死** (退出码 0)。
+
+`tests/gc/gc_mod.zt` 是 `09_globals_modules.zt` 的辅助模块 (被 import), 不属于测试用例, 通配符 `[0-9]*.zt` 会将其排除。
+
+### 运行方式
+
+```bash
+bash tests/gc/run_gc.sh       # 全部 GC 测试 (bash)
+# powershell -File tests/gc/run_gc.ps1
+```
+
+`bash tests/test.sh` 和 `tests/test.ps1` 已在末尾接入 GC 测试。
+
+### 已知失败用例 (2026-08-05 状态)
+
+首次运行本套件即暴露了 4 个真实缺陷, 全部修复前套件不会全绿。每个用例的失败归属如下表 (详见"调试笔记"一节):
+
+| 用例 | 现状 | 原因 |
+|---|---|---|
+| 01, 03, 05, 07, 09, 10, 12, 13 | 红 (崩溃或内容损坏) | R1: minorGC 的 remembered-set 标记不加入 worklist |
+| 02, 04, 08 | 红 (fullGC 断言 `*child`) | R2: fullGC 对 `Class::base == null` 断言/解引用 |
+| 06 | 红 (minorGC 313 断言) | R1 |
+| 11 | 红 (段错误, 预期) | OOM 路径空指针解引用 (已确认, 暂缓修复) |
+
+修复后各用例应自动转绿 (判定规则见上文, 与修复无关)。
+
+### 调试笔记
+
+1. **R1 (核心): minorGC 的 remembered-set 标记不加入 worklist** (`gc.cpp:253-258`)。
+   `rememberedSet.forEach` 只把仅被老对象引用的年轻对象标记为 `marked`, 没有 push 进 `worklist`, 导致这些对象从不被复制, `forward` 保持 0。随后在三个位置崩溃/损坏:
+   - 更新阶段 `gc.cpp:313` (`assert((*field)->gcWord.forward)`, 06 触发);
+   - 扫描阶段 `gc.cpp:325` (小堆复现触发);
+   - 溢出路径 (`gc.cpp:294-304`) 只清理 worklist 内对象的 `marked`, **未清理 remembered-set 标记的孤儿**, 孤儿带着 `marked=true` 进入后续 fullGC, 被 fullGC 的标记阶段跳过, 更新阶段 `gc.cpp:431` 把字段写成 `HEAP_PTR(0)` (堆基址), 产生内容损坏/段错误 (01/09/12/13 的 Runtime Error 与段错误均属此系)。
+   平时不暴露的原因: 被存进老容器的对象通常同时还是根 (局部变量), 能正常复制; 只有"存完即丢弃的临时对象" (map 字面量、函数调用结果) 会命中。
+2. **R2: fullGC 对 null 子节点断言** (`gc.cpp:361`)。`Class::base` 对无父类的类合法为 null, 而 `Class::trace` 无条件追踪 `base`, fullGC 标记阶段 `assert(*child)` 直接崩; 更新阶段 `gc.cpp:430-431` 同样会解引用 null。任何"含 class 且触发 fullGC"的程序都会命中 (02/04/08; 触发 fullGC 的途径: 大保留结构导致 minorGC 溢出, 或小堆)。
+3. **OOM 路径空指针解引用** (用户已确认, 暂缓): `allocateInOld`/`fullGC` 超限时 errorHandler 返回后返回 `nullptr`, 调用方解引用。11 用例的判定 (输出含 "Out of memory" 且未被信号杀死) 即为其回归标准。
+4. **编译器: `for-in` 循环内 `return` 编译期崩溃** (`translate.cpp:870` `calcMaxStackSize` 断言)。与 GC 无关; `while` 内提前 return、`for` 内 `break` 均正常。`02` 的 `tree_find` 已改写为 `while` 绕过, 修复后可以改回。
+
+最小复现: `/tmp/bug_a.zt` (R1, 默认堆), `/tmp/bug_b.zt` (R2, 需 `-i 8 -m 256`)。

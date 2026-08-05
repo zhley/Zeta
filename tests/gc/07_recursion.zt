@@ -1,0 +1,55 @@
+// GC: deep recursion - the locals of every live stack frame are GC roots
+// and must survive collections triggered deep inside the call stack.
+
+fn churn(n) {
+    var i = 0;
+    while (i < n) {
+        var a = [i, i + 1, i + 2, i + 3];
+        var m = {x: i, y: str(i)};
+        var s = "garbage-" + str(i);
+        i = i + 1;
+    }
+}
+
+fn deep(depth, value) {
+    var tag = "level-" + str(depth); // fresh string held in this frame
+    if (depth == 0) {
+        churn(8000); // collect while all 40 frames are live
+        return tag + ":" + str(value);
+    }
+    var sub = deep(depth - 1, value + 1);
+    return tag + ">" + sub;
+}
+
+fn main() {
+    // deep(40, 0): frames at depth d hold value 40 - d, so the deepest
+    // frame returns "level-0:40"
+    var r = deep(40, 0);
+    var expected = "level-40";
+    var d = 39;
+    while (d >= 0) {
+        expected = expected + ">level-" + str(d);
+        d = d - 1;
+    }
+    expected = expected + ":40";
+    assert(r == expected);
+
+    // function values as array elements, called after churn
+    // (routines are not GC-managed; this exercises the value path)
+    var fns = array(0);
+    var i = 0;
+    while (i < 50) {
+        fns.add(fn(x) { return x * 2; });
+        i = i + 1;
+    }
+    churn(20000);
+    i = 0;
+    while (i < 50) {
+        var g = fns[i];
+        assert(g(i) == i * 2);
+        i = i + 1;
+    }
+
+    print("gc_recursion: all passed\n");
+    return 0;
+}

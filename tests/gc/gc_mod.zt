@@ -1,0 +1,19 @@
+// Module used by 09_globals_modules.zt: exports a module-level global
+// that is replaced with heap objects across collection cycles in the
+// importer.
+
+var shared = null;
+
+fn store(v) {
+    shared = v;
+    return shared;
+}
+
+fn load() {
+    return shared;
+}
+
+fn swap(v) {
+    shared = v;
+    return shared;
+}

@@ -1,0 +1,84 @@
+// GC: cyclic object graphs must survive collection cycles; walkability
+// and content are verified after heavy garbage churn.
+//
+// Note: reclamation of unreachable cycles is only observable from the
+// white-box C++ tests; here the cycles are intentionally reachable and the
+// test checks that the GC never breaks or corrupts them.
+
+class SelfRef {
+    var self = null;
+    var v = 0;
+}
+
+class Pair {
+    var other = null;
+    var v = 0;
+}
+
+class CNode {
+    var next = null;
+    var v = 0;
+}
+
+fn churn(n) {
+    var i = 0;
+    while (i < n) {
+        var a = [i, i + 1, i + 2, i + 3];
+        var m = {x: i, y: str(i)};
+        var s = "garbage-" + str(i);
+        i = i + 1;
+    }
+}
+
+fn main() {
+    // self-referencing instance
+    var s = SelfRef();
+    s.self = s;
+    s.v = 7;
+
+    // mutually referencing pair
+    var a = Pair();
+    var b = Pair();
+    a.other = b;
+    b.other = a;
+    a.v = 11;
+    b.v = 13;
+
+    // circular list of 30 nodes
+    var head = CNode();
+    head.v = 0;
+    var tail = head;
+    var i = 1;
+    while (i < 30) {
+        var node = CNode();
+        node.v = i;
+        tail.next = node;
+        tail = node;
+        i = i + 1;
+    }
+    tail.next = head; // close the loop
+
+    churn(30000);
+
+    // cycles still intact after collections
+    assert(s.self.self.self.self.self.self is s);
+    assert(s.v == 7);
+    assert(a.other.other.other.other is a);
+    assert(a.other.v == 13 && a.other.other.v == 11);
+
+    // walk the circular list twice (60 hops): must end back at head
+    // and cover each value twice: 2 * (0 + 1 + ... + 29) = 870
+    var p = head;
+    var total = 0;
+    i = 0;
+    while (i < 60) {
+        total = total + p.v;
+        p = p.next;
+        i = i + 1;
+    }
+    assert(p is head);
+    assert(total == 870);
+
+    print("gc_cycles: all passed\n");
+    return 0;
+}

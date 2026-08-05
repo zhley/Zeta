@@ -1,0 +1,26 @@
+// ARGS: -i 8 -m 128
+// GC: memory reclamation under a bounded heap. Only a few bytes are
+// retained while ~2 MB of garbage is allocated through a 128 KiB max heap;
+// if the GC failed to reclaim, the heap would be exhausted and this run
+// would fail (or OOM). Passing proves unreachable objects are collected.
+
+fn main() {
+    var r = "";
+    var i = 0;
+    while (i < 5000) {
+        var a = [i, i + 1, i + 2, i + 3];
+        var m = {x: i, y: i * 2};
+        var s = "str-" + str(i);
+        if (i % 10 == 0) {
+            var big = array(64); // >512 B backing block: old-generation churn
+            big[0] = i;
+        }
+        if (i % 500 == 0) {
+            r = r + "."; // the only retained allocation
+        }
+        i = i + 1;
+    }
+    assert(r.len() == 10);
+    print("gc_reclaim: all passed\n");
+    return 0;
+}

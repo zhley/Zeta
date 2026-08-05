@@ -1,0 +1,43 @@
+// ARGS: -i 4 -m 256 ;; -i 64 -m 1024 ;; -i 1024
+// GC: program results must be independent of the heap configuration and
+// therefore of the collection schedule. The runner executes this file once
+// per ARGS set and requires all outputs to be byte-identical.
+
+fn churn(n) {
+    var i = 0;
+    while (i < n) {
+        var a = [i, i * 7, i + 1];
+        var m = {a: i, b: str(i)};
+        i = i + 1;
+    }
+}
+
+fn main() {
+    var m = {:};
+    var s = 0;
+    var i = 0;
+    while (i < 3000) {
+        var a = array(8);
+        var j = 0;
+        while (j < 8) {
+            a[j] = (i * (j + 3)) % 97;
+            j = j + 1;
+        }
+        s = s + a[7];
+        if (i % 3 == 0) {
+            m[intern("m" + str(i % 100))] = a;
+        }
+        i = i + 1;
+        churn(2);
+    }
+
+    var sum2 = 0;
+    for (k : m) {
+        sum2 = sum2 + m[k][7];
+    }
+
+    print("sum=" + str(s) + "\n");
+    print("sum2=" + str(sum2) + "\n");
+    print("gc_determinism: all passed\n");
+    return 0;
+}

@@ -25,3 +25,7 @@ foreach ($dir in $directories) {
 Write-Host "=== tests/module/mod_main.zt ==="
 & $exe "tests/module/mod_main.zt"
 Write-Host ""
+
+# GC 测试 (带堆参数, 见 tests/gc/run_gc.ps1)
+Write-Host "=== tests/gc (run_gc.ps1) ==="
+& ".\tests\gc\run_gc.ps1"
