@@ -33,9 +33,6 @@ std::unique_ptr<Module> compileModule(const std::string& path, std::string* outE
         std::unique_ptr<Module> module = translator.translate(root.get());
         if(CompileErrorCollector::get().hasErrors()) goto ERROR;
         module->name = path.substr(0, path.find_last_of('.'));
-        {
-            printModule(module.get(), path + ".dump");
-        }
         fclose(file);
         return module;
     }
