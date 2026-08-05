@@ -356,12 +356,16 @@ void Translator::visit(AST::ForStmt& forStmt) {
     curFunc->breakPosStack.push({});
     curFunc->continuePosStack.push({});
     curFunc->scopeMgr.enterScope();
+    uint32_t iterSlot = curFunc->scopeMgr.declare("$iter", true);
     uint32_t valSlot = curFunc->scopeMgr.declare(forStmt.valVarName, true);
     
     forStmt.iterable->accept(*this);
     callBuiltin(Builtin::GetIter);
+    pushOpcode(Opcode::StoreVar);
+    push4B(iterSlot);
     uint32_t loopStart = getLabel();
-    pushOpcode(Opcode::Dup);
+    pushOpcode(Opcode::LoadVar);
+    push4B(iterSlot);
     callBuiltin(Builtin::IterNext);
     pushOpcode(Opcode::Dup);
     pushOpcode(Opcode::StoreVar);
@@ -373,7 +377,6 @@ void Translator::visit(AST::ForStmt& forStmt) {
     pushOpcode(Opcode::Jump);
     push4B(loopStart);
     uint32_t loopEnd = getLabel();
-    pushOpcode(Opcode::Pop);
     set4B(loopEndPos, loopEnd);
     for(uint32_t breakPos : curFunc->breakPosStack.top()){
         set4B(breakPos, loopEnd);
