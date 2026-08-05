@@ -61,7 +61,7 @@ public:
     };
     using ErrorHandler = std::function<void(const Error&)>;
 
-    VM(Config config = {ZETA_DEFAULT_STACK_SIZE, ZETA_DEFAULT_INIT_HEAP_SIZE, ZETA_DEFAULT_MAX_HEAP_SIZE}, ErrorHandler handler = defaultErrorHandler);
+    VM(Config config = {ZETA_DEFAULT_STACK_SIZE, ZETA_DEFAULT_INIT_HEAP_SIZE, ZETA_DEFAULT_MAX_HEAP_SIZE, {}}, ErrorHandler handler = defaultErrorHandler);
     ~VM();
 
     void setErrorHandler(const ErrorHandler& handler) { errorHandler = handler; }
