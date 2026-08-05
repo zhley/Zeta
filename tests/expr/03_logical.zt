@@ -39,6 +39,27 @@ fn main() {
     assert(!truthy(0));
     assert(truthy(0 || "x"));
 
+    // operand-returning semantics (same for constant folding and runtime):
+    // && returns the left operand if falsy, else the right operand;
+    // || returns the left operand if truthy, else the right operand.
+    // the result keeps the operand's own type, not a Bool.
+    assert((1 && 2) is 2);       // folded: Int 2, not Bool true
+    assert((1 && 2) == 2);
+    assert((0 && 2) == 0);
+    assert((2 || 3) == 2);
+    assert((0 || 3) == 3);
+    assert(("a" && "b") == "b");
+    assert(("" || "b") == "b");
+    assert(("a" || "b") == "a");
+
+    // runtime path (non-literal operands) matches the folded path
+    var n = 1;
+    assert((n && 2) is 2);
+    assert((n && 2) == 2);
+    assert((0 && n) == 0);
+    assert((n || 2) == 1);
+    assert((0 || n) == 1);
+
     print("logical: all passed\n");
     return 0;
 }

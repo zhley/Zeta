@@ -330,10 +330,13 @@ std::unique_ptr<Zeta::AST::Exp> tryExpFold(std::unique_ptr<Zeta::AST::Exp> exp) 
                 auto* rightLit = static_cast<Zeta::AST::LiteralExp*>(binaryExp->right.get());
 
                 if(binaryExp->op == Zeta::AST::BinaryExp::Op::And){
-                    return makeBool(boolean(leftLit) && boolean(rightLit));
+                    // NOTE: 与运行时短路求值一致 (见 Translator::visit(BinaryExp)):
+                    // 左操作数为假则结果为左操作数, 否则为右操作数. 结果不一定是 Bool.
+                    return boolean(leftLit) ? std::move(binaryExp->right) : std::move(binaryExp->left);
                 }
                 if(binaryExp->op == Zeta::AST::BinaryExp::Op::Or){
-                    return makeBool(boolean(leftLit) || boolean(rightLit));
+                    // NOTE: 与运行时短路求值一致: 左操作数为真则结果为左操作数, 否则为右操作数. 结果不一定是 Bool.
+                    return boolean(leftLit) ? std::move(binaryExp->left) : std::move(binaryExp->right);
                 }
                 if(binaryExp->op == Zeta::AST::BinaryExp::Op::Is){
                     if(leftLit->type == rightLit->type){

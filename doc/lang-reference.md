@@ -51,7 +51,7 @@
 ```
 var    let    fn     return  if     else
 while  for    break  continue
-class  extends  this
+class  extends  this  super
 import as    is
 true   false  null
 ```
@@ -445,6 +445,11 @@ fn apply(f, val) {
 apply(twice, 10);                // 20
 ```
 
+### 7.4 已知限制
+
+- 函数声明（`fn name() { ... }`）只能出现在顶层；在函数体内定义函数必须使用函数字面量赋值给变量：`var f = fn() { ... };`
+- 不支持对任意表达式直接调用（如 `f()(x)`、`arr[0](x)`）。函数调用只有两种形式：`ID(...)` 和 `Exp.method(...)`。
+
 ---
 
 ## 8. 类与对象
@@ -500,8 +505,36 @@ class Point3D extends Point {
 
 - Zeta 支持单继承。
 - 基类可以来自其他模块：`class A extends ModuleAlias.BaseClass { ... }`
+- 方法内可以通过 `super.method()` 调用父类方法，见 [8.4 super 调用](#84-super-调用)。
 
-### 8.4 字段与方法访问
+### 8.4 `super` 调用
+
+在方法内可以通过 `super.method(args)` 调用父类的方法：
+
+```zeta
+class Dog extends Animal {
+    fn speak() {
+        return super.speak() + "!";
+    }
+}
+```
+
+- `super.method()` 只能出现在方法内。其语义是**跳过当前方法所属的类**，从它的父类开始向上查找该方法。
+- 查找起点由**方法定义所在的类**决定，而不是实例的类。因此即使一个方法经由继承链被调用（如 C 的实例调用了 B 的方法），其中的 `super.method()` 仍然从 B 的父类开始查找，不会再次解析到 B 自身造成无限递归。支持任意层数的继承链。
+- `super` 不支持跳过两层或以上。要直接调用祖父类的方法，请改用**类名调用**（第一个参数是 `this`）：
+
+```zeta
+class C extends B {
+    fn who() {
+        return "C+" + super.who();   // 跳过 C, 从 B 的父类开始找
+    }
+    fn who_grand() {
+        return A.who(this);          // 直接用类名调用祖父类的方法
+    }
+}
+```
+
+### 8.5 字段与方法访问
 
 ```zeta
 var p = Point(1, 2);
@@ -510,11 +543,11 @@ print(p.x);             // 读取字段
 p.init(5, 6);           // 调用方法
 ```
 
-### 8.5 `this` 关键字
+### 8.6 `this` 关键字
 
 `this` 只能在方法内部使用，指向调用该方法的当前实例。方法体内 `this` 始终位于局部变量槽位 0。
 
-### 8.6 自定义迭代器与特殊方法
+### 8.7 自定义迭代器与特殊方法
 
 Zeta 支持以下特殊方法：
 
@@ -602,10 +635,11 @@ print(a is b);    // false（不同实例）
 ### 9.1 模块导入
 
 ```zeta
-import "foo.zt";          // 导入 foo.zt 中定义的所有全局符号
-import "bar.zt" as bar;   // 导入并起别名，通过 bar.name 访问
+import "foo";             // 导入 foo 模块中定义的所有全局符号
+import "bar" as bar;      // 导入并起别名，通过 bar.name 访问
 ```
 
+> 模块名**不带扩展名**（如 `"foo"` 而非 `"foo.zt"`），导入时会自动拼接扩展名查找文件。
 > 不支持重复导入同一模块。
 
 ### 9.2 模块查找规则
@@ -615,6 +649,8 @@ import "bar.zt" as bar;   // 导入并起别名，通过 bar.name 访问
 1. 相对于导入模块所在目录。
 2. 绝对路径，或相对当前工作目录。
 3. VM 配置的模块搜索路径。
+
+在每个查找位置，都先尝试字节码文件 `<模块名>.ztc`，若不存在再尝试源文件 `<模块名>.zt`。
 
 ### 9.3 可见性
 
@@ -644,10 +680,11 @@ import "bar.zt" as bar;   // 导入并起别名，通过 bar.name 访问
 | `error` | `error(code)` | 返回携带整数错误码 `code` 的 `Error` 值 |
 | `check` | `check(val)` | 若 `val` 不是 `Error` 类型返回 `true`，否则返回 `false` |
 | `intern` | `intern(strObj)` | 将 `StrObj` 驻留为 `String`。用于需要驻留字符串的场景（如 Map 键访问） |
-| `type` | `type(val)` | 返回 `val` 的类型名称字符串（`"null"` / `"int"` / `"float"` / `"bool"` / `"string"` / `"array"` / `"map"` / `"function"` / `"class"` / `"instance"` / `"iterator"` / `"error"`） |
+| `type` | `type(val)` | 返回 `val` 的类型名称字符串（`"Null"` / `"Bool"` / `"Int"` / `"Float"` / `"String"` / `"StrObj"` / `"Array"` / `"Map"` / `"Function"` / `"Class"` / `"Instance"` / `"Iterator"` / `"Error"`） |
 | `int` | `int(val)` | 将 `val` 转换为 Int 并返回 |
 | `float` | `float(val)` | 将 `val` 转换为 Float 并返回 |
 | `str` | `str(val)` | 将 `val` 转换为字符串（StrObj）并返回 |
+| `assert` | `assert(cond)` | 断言。`cond` 必须是 Bool 类型，否则报运行时错误 `Assert: condition must be a boolean`；若为 `false`，报运行时错误 `Assertion failed` 并终止程序。通过时返回 `null` |
 
 > 自定义函数名不能与内置函数同名，否则编译报错。
 
@@ -771,6 +808,8 @@ print(s1 is s3);                      // true（同为驻留 String，相同内�
 - 位运算
 - 逻辑运算（`&&` `||` `!`）
 - 三元条件表达式（若条件为常量）
+
+> 折叠结果与运行时求值结果保持一致：`&&`/`||` 按短路求值返回操作数本身（不一定是 Bool，见 [4.3 逻辑运算符](#43-逻辑运算符)），`!` 返回 Bool。
 - 数组/映射字面量（若所有元素为常量）
 
 ### 12.6 错误处理
@@ -857,6 +896,7 @@ Exp          → Exp "?" Exp ":" Exp
              | ID
              | Literal
              | "this"
+             | "super" "." ID "(" [ArgList] ")"
 
 Literal      → INT | FLOAT | BOOL | "null" | STR
              | "[" [ElemList] "]"            // 数组字面量
