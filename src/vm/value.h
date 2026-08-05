@@ -15,6 +15,7 @@ struct Object;
 struct String;
 struct GC;
 struct Routine;
+struct Class;
 struct Value;
 
 struct StrView {
@@ -81,6 +82,7 @@ struct Routine{
     uint32_t arity;
     uint32_t localCount;
     uint32_t maxStackSize; // max operand stack size
+    Class* ownerClass = nullptr; // the class this method is defined in, nullptr for plain functions; set at module load time
 };
 
 // allocated on heap, managed by GC

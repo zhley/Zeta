@@ -90,4 +90,4 @@ powershell -File tests/test.ps1
 - 断言失败时 VM 打印 `[Runtime Error][line N]: Assertion failed` 并立即终止, 不会打印汇总行。
 - 所有断言通过后, 输出类似 `tests_name: all passed` 的汇总行。
 - `builtin/01_print.zt` 是人工检查输出的测试 (打印期望值对比); `builtin/07_input.zt` 读取标准输入, 需手动运行。
-- 已知限制 (TODO): `class/06_super.zt` 只覆盖 2 层继承链, 3 层及以上链的 `super.method()` 存在 VM bug (见 `src/vm/vm.cpp` 中 `Opcode::SuperCall` 处的 TODO)。
+- `super.method()` 的语义是"跳过当前方法所属的类, 从父类开始向上查找", 支持任意层数的继承链 (见 `class/06_super.zt`); 调用祖父类的方法也可以直接用类名调用, 如 `B.who(instance)`。

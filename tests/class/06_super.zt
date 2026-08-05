@@ -1,9 +1,8 @@
 // super.method() calls: base constructor and base method invocation
 //
-// NOTE: 只覆盖 2 层继承链. 3 层及以上链的 super 解析有一个 VM bug:
-// SuperCall 从 instance->cls 的父类开始查找方法, 而不是从"当前方法所属的类"开始,
-// 导致中间层方法里的 super.xxx() 再次解析到它自己, 无限递归直至段错误.
-// 参见 src/vm/vm.cpp 中 Opcode::SuperCall 处的 TODO.
+// super 语义: 跳过当前方法所属的类, 从它的父类开始向上查找.
+// 通过继承链调用时 (如 C 的实例调用 B 的方法), super 仍然从 B 的父类开始找.
+// 要调用祖父类的方法也可以直接用类名调用: B.who(instance), 第一个参数是 this.
 
 class Animal {
     var name = "";
@@ -36,6 +35,42 @@ class Dog extends Animal {
     }
 }
 
+class A {
+    var tag = "";
+
+    fn _init() {
+        this.tag = "A";
+        return this;
+    }
+
+    fn who() {
+        return "A";
+    }
+}
+
+class B extends A {
+    fn _init() {
+        super._init();
+        this.tag = this.tag + "B";
+        return this;
+    }
+
+    fn who() {
+        return "B+" + super.who();
+    }
+}
+
+class C extends B {
+    fn _init() {
+        super._init();
+        return this;
+    }
+
+    fn who() {
+        return "C+" + super.who();
+    }
+}
+
 fn main() {
     // super._init: base constructor runs before derived body
     var d = Dog("Rex", "Labrador");
@@ -52,6 +87,16 @@ fn main() {
     var a = Animal("Bob");
     assert(a.speak() == "Animal Bob");
     assert(a.name == "Bob");
+
+    // three-level chain: every super resolves from the class the method is
+    // defined in, so the whole constructor chain and override chain run
+    var c = C();
+    assert(c.tag == "AB");
+    assert(c.who() == "C+B+A");
+
+    // calling a method via class name: the first argument is 'this'
+    assert(B.who(c) == "B+A");
+    assert(A.who(c) == "A");
 
     print("super: all passed\n");
     return 0;
