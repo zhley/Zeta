@@ -1,0 +1,53 @@
+// Named functions are first-class values (Function is a primitive type)
+
+fn add(a, b) {
+    return a + b;
+}
+
+fn sub(a, b) {
+    return a - b;
+}
+
+fn apply2(f, a, b) {
+    return f(a, b);
+}
+
+fn pick(flag) {
+    if (flag) {
+        return add;
+    }
+    return sub;
+}
+
+fn main() {
+    // assign function to variable and call through it
+    var f = add;
+    assert(f(2, 3) == 5);
+
+    // reassign to a different function
+    f = sub;
+    assert(f(5, 2) == 3);
+
+    // pass as argument
+    assert(apply2(add, 10, 20) == 30);
+    assert(apply2(sub, 10, 20) == -10);
+
+    // store in array
+    var ops = [add, sub];
+    var op0 = ops[0];
+    var op1 = ops[1];
+    assert(op0(7, 2) == 9);
+    assert(op1(7, 2) == 5);
+
+    // function returned from function
+    var g = pick(true);
+    var h = pick(false);
+    assert(g(8, 1) == 9);
+    assert(h(8, 1) == 7);
+
+    // type of a function value
+    assert(type(f) == "Function");
+
+    print("function_value: all passed\n");
+    return 0;
+}

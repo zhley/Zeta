@@ -1,40 +1,32 @@
 fn main() {
-    var pass = 0;
-    var fail = 0;
-
     // function literal assigned to variable
     var double = fn(x) { return x * 2; };
-    if (double(5) == 10) { pass = pass + 1; } else { print("FAIL: lambda double\n"); fail = fail + 1; }
+    assert(double(5) == 10);
 
     // lambda with no parameters
     var getOne = fn() { return 1; };
-    if (getOne() == 1) { pass = pass + 1; } else { print("FAIL: lambda no params\n"); fail = fail + 1; }
+    assert(getOne() == 1);
 
     // lambda with multiple parameters
     var mul = fn(a, b) { return a * b; };
-    if (mul(6, 7) == 42) { pass = pass + 1; } else { print("FAIL: lambda mul\n"); fail = fail + 1; }
+    assert(mul(6, 7) == 42);
 
-    // lambda capturing outer variables (no closure support yet, just accessing global/outer scope)
-    // NOTE: currently no closure support, using parameter only
-    var _ = 0;
+    // NOTE: currently no closure support, so lambdas can only access
+    // their parameters and globals, not enclosing local variables.
 
     // passing lambda as argument
     var apply = fn (f, x) {
         return f(x);
     };
-    if (apply(fn(y) { return y + 1; }, 10) == 11) { pass = pass + 1; } else { print("FAIL: lambda as arg\n"); fail = fail + 1; }
+    assert(apply(fn(y) { return y + 1; }, 10) == 11);
 
     // lambda returning lambda (higher-order)
     var make_adder = fn(n) {
         return fn(x) { return x; };
     };
     var add3 = make_adder(3);
-    if (add3(7) == 7) { pass = pass + 1; } else { print("FAIL: lambda returning lambda\n"); fail = fail + 1; }
+    assert(add3(7) == 7);
 
-    print("lambda: ");
-    print(pass);
-    print("/");
-    print(pass + fail);
-    print(" passed\n");
+    print("lambda: all passed\n");
     return 0;
 }

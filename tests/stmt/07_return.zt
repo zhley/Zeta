@@ -14,24 +14,17 @@ fn return_null_explicitly() {
 }
 
 fn main() {
-    var pass = 0;
-    var fail = 0;
-
     // return with value
-    if (early_return(5) == 5) { pass = pass + 1; } else { print("FAIL: return value\n"); fail = fail + 1; }
-    if (early_return(-1) == 0) { pass = pass + 1; } else { print("FAIL: return 0\n"); fail = fail + 1; }
+    assert(early_return(5) == 5);
+    assert(early_return(-1) == 0);
 
     // return with no value (implicit null)
-    if (no_return_value() == null) { pass = pass + 1; } else { print("FAIL: implicit return null\n"); fail = fail + 1; }
-    if (return_null_explicitly() == null) { pass = pass + 1; } else { print("FAIL: explicit return;\n"); fail = fail + 1; }
+    assert(no_return_value() == null);
+    assert(return_null_explicitly() == null);
 
     // multiple return paths
-    if (early_return(10) == 10 && early_return(0) == 0) { pass = pass + 1; } else { print("FAIL: multiple returns\n"); fail = fail + 1; }
+    assert(early_return(10) == 10 && early_return(0) == 0);
 
-    print("return: ");
-    print(pass);
-    print("/");
-    print(pass + fail);
-    print(" passed\n");
+    print("return: all passed\n");
     return 0;
 }

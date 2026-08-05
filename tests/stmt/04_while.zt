@@ -1,7 +1,4 @@
 fn main() {
-    var pass = 0;
-    var fail = 0;
-
     // basic while loop
     var sum = 0;
     var i = 1;
@@ -9,21 +6,21 @@ fn main() {
         sum = sum + i;
         i = i + 1;
     }
-    if (sum == 15) { pass = pass + 1; } else { print("FAIL: while sum 1..5\n"); fail = fail + 1; }
+    assert(sum == 15);
 
     // while with false condition (zero iterations)
     var count = 0;
     while (false) {
         count = count + 1;
     }
-    if (count == 0) { pass = pass + 1; } else { print("FAIL: while false\n"); fail = fail + 1; }
+    assert(count == 0);
 
     // while with 0 as condition (zero iterations)
     count = 0;
     while (0) {
         count = count + 1;
     }
-    if (count == 0) { pass = pass + 1; } else { print("FAIL: while 0\n"); fail = fail + 1; }
+    assert(count == 0);
 
     // nested while loops
     var row = 0;
@@ -36,12 +33,8 @@ fn main() {
         }
         row = row + 1;
     }
-    if (total == 9) { pass = pass + 1; } else { print("FAIL: nested while\n"); fail = fail + 1; }
+    assert(total == 9);
 
-    print("while: ");
-    print(pass);
-    print("/");
-    print(pass + fail);
-    print(" passed\n");
+    print("while: all passed\n");
     return 0;
 }

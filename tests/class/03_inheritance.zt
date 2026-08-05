@@ -26,29 +26,22 @@ class Dog extends Animal {
 }
 
 fn main() {
-    var pass = 0;
-    var fail = 0;
-
     // base class
     var a = Animal("Bob");
-    if (a.name == "Bob") { pass = pass + 1; } else { print("FAIL: base field\n"); fail = fail + 1; }
-    if (a.speak() == "Animal Bob") { pass = pass + 1; } else { print("FAIL: base method\n"); fail = fail + 1; }
+    assert(a.name == "Bob");
+    assert(a.speak() == "Animal Bob");
 
     // derived class inherits fields
     var d = Dog("Rex", "Labrador");
-    if (d.name == "Rex") { pass = pass + 1; } else { print("FAIL: inherited field\n"); fail = fail + 1; }
-    if (d.breed == "Labrador") { pass = pass + 1; } else { print("FAIL: own field\n"); fail = fail + 1; }
+    assert(d.name == "Rex");
+    assert(d.breed == "Labrador");
 
     // method override
-    if (d.speak() == "Dog Rex (Labrador)") { pass = pass + 1; } else { print("FAIL: method override\n"); fail = fail + 1; }
+    assert(d.speak() == "Dog Rex (Labrador)");
 
     // base method still works on base instance
-    if (a.speak() == "Animal Bob") { pass = pass + 1; } else { print("FAIL: base method preserved\n"); fail = fail + 1; }
+    assert(a.speak() == "Animal Bob");
 
-    print("inheritance: ");
-    print(pass);
-    print("/");
-    print(pass + fail);
-    print(" passed\n");
+    print("inheritance: all passed\n");
     return 0;
 }

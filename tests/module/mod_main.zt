@@ -4,34 +4,27 @@ import "tests/module/mod_b" as b;
 import "tests/module/mod_c";
 
 fn main() {
-    var pass = 0;
-    var fail = 0;
-
     // Using imported function via alias
-    if (a.add(1, 2) == 3) { pass = pass + 1; } else { print("FAIL: import alias function\n"); fail = fail + 1; }
-    if (a.multiply(3, 4) == 12) { pass = pass + 1; } else { print("FAIL: import alias multiply\n"); fail = fail + 1; }
+    assert(a.add(1, 2) == 3);
+    assert(a.multiply(3, 4) == 12);
 
     // Using imported constant
-    if (a.PI > 3.14 && a.PI < 3.142) { pass = pass + 1; } else { print("FAIL: import constant\n"); fail = fail + 1; }
+    assert(a.PI > 3.14 && a.PI < 3.142);
 
     // Using module that depends on another module
     // b.circle_area uses a.PI and a.multiply
     var area = b.circle_area(10);
-    if (area == 314.159) { pass = pass + 1; } else { print("FAIL: transitive import\n"); fail = fail + 1; }
+    assert(area == 314.159);
 
     // Shared mutable state through import
     var c1 = b.increment_counter();
     var c2 = b.increment_counter();
-    if (c1 == 1 && c2 == 2) { pass = pass + 1; } else { print("FAIL: shared mutable import\n"); fail = fail + 1; }
+    assert(c1 == 1 && c2 == 2);
 
     // Import without alias
     var s = Shape("circle");
-    if (s.describe() == "Shape: circle") { pass = pass + 1; } else { print("FAIL: import class\n"); fail = fail + 1; }
+    assert(s.describe() == "Shape: circle");
 
-    print("module: ");
-    print(pass);
-    print("/");
-    print(pass + fail);
-    print(" passed\n");
+    print("module: all passed\n");
     return 0;
 }

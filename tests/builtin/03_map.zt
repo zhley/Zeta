@@ -1,26 +1,23 @@
 fn main() {
-    var pass = 0;
-    var fail = 0;
-
     // map literal
     var m = {name: "Alice", age: 30};
-    if (m["name"] == "Alice" && m["age"] == 30) { pass = pass + 1; } else { print("FAIL: map literal access\n"); fail = fail + 1; }
+    assert(m["name"] == "Alice" && m["age"] == 30);
 
     // map creation via built-in
     var m2 = map(4);
     m2["key1"] = "val1";
     m2["key2"] = "val2";
-    if (m2["key1"] == "val1" && m2["key2"] == "val2") { pass = pass + 1; } else { print("FAIL: map(key) set/get\n"); fail = fail + 1; }
+    assert(m2["key1"] == "val1" && m2["key2"] == "val2");
 
     // map.size()
-    if (m.size() == 2) { pass = pass + 1; } else { print("FAIL: map.size\n"); fail = fail + 1; }
+    assert(m.size() == 2);
     var empty = {:};
-    if (empty.size() == 0) { pass = pass + 1; } else { print("FAIL: empty map.size\n"); fail = fail + 1; }
+    assert(empty.size() == 0);
 
     // map update value
     m["name"] = "Bob";
-    if (m["name"] == "Bob") { pass = pass + 1; } else { print("FAIL: map update\n"); fail = fail + 1; }
-    if (m["age"] == 30) { pass = pass + 1; } else { print("FAIL: map update preserved other\n"); fail = fail + 1; }
+    assert(m["name"] == "Bob");
+    assert(m["age"] == 30);
 
     // map with various value types
     var vt = {
@@ -30,24 +27,15 @@ fn main() {
         b: true,
         n: null
     };
-    if (vt["i"] == 1 && vt["f"] == 1.5 && vt["s"] == "hello" && vt["b"] == true && vt["n"] == null) {
-        pass = pass + 1;
-    } else {
-        print("FAIL: map value types\n");
-        fail = fail + 1;
-    }
+    assert(vt["i"] == 1 && vt["f"] == 1.5 && vt["s"] == "hello" && vt["b"] == true && vt["n"] == null);
 
     // map iteration (keys)
     var count = 0;
     for (key : m) {
         count = count + 1;
     }
-    if (count == 2) { pass = pass + 1; } else { print("FAIL: map iteration\n"); fail = fail + 1; }
+    assert(count == 2);
 
-    print("map: ");
-    print(pass);
-    print("/");
-    print(pass + fail);
-    print(" passed\n");
+    print("map: all passed\n");
     return 0;
 }

@@ -1259,6 +1259,10 @@ Value VM::execute() {
                 String* methodName = nameVal.strValue;
                 assert(objVal.type == Value::Type::Object && objVal.ptrValue->type == Object::Type::Instance);
                 Instance* instance = static_cast<Instance*>(objVal.ptrValue);
+                // TODO: 应该从"当前正在执行的方法所属的类"开始向上查找, 而不是从 instance->cls 的父类开始.
+                // 当前实现只有 2 层继承链时碰巧正确; 3 层及以上 (C->B->A, C 和 B 都重写了同名方法) 时,
+                // B.who() 里的 super.who() 会再次解析到 B.who, 造成无限递归 (参见 tests/class/06_super.zt 的注释).
+                // 需要把 super 调用词法上所属的类信息编译进 SuperCall 指令 (或 Routine).
                 Class* superClass = instance->cls->base;
                 std::optional<Value> methodValOpt;
                 while(superClass) {

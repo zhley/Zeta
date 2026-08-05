@@ -184,6 +184,8 @@ Exp: Exp QMARK Exp COLON Exp { auto e = std::make_unique<ConditionalExp>(); SET_
     | Exp DOT ID LP RP { auto e = std::make_unique<CallExp>(); SET_POS(e, @$); e->caller = std::move($1); e->funcName = std::move($3); $$ = std::move(e); }
     | Exp DOT ID { auto e = std::make_unique<MemberAccessExp>(); SET_POS(e, @$); e->object = std::move($1); e->member = std::move($3); $$ = std::move(e); }
     | Exp LB Exp RB { auto e = std::make_unique<IndexAccessExp>(); SET_POS(e, @$); e->object = std::move($1); e->index = std::move($3); $$ = std::move(e); }
+    // TODO: 不支持对任意表达式直接调用 (如 f()(x) 或 arr[0](x)), 只有 ID(...) 和 Exp.method(...) 两种调用形式.
+    // 设计时的遗漏, 当时没有考虑到表达式可以产生函数. 需要时添加规则: | Exp LP ArgList RP / | Exp LP RP
     | ID LP ArgList RP { auto e = std::make_unique<CallExp>(); SET_POS(e, @$); e->funcName = std::move($1); e->args = std::move($3); $$ = std::move(e); }
     | ID LP RP { auto e = std::make_unique<CallExp>(); SET_POS(e, @$); e->funcName = std::move($1); $$ = std::move(e); }
     | SUPER DOT ID LP ArgList RP { auto e = std::make_unique<SuperCallExp>(); SET_POS(e, @$); e->methodName = std::move($3); e->args = std::move($5); $$ = std::move(e); }

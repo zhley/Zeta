@@ -14,40 +14,33 @@ class Point {
 }
 
 fn main() {
-    var pass = 0;
-    var fail = 0;
-
     // instantiation
     var p = Point();
-    if (p.x == 0 && p.y == 0) { pass = pass + 1; } else { print("FAIL: default fields\n"); fail = fail + 1; }
+    assert(p.x == 0 && p.y == 0);
 
     // field access and modification
     p.x = 10;
     p.y = 20;
-    if (p.x == 10 && p.y == 20) { pass = pass + 1; } else { print("FAIL: field assignment\n"); fail = fail + 1; }
+    assert(p.x == 10 && p.y == 20);
 
     // method call
     p.set_x(30);
-    if (p.x == 30) { pass = pass + 1; } else { print("FAIL: method set_x\n"); fail = fail + 1; }
+    assert(p.x == 30);
 
     p.set_y(40);
-    if (p.y == 40) { pass = pass + 1; } else { print("FAIL: method set_y\n"); fail = fail + 1; }
+    assert(p.y == 40);
 
     // method chaining
     p.set_x(50).set_y(60);
-    if (p.x == 50 && p.y == 60) { pass = pass + 1; } else { print("FAIL: method chaining\n"); fail = fail + 1; }
+    assert(p.x == 50 && p.y == 60);
 
     // two distinct instances
     var p1 = Point();
     var p2 = Point();
     p1.x = 100;
     p2.x = 200;
-    if (p1.x == 100 && p2.x == 200) { pass = pass + 1; } else { print("FAIL: distinct instances\n"); fail = fail + 1; }
+    assert(p1.x == 100 && p2.x == 200);
 
-    print("class_basic: ");
-    print(pass);
-    print("/");
-    print(pass + fail);
-    print(" passed\n");
+    print("class_basic: all passed\n");
     return 0;
 }

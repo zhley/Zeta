@@ -34,9 +34,6 @@ class RangeIter {
 }
 
 fn main() {
-    var pass = 0;
-    var fail = 0;
-
     // custom iterator via _iter/_next
     var sum = 0;
     var count = 0;
@@ -44,15 +41,15 @@ fn main() {
         sum = sum + i;
         count = count + 1;
     }
-    if (sum == 15) { pass = pass + 1; } else { print("FAIL: custom iter sum\n"); fail = fail + 1; }
-    if (count == 5) { pass = pass + 1; } else { print("FAIL: custom iter count\n"); fail = fail + 1; }
+    assert(sum == 15);
+    assert(count == 5);
 
     // empty range
     count = 0;
     for (i : Range(0, 0)) {
         count = count + 1;
     }
-    if (count == 0) { pass = pass + 1; } else { print("FAIL: custom iter empty\n"); fail = fail + 1; }
+    assert(count == 0);
 
     // break in custom iterator
     sum = 0;
@@ -62,12 +59,8 @@ fn main() {
         }
         sum = sum + i;
     }
-    if (sum == 15) { pass = pass + 1; } else { print("FAIL: custom iter break\n"); fail = fail + 1; }
+    assert(sum == 15);
 
-    print("class_iter: ");
-    print(pass);
-    print("/");
-    print(pass + fail);
-    print(" passed\n");
+    print("class_iter: all passed\n");
     return 0;
 }

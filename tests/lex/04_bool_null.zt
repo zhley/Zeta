@@ -1,27 +1,20 @@
 fn main() {
-    var pass = 0;
-    var fail = 0;
-
     // bool literals
-    if (true == true) { pass = pass + 1; } else { print("FAIL: true\n"); fail = fail + 1; }
-    if (false == false) { pass = pass + 1; } else { print("FAIL: false\n"); fail = fail + 1; }
-    if (true != false) { pass = pass + 1; } else { print("FAIL: true != false\n"); fail = fail + 1; }
+    assert(true == true);
+    assert(false == false);
+    assert(true != false);
 
     // not operator on bool
-    if (!true == false) { pass = pass + 1; } else { print("FAIL: !true\n"); fail = fail + 1; }
-    if (!false == true) { pass = pass + 1; } else { print("FAIL: !false\n"); fail = fail + 1; }
+    assert(!true == false);
+    assert(!false == true);
 
     // null literal
-    if (null == null) { pass = pass + 1; } else { print("FAIL: null == null\n"); fail = fail + 1; }
-    if (null != true) { pass = pass + 1; } else { print("FAIL: null != true\n"); fail = fail + 1; }
+    assert(null == null);
+    assert(null != true);
 
     // truthiness: null is falsey
-    if (!null == true) { pass = pass + 1; } else { print("FAIL: !null\n"); fail = fail + 1; }
+    assert(!null == true);
 
-    print("bool_null: ");
-    print(pass);
-    print("/");
-    print(pass + fail);
-    print(" passed\n");
+    print("bool_null: all passed\n");
     return 0;
 }

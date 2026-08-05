@@ -1,62 +1,55 @@
 fn main() {
-    var pass = 0;
-    var fail = 0;
-
     // simple assignment
     var x = 0;
     x = 42;
-    if (x == 42) { pass = pass + 1; } else { print("FAIL: simple assign\n"); fail = fail + 1; }
+    assert(x == 42);
 
     // AddAssign
     var a = 10;
     a += 5;
-    if (a == 15) { pass = pass + 1; } else { print("FAIL: +=\n"); fail = fail + 1; }
+    assert(a == 15);
 
     // SubAssign
     a -= 3;
-    if (a == 12) { pass = pass + 1; } else { print("FAIL: -=\n"); fail = fail + 1; }
+    assert(a == 12);
 
     // MulAssign
     a *= 2;
-    if (a == 24) { pass = pass + 1; } else { print("FAIL: *=\n"); fail = fail + 1; }
+    assert(a == 24);
 
     // DivAssign
     a /= 3;
-    if (a == 8) { pass = pass + 1; } else { print("FAIL: /=\n"); fail = fail + 1; }
+    assert(a == 8);
 
     // ModAssign
     a %= 5;
-    if (a == 3) { pass = pass + 1; } else { print("FAIL: %=\n"); fail = fail + 1; }
+    assert(a == 3);
 
     // BitAndAssign
     var ba = 0xFF;
     ba &= 0x0F;
-    if (ba == 15) { pass = pass + 1; } else { print("FAIL: &=\n"); fail = fail + 1; }
+    assert(ba == 15);
 
     // BitOrAssign
     var bo = 0xF0;
     bo |= 0x0F;
-    if (bo == 255) { pass = pass + 1; } else { print("FAIL: |=\n"); fail = fail + 1; }
+    assert(bo == 255);
 
     // BitXorAssign
     var bx = 0xFF;
     bx ^= 0xFF;
-    if (bx == 0) { pass = pass + 1; } else { print("FAIL: ^=\n"); fail = fail + 1; }
+    assert(bx == 0);
 
     // ShlAssign
     var sl = 1;
     sl <<= 4;
-    if (sl == 16) { pass = pass + 1; } else { print("FAIL: <<=\n"); fail = fail + 1; }
+    assert(sl == 16);
 
     // ShrAssign
     var sr = 16;
     sr >>= 2;
-    if (sr == 4) { pass = pass + 1; } else { print("FAIL: >>=\n"); fail = fail + 1; }
+    assert(sr == 4);
 
-    print("assignment: ");
-    print(pass);
-    print("/");
-    print(pass + fail);
-    print(" passed\n");
+    print("assignment: all passed\n");
     return 0;
 }

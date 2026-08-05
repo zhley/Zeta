@@ -21,32 +21,25 @@ fn sum_to_n(n) {
 }
 
 fn main() {
-    var pass = 0;
-    var fail = 0;
-
     // basic call
-    if (add(1, 2) == 3) { pass = pass + 1; } else { print("FAIL: add(1,2)\n"); fail = fail + 1; }
-    if (add(-1, 5) == 4) { pass = pass + 1; } else { print("FAIL: add(-1,5)\n"); fail = fail + 1; }
+    assert(add(1, 2) == 3);
+    assert(add(-1, 5) == 4);
 
     // identity
-    if (identity(42) == 42) { pass = pass + 1; } else { print("FAIL: identity int\n"); fail = fail + 1; }
-    if (identity("x") == "x") { pass = pass + 1; } else { print("FAIL: identity str\n"); fail = fail + 1; }
-    if (identity(true) == true) { pass = pass + 1; } else { print("FAIL: identity bool\n"); fail = fail + 1; }
-    if (identity(null) == null) { pass = pass + 1; } else { print("FAIL: identity null\n"); fail = fail + 1; }
+    assert(identity(42) == 42);
+    assert(identity("x") == "x");
+    assert(identity(true) == true);
+    assert(identity(null) == null);
 
     // string return
     var g = greet("World");
-    if (g == "Hello, World") { pass = pass + 1; } else { print("FAIL: greet\n"); fail = fail + 1; }
+    assert(g == "Hello, World");
 
     // sum
-    if (sum_to_n(5) == 15) { pass = pass + 1; } else { print("FAIL: sum_to_n\n"); fail = fail + 1; }
-    if (sum_to_n(1) == 1) { pass = pass + 1; } else { print("FAIL: sum_to_n(1)\n"); fail = fail + 1; }
-    if (sum_to_n(0) == 0) { pass = pass + 1; } else { print("FAIL: sum_to_n(0)\n"); fail = fail + 1; }
+    assert(sum_to_n(5) == 15);
+    assert(sum_to_n(1) == 1);
+    assert(sum_to_n(0) == 0);
 
-    print("func_basic: ");
-    print(pass);
-    print("/");
-    print(pass + fail);
-    print(" passed\n");
+    print("func_basic: all passed\n");
     return 0;
 }

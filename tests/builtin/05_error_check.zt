@@ -1,26 +1,23 @@
 fn main() {
-    var pass = 0;
-    var fail = 0;
-
     // error with different codes
     var e1 = error(1);
     var e2 = error(2);
     var e0 = error(0);
 
     // check on Error returns false
-    if (check(e1) == false) { pass = pass + 1; } else { print("FAIL: check(error)\n"); fail = fail + 1; }
-    if (check(e2) == false) { pass = pass + 1; } else { print("FAIL: check(error 2)\n"); fail = fail + 1; }
-    if (check(e0) == false) { pass = pass + 1; } else { print("FAIL: check(error 0)\n"); fail = fail + 1; }
+    assert(check(e1) == false);
+    assert(check(e2) == false);
+    assert(check(e0) == false);
 
     // check on non-Error returns true
-    if (check(0) == true) { pass = pass + 1; } else { print("FAIL: check(0)\n"); fail = fail + 1; }
-    if (check(null) == true) { pass = pass + 1; } else { print("FAIL: check(null)\n"); fail = fail + 1; }
-    if (check("str") == true) { pass = pass + 1; } else { print("FAIL: check(str)\n"); fail = fail + 1; }
-    if (check(true) == true) { pass = pass + 1; } else { print("FAIL: check(true)\n"); fail = fail + 1; }
-    if (check([1, 2]) == true) { pass = pass + 1; } else { print("FAIL: check(array)\n"); fail = fail + 1; }
+    assert(check(0) == true);
+    assert(check(null) == true);
+    assert(check("str") == true);
+    assert(check(true) == true);
+    assert(check([1, 2]) == true);
 
     // error values are not equal to each other
-    if (error(1) is error(1)) { pass = pass + 1; } else { print("FAIL: error same type\n"); fail = fail + 1; }
+    assert(error(1) is error(1));
 
     // use check() with iter pattern to terminate a loop
     var arr = [1, 2, 3];
@@ -31,12 +28,8 @@ fn main() {
         sum = sum + val;
         val = next(it);
     }
-    if (sum == 6) { pass = pass + 1; } else { print("FAIL: check with iter\n"); fail = fail + 1; }
+    assert(sum == 6);
 
-    print("error_check: ");
-    print(pass);
-    print("/");
-    print(pass + fail);
-    print(" passed\n");
+    print("error_check: all passed\n");
     return 0;
 }

@@ -24,32 +24,20 @@ fn fib_recursive(n) {
 }
 
 fn main() {
-    var pass = 0;
-    var fail = 0;
-
     // fib(0) and fib(1)
-    if (fib_iterative(0) == 0) { pass = pass + 1; } else { print("FAIL: fib_iter(0)\n"); fail = fail + 1; }
-    if (fib_iterative(1) == 1) { pass = pass + 1; } else { print("FAIL: fib_iter(1)\n"); fail = fail + 1; }
-    if (fib_recursive(0) == 0) { pass = pass + 1; } else { print("FAIL: fib_rec(0)\n"); fail = fail + 1; }
-    if (fib_recursive(1) == 1) { pass = pass + 1; } else { print("FAIL: fib_rec(1)\n"); fail = fail + 1; }
+    assert(fib_iterative(0) == 0);
+    assert(fib_iterative(1) == 1);
+    assert(fib_recursive(0) == 0);
+    assert(fib_recursive(1) == 1);
 
     // fib(10) = 55
-    if (fib_iterative(10) == 55) { pass = pass + 1; } else { print("FAIL: fib_iter(10)\n"); fail = fail + 1; }
-    if (fib_recursive(10) == 55) { pass = pass + 1; } else { print("FAIL: fib_rec(10)\n"); fail = fail + 1; }
+    assert(fib_iterative(10) == 55);
+    assert(fib_recursive(10) == 55);
 
     // both methods agree
     var n = 15;
-    if (fib_iterative(n) == fib_recursive(n)) {
-        pass = pass + 1;
-    } else {
-        print("FAIL: fib methods agree\n");
-        fail = fail + 1;
-    }
+    assert(fib_iterative(n) == fib_recursive(n));
 
-    print("fibonacci: ");
-    print(pass);
-    print("/");
-    print(pass + fail);
-    print(" passed\n");
+    print("fibonacci: all passed\n");
     return 0;
 }

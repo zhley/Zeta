@@ -1,0 +1,49 @@
+// int()/float()/str() conversion builtins
+
+fn main() {
+    // int()
+    assert(int(42) == 42);
+    assert(int(3.7) == 3);       // float truncates toward zero
+    assert(int(-3.7) == -3);
+    assert(int(true) == 1);
+    assert(int(false) == 0);
+    assert(int("42") == 42);     // numeric string
+    assert(int("-7") == -7);
+
+    // float()
+    assert(float(2.5) == 2.5);
+    assert(float(3) == 3.0);
+    assert(float(true) == 1.0);
+    assert(float(false) == 0.0);
+    assert(float("2.5") == 2.5);
+    assert(float("1e2") == 100.0);
+
+    // str()
+    assert(str(42) == "42");
+    assert(str(-7) == "-7");
+    assert(str(true) == "true");
+    assert(str(false) == "false");
+    assert(str(null) == "null");
+    // float uses C++ to_string formatting (6 decimal places)
+    assert(str(3.14) == "3.140000");
+    // int stays integer-formatted (no decimal point)
+    assert(str(2) == "2");
+
+    // conversion round-trips
+    assert(int(float(10)) == 10);
+    assert(float(int(2.9)) == 2.0);
+    assert(int(str(123)) == 123);
+
+    // str() returns a StrObj (runtime-allocated string)
+    var s = str(42);
+    assert(type(s) == "StrObj");
+    assert(s == "42");
+    assert(!(s is "42"));
+
+    // conversions work on StrObj input too
+    var concat = "3" + "0"; // runtime concat => StrObj
+    assert(int(concat) == 30);
+
+    print("conversions: all passed\n");
+    return 0;
+}

@@ -21,29 +21,22 @@ class Vec2 {
 }
 
 fn main() {
-    var pass = 0;
-    var fail = 0;
-
     // _equals: value equality
     var a = Vec2(1, 2);
     var b = Vec2(1, 2);
     var c = Vec2(3, 4);
 
-    if (a == b) { pass = pass + 1; } else { print("FAIL: _equals same values\n"); fail = fail + 1; }
-    if (a != c) { pass = pass + 1; } else { print("FAIL: _equals different values\n"); fail = fail + 1; }
+    assert(a == b);
+    assert(a != c);
 
     // is vs == on instances
-    if (!(a is b)) { pass = pass + 1; } else { print("FAIL: is different instances\n"); fail = fail + 1; }
-    if (a is a) { pass = pass + 1; } else { print("FAIL: is same instance\n"); fail = fail + 1; }
+    assert(!(a is b));
+    assert(a is a);
 
     // _equals with modified values
     a.x = 10;
-    if (a != b) { pass = pass + 1; } else { print("FAIL: _equals after modification\n"); fail = fail + 1; }
+    assert(a != b);
 
-    print("equals: ");
-    print(pass);
-    print("/");
-    print(pass + fail);
-    print(" passed\n");
+    print("equals: all passed\n");
     return 0;
 }

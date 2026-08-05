@@ -1,7 +1,4 @@
 fn main() {
-    var pass = 0;
-    var fail = 0;
-
     // iter on array
     var arr = [10, 20, 30];
     var it = iter(arr);
@@ -10,11 +7,11 @@ fn main() {
     var n1 = next(it);
     var n2 = next(it);
     var n3 = next(it);
-    if (n1 == 10 && n2 == 20 && n3 == 30) { pass = pass + 1; } else { print("FAIL: next on array\n"); fail = fail + 1; }
+    assert(n1 == 10 && n2 == 20 && n3 == 30);
 
     // 4th next returns Error
     var n4 = next(it);
-    if (check(n4) == false) { pass = pass + 1; } else { print("FAIL: next past end is Error\n"); fail = fail + 1; }
+    assert(check(n4) == false);
 
     // iter on map
     var m = {x: 100, y: 200};
@@ -25,24 +22,20 @@ fn main() {
         count = count + 1;
         mk = next(mi);
     }
-    if (count == 2) { pass = pass + 1; } else { print("FAIL: iter on map\n"); fail = fail + 1; }
+    assert(count == 2);
 
     // iter on empty array
     var empty = [];
     var ei = iter(empty);
     var en = next(ei);
-    if (check(en) == false) { pass = pass + 1; } else { print("FAIL: iter empty array\n"); fail = fail + 1; }
+    assert(check(en) == false);
 
     // iter on empty map
     var emptyMap = {:};
     var emi = iter(emptyMap);
     var emn = next(emi);
-    if (check(emn) == false) { pass = pass + 1; } else { print("FAIL: iter empty map\n"); fail = fail + 1; }
+    assert(check(emn) == false);
 
-    print("iter_next: ");
-    print(pass);
-    print("/");
-    print(pass + fail);
-    print(" passed\n");
+    print("iter_next: all passed\n");
     return 0;
 }

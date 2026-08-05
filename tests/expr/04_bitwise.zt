@@ -1,37 +1,30 @@
 fn main() {
-    var pass = 0;
-    var fail = 0;
-
     // bitwise AND
-    if (0xFF & 0x0F == 0x0F) { pass = pass + 1; } else { print("FAIL: bitand\n"); fail = fail + 1; }
-    if (0 & 1 == 0) { pass = pass + 1; } else { print("FAIL: bitand zero\n"); fail = fail + 1; }
+    assert(0xFF & 0x0F == 0x0F);
+    assert(0 & 1 == 0);
 
     // bitwise OR
-    if (0xF0 | 0x0F == 0xFF) { pass = pass + 1; } else { print("FAIL: bitor\n"); fail = fail + 1; }
-    if (0 | 0 == 0) { pass = pass + 1; } else { print("FAIL: bitor zero\n"); fail = fail + 1; }
+    assert(0xF0 | 0x0F == 0xFF);
+    assert(0 | 0 == 0);
 
     // bitwise XOR
-    if (0xFF ^ 0xFF == 0) { pass = pass + 1; } else { print("FAIL: bitxor self\n"); fail = fail + 1; }
-    if (0xF0 ^ 0x0F == 0xFF) { pass = pass + 1; } else { print("FAIL: bitxor\n"); fail = fail + 1; }
+    assert(0xFF ^ 0xFF == 0);
+    assert(0xF0 ^ 0x0F == 0xFF);
 
     // bitwise NOT
-    if (~0 == -1) { pass = pass + 1; } else { print("FAIL: bitnot 0\n"); fail = fail + 1; }
-    if (~~0 == 0) { pass = pass + 1; } else { print("FAIL: bitnot bitnot\n"); fail = fail + 1; }
+    assert(~0 == -1);
+    assert(~~0 == 0);
 
     // shift left
-    if (1 << 0 == 1) { pass = pass + 1; } else { print("FAIL: shl 0\n"); fail = fail + 1; }
-    if (1 << 1 == 2) { pass = pass + 1; } else { print("FAIL: shl 1\n"); fail = fail + 1; }
-    if (1 << 8 == 256) { pass = pass + 1; } else { print("FAIL: shl 8\n"); fail = fail + 1; }
+    assert(1 << 0 == 1);
+    assert(1 << 1 == 2);
+    assert(1 << 8 == 256);
 
     // shift right
-    if (256 >> 8 == 1) { pass = pass + 1; } else { print("FAIL: shr 8\n"); fail = fail + 1; }
-    if (2 >> 1 == 1) { pass = pass + 1; } else { print("FAIL: shr 1\n"); fail = fail + 1; }
-    if (1 >> 0 == 1) { pass = pass + 1; } else { print("FAIL: shr 0\n"); fail = fail + 1; }
+    assert(256 >> 8 == 1);
+    assert(2 >> 1 == 1);
+    assert(1 >> 0 == 1);
 
-    print("bitwise: ");
-    print(pass);
-    print("/");
-    print(pass + fail);
-    print(" passed\n");
+    print("bitwise: all passed\n");
     return 0;
 }

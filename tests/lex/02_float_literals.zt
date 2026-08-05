@@ -1,27 +1,20 @@
 fn main() {
-    var pass = 0;
-    var fail = 0;
-
     // basic floats
-    if (3.14 == 3.14) { pass = pass + 1; } else { print("FAIL: basic float\n"); fail = fail + 1; }
-    if (0.5 == 0.5) { pass = pass + 1; } else { print("FAIL: 0.5\n"); fail = fail + 1; }
-    if (0.0 == 0.0) { pass = pass + 1; } else { print("FAIL: 0.0\n"); fail = fail + 1; }
+    assert(3.14 == 3.14);
+    assert(0.5 == 0.5);
+    assert(0.0 == 0.0);
 
     // with exponent
-    if (1.0e10 == 10000000000.0) { pass = pass + 1; } else { print("FAIL: 1.0e10\n"); fail = fail + 1; }
-    if (2.5e-3 == 0.0025) { pass = pass + 1; } else { print("FAIL: 2.5e-3\n"); fail = fail + 1; }
-    if (1e5 == 100000.0) { pass = pass + 1; } else { print("FAIL: 1e5\n"); fail = fail + 1; }
+    assert(1.0e10 == 10000000000.0);
+    assert(2.5e-3 == 0.0025);
+    assert(1e5 == 100000.0);
 
     // with separators
-    if (1_000.5 == 1000.5) { pass = pass + 1; } else { print("FAIL: float with separator\n"); fail = fail + 1; }
+    assert(1_000.5 == 1000.5);
 
     // negative
-    if (-3.14 == -3.14) { pass = pass + 1; } else { print("FAIL: negative float\n"); fail = fail + 1; }
+    assert(-3.14 == -3.14);
 
-    print("float_literals: ");
-    print(pass);
-    print("/");
-    print(pass + fail);
-    print(" passed\n");
+    print("float_literals: all passed\n");
     return 0;
 }

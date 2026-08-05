@@ -1,0 +1,58 @@
+// super.method() calls: base constructor and base method invocation
+//
+// NOTE: 只覆盖 2 层继承链. 3 层及以上链的 super 解析有一个 VM bug:
+// SuperCall 从 instance->cls 的父类开始查找方法, 而不是从"当前方法所属的类"开始,
+// 导致中间层方法里的 super.xxx() 再次解析到它自己, 无限递归直至段错误.
+// 参见 src/vm/vm.cpp 中 Opcode::SuperCall 处的 TODO.
+
+class Animal {
+    var name = "";
+
+    fn _init(n) {
+        this.name = n;
+        return this;
+    }
+
+    fn speak() {
+        return "Animal " + this.name;
+    }
+}
+
+class Dog extends Animal {
+    var breed = "";
+
+    fn _init(n, b) {
+        super._init(n);
+        this.breed = b;
+        return this;
+    }
+
+    fn speak() {
+        return "Dog " + this.name + " (" + this.breed + ")";
+    }
+
+    fn base_speak() {
+        return super.speak();
+    }
+}
+
+fn main() {
+    // super._init: base constructor runs before derived body
+    var d = Dog("Rex", "Labrador");
+    assert(d.name == "Rex");
+    assert(d.breed == "Labrador");
+
+    // super.method: invoke the overridden base method
+    assert(d.base_speak() == "Animal Rex");
+
+    // derived override still works
+    assert(d.speak() == "Dog Rex (Labrador)");
+
+    // base instance unaffected
+    var a = Animal("Bob");
+    assert(a.speak() == "Animal Bob");
+    assert(a.name == "Bob");
+
+    print("super: all passed\n");
+    return 0;
+}

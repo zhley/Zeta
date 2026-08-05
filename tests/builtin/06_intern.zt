@@ -1,30 +1,23 @@
 fn main() {
-    var pass = 0;
-    var fail = 0;
-
     var s1 = "hel";
     // intern a concatenated string
     var concat = s1 + "lo";
     var interned = intern(concat);
     // interned string is a String (interned), equal to literal
-    if (interned == "hello") { pass = pass + 1; } else { print("FAIL: intern == literal\n"); fail = fail + 1; }
-    if (interned is "hello") { pass = pass + 1; } else { print("FAIL: intern is literal (same interned string)\n"); fail = fail + 1; }
+    assert(interned == "hello");
+    assert(interned is "hello");
 
     // can use interned string as map key
     var m = {hello: 42};
-    if (m[interned] == 42) { pass = pass + 1; } else { print("FAIL: map access with interned key\n"); fail = fail + 1; }
+    assert(m[interned] == 42);
 
     // StrObj can't be used as map key (would need different key)
     // Just verify the intern doesn't crash
     var s2 = "a";
     s2 = s2 + "b";
     var i2 = intern(s2);
-    if (i2 == "ab") { pass = pass + 1; } else { print("FAIL: intern second\n"); fail = fail + 1; }
+    assert(i2 == "ab");
 
-    print("intern: ");
-    print(pass);
-    print("/");
-    print(pass + fail);
-    print(" passed\n");
+    print("intern: all passed\n");
     return 0;
 }

@@ -20,27 +20,20 @@ fn sum_list(arr, idx, len) {
 }
 
 fn main() {
-    var pass = 0;
-    var fail = 0;
-
     // factorial
-    if (factorial(0) == 1) { pass = pass + 1; } else { print("FAIL: factorial(0)\n"); fail = fail + 1; }
-    if (factorial(1) == 1) { pass = pass + 1; } else { print("FAIL: factorial(1)\n"); fail = fail + 1; }
-    if (factorial(5) == 120) { pass = pass + 1; } else { print("FAIL: factorial(5)\n"); fail = fail + 1; }
+    assert(factorial(0) == 1);
+    assert(factorial(1) == 1);
+    assert(factorial(5) == 120);
 
     // fibonacci
-    if (fibonacci(0) == 0) { pass = pass + 1; } else { print("FAIL: fib(0)\n"); fail = fail + 1; }
-    if (fibonacci(1) == 1) { pass = pass + 1; } else { print("FAIL: fib(1)\n"); fail = fail + 1; }
-    if (fibonacci(6) == 8) { pass = pass + 1; } else { print("FAIL: fib(6)\n"); fail = fail + 1; }
+    assert(fibonacci(0) == 0);
+    assert(fibonacci(1) == 1);
+    assert(fibonacci(6) == 8);
 
     // recursive array sum
     var arr = [1, 2, 3, 4, 5];
-    if (sum_list(arr, 0, 5) == 15) { pass = pass + 1; } else { print("FAIL: recursive sum\n"); fail = fail + 1; }
+    assert(sum_list(arr, 0, 5) == 15);
 
-    print("recursion: ");
-    print(pass);
-    print("/");
-    print(pass + fail);
-    print(" passed\n");
+    print("recursion: all passed\n");
     return 0;
 }

@@ -1,0 +1,42 @@
+// type() builtin: returns the type name of a value as an interned string
+
+class Foo {
+    var x = 0;
+}
+
+fn main() {
+    // primitive types
+    assert(type(null) == "Null");
+    assert(type(true) == "Bool");
+    assert(type(false) == "Bool");
+    assert(type(1) == "Int");
+    assert(type(-42) == "Int");
+    assert(type(1.5) == "Float");
+    assert(type("s") == "String");
+
+    // literal string concat is constant-folded => interned String
+    assert(type("a" + "b") == "String");
+
+    // runtime string concat produces a StrObj
+    var s1 = "a";
+    assert(type(s1 + "b") == "StrObj");
+
+    // object types
+    assert(type([1, 2]) == "Array");
+    assert(type({a: 1}) == "Map");
+    assert(type(Foo()) == "Instance");
+    assert(type(Foo) == "Class");
+    assert(type(fn(){}) == "Function");
+
+    // iterator and error values
+    assert(type(iter([1])) == "Iterator");
+    assert(type(error(1)) == "Error");
+
+    // type names are interned strings: `is` identity holds
+    var t = type(1);
+    assert(t is "Int");
+    assert(!(t is "Float"));
+
+    print("type: all passed\n");
+    return 0;
+}

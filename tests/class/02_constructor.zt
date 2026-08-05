@@ -21,34 +21,22 @@ class NoCtor {
 }
 
 fn main() {
-    var pass = 0;
-    var fail = 0;
-
     // constructor with arguments
     var v = Vec3(1, 2, 3);
-    if (v.x == 1 && v.y == 2 && v.z == 3) { pass = pass + 1; } else { print("FAIL: constructor init\n"); fail = fail + 1; }
+    assert(v.x == 1 && v.y == 2 && v.z == 3);
 
     // method works after construction
-    if (v.length_sq() == 14) { pass = pass + 1; } else { print("FAIL: method after ctor\n"); fail = fail + 1; }
+    assert(v.length_sq() == 14);
 
     // no constructor: uses defaults
     var nc = NoCtor();
-    if (nc.a == 10 && nc.b == 20) { pass = pass + 1; } else { print("FAIL: no-ctor defaults\n"); fail = fail + 1; }
+    assert(nc.a == 10 && nc.b == 20);
 
     // multiple instances via constructor
     var v1 = Vec3(1, 0, 0);
     var v2 = Vec3(0, 1, 0);
-    if (v1.x == 1 && v1.y == 0 && v2.x == 0 && v2.y == 1) {
-        pass = pass + 1;
-    } else {
-        print("FAIL: multiple instances via ctor\n");
-        fail = fail + 1;
-    }
+    assert(v1.x == 1 && v1.y == 0 && v2.x == 0 && v2.y == 1);
 
-    print("constructor: ");
-    print(pass);
-    print("/");
-    print(pass + fail);
-    print(" passed\n");
+    print("constructor: all passed\n");
     return 0;
 }

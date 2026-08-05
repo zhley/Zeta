@@ -5,38 +5,40 @@ fn func(){
     return true;
 }
 
-fn main() {
-    var pass = 0;
-    var fail = 0;
+fn truthy(v) {
+    if (v) {
+        return true;
+    }
+    return false;
+}
 
+fn main() {
     // AND truth table
-    if ((true && true) == true) { pass = pass + 1; } else { print("FAIL: T&&T\n"); fail = fail + 1; }
-    if ((true && false) == false) { pass = pass + 1; } else { print("FAIL: T&&F\n"); fail = fail + 1; }
-    if ((false && true) == false) { pass = pass + 1; } else { print("FAIL: F&&T\n"); fail = fail + 1; }
-    if ((false && false) == false) { pass = pass + 1; } else { print("FAIL: F&&F\n"); fail = fail + 1; }
+    assert((true && true) == true);
+    assert((true && false) == false);
+    assert((false && true) == false);
+    assert((false && false) == false);
 
     // OR truth table
-    if ((true || true) == true) { pass = pass + 1; } else { print("FAIL: T||T\n"); fail = fail + 1; }
-    if ((true || false) == true) { pass = pass + 1; } else { print("FAIL: T||F\n"); fail = fail + 1; }
-    if ((false || true) == true) { pass = pass + 1; } else { print("FAIL: F||T\n"); fail = fail + 1; }
-    if ((false || false) == false) { pass = pass + 1; } else { print("FAIL: F||F\n"); fail = fail + 1; }
+    assert((true || true) == true);
+    assert((true || false) == true);
+    assert((false || true) == true);
+    assert((false || false) == false);
 
     // NOT
-    if (!true == false) { pass = pass + 1; } else { print("FAIL: !T\n"); fail = fail + 1; }
-    if (!false == true) { pass = pass + 1; } else { print("FAIL: !F\n"); fail = fail + 1; }
+    assert(!true == false);
+    assert(!false == true);
 
-    if(true || func()) { pass = pass + 1; } else { print("FAIL: short-circuit OR\n"); fail = fail + 1; }
-    if(false && func()) { print("FAIL: short-circuit AND\n"); fail = fail + 1; } else { pass = pass + 1; }
-    if(flag == 1) { pass = pass + 1; } else { print("FAIL: short-circuit AND/OR\n"); fail = fail + 1; }
+    // short-circuit: func() must not be called
+    assert(true || func());
+    assert(!(false && func()));
+    assert(flag == 1);
 
-    // truthiness: non-bool in condition context
-    if (1 && 1) { pass = pass + 1; } else { print("FAIL: truthy int\n"); fail = fail + 1; }
-    if (!0) { pass = pass + 1; } else { print("FAIL: falsey int 0\n"); fail = fail + 1; }
+    // truthiness: non-bool operands work in condition context
+    assert(truthy(1 && 1));
+    assert(!truthy(0));
+    assert(truthy(0 || "x"));
 
-    print("logical: ");
-    print(pass);
-    print("/");
-    print(pass + fail);
-    print(" passed\n");
+    print("logical: all passed\n");
     return 0;
 }

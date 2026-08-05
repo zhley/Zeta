@@ -1,0 +1,60 @@
+// Classes are values: assignable, storable, and callable to instantiate
+
+class Point {
+    var x = 0;
+    var y = 0;
+
+    fn _init(vx, vy) {
+        this.x = vx;
+        this.y = vy;
+        return this;
+    }
+
+    fn sum() {
+        return this.x + this.y;
+    }
+}
+
+class NoCtor {
+    var v = 99;
+}
+
+fn pick_class(flag) {
+    if (flag) {
+        return Point;
+    }
+    return NoCtor;
+}
+
+fn main() {
+    // class as value: instantiate through a variable
+    var c = Point;
+    var p = c(3, 4);
+    assert(p.x == 3 && p.y == 4);
+    assert(p.sum() == 7);
+
+    // class without constructor through a variable
+    var nc = NoCtor;
+    var obj = nc();
+    assert(obj.v == 99);
+
+    // class in array
+    var classes = [Point, NoCtor];
+    var picked = classes[1];
+    var obj2 = picked();
+    assert(obj2.v == 99);
+
+    // function returning a class
+    var p_cls = pick_class(true);
+    var p2 = p_cls(2, 5);
+    assert(p2.x == 2 && p2.y == 5);
+    var n_cls = pick_class(false);
+    var n2 = n_cls();
+    assert(n2.v == 99);
+
+    // type of a class value
+    assert(type(c) == "Class");
+
+    print("class_value: all passed\n");
+    return 0;
+}

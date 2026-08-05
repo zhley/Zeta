@@ -1,0 +1,42 @@
+// Tower of Hanoi: recursion + string concatenation + arrays
+
+fn hanoi(n, src, dst, aux, moves) {
+    if (n > 0) {
+        hanoi(n - 1, src, aux, dst, moves);
+        moves.add(src + "->" + dst);
+        hanoi(n - 1, aux, dst, src, moves);
+    }
+}
+
+fn main() {
+    // 3 disks on A, move all to C: expected 7 moves
+    var moves = array(0);
+    hanoi(3, "A", "C", "B", moves);
+    assert(moves.size() == 7);
+
+    // classic 3-disk solution sequence
+    assert(moves[0] == "A->C");
+    assert(moves[1] == "A->B");
+    assert(moves[2] == "C->B");
+    assert(moves[3] == "A->C");
+    assert(moves[4] == "B->A");
+    assert(moves[5] == "B->C");
+    assert(moves[6] == "A->C");
+
+    // move count is 2^n - 1
+    var moves4 = array(0);
+    hanoi(4, "A", "C", "B", moves4);
+    assert(moves4.size() == 15);
+    // the largest disk moves A->C at the halfway point (move 7, 0-based)
+    assert(moves4[7] == "A->C");
+    // last move completes the stack on C
+    assert(moves4[14] == "B->C");
+
+    // zero disks: no moves
+    var moves0 = array(0);
+    hanoi(0, "A", "C", "B", moves0);
+    assert(moves0.size() == 0);
+
+    print("hanoi: all passed\n");
+    return 0;
+}
