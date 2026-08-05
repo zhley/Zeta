@@ -69,3 +69,4 @@ foo(a, b, c, d):
 | **Int** | `0x0B` | `int(val)` | 弹出 `val`，转换为 Int 并压栈。 |
 | **Float** | `0x0C` | `float(val)` | 弹出 `val`，转换为 Float 并压栈。 |
 | **Str** | `0x0D` | `str(val)` | 弹出 `val`，转换为字符串（StrObj）并压栈。 |
+| **Assert** | `0x0E` | `assert(val)` | 弹出 `val`, 如果不是 true, 抛出运行时错误. |

@@ -5,3 +5,4 @@ tmp/
 tests/**/*.dump
 tests/**/*.ztc
 tools/
+CLAUDE.md
