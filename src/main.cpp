@@ -88,7 +88,12 @@ int compileSource(const std::string& srcPath, const std::string& outPath) {
 }
 
 int runModule(const std::unique_ptr<Zeta::Module>& module, const RuntimeConfig& config) {
+    bool runtimeErrorOccurred = false;
     Zeta::VM vm(Zeta::VM::Config{config.stackSize, config.initHeapSize, config.maxHeapSize, config.moduleSearchPaths});
+    vm.setErrorHandler([&runtimeErrorOccurred](const Zeta::VM::Error& error) {
+        std::cerr << std::format("[{}][line {}]: {}\n", error.type == Zeta::VM::Error::RuntimeError ? "Runtime Error" : "VM Error", error.line, error.message);
+        runtimeErrorOccurred = true;
+    });
     vm.loadModule(module.get());
     try {
         vm.callFunction(module->name, "main", 0, nullptr);
@@ -96,6 +101,7 @@ int runModule(const std::unique_ptr<Zeta::Module>& module, const RuntimeConfig& 
         std::cerr << e.what() << std::endl;
         return 2;
     }
+    if (runtimeErrorOccurred) return 3;
     return 0;
 }
 
@@ -135,7 +141,8 @@ int dumpModule(const std::string& bcPath, const std::string& outPath) {
 // exit code:
 // 0: success
 // 1: local error
-// 2: zeta vm error
+// 2: zeta vm exception
+// 3: zeta runtime error
 int main(int argc, char* argv[]) {
     Action action = Action::None;
     std::string inputPath;

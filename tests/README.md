@@ -113,13 +113,14 @@ powershell -File tests/test.ps1
 - **`assert()` 只接受 Bool 类型的条件**: 非 Bool 会报 `[Runtime Error][line N]: Assert: condition must be a boolean`。因此需要把表达式转为比较/`is`/`check()` 等 Bool 形式后再断言 (注意 `&&`/`||` 返回的是操作数值本身, 不一定为 Bool)。
 - 断言失败时 VM 打印 `[Runtime Error][line N]: Assertion failed` 并立即终止, 不会打印汇总行。
 - 所有断言通过后, 输出类似 `tests_name: all passed` 的汇总行。
+- 退出码约定: `0` = 成功, `1` = 本地错误, `2` = VM 异常 (如堆超限), `3` = 运行时错误 (如断言失败)。`test.sh` / `test.ps1` 对每个普通用例同时要求退出码为 `0` 且输出含 `all passed`。
 - `builtin/01_print.zt` 校验 `print()` 的精确输出: 其输出须与 `tests/builtin/01_print.expected` 逐字节一致 (由 `test.sh` 比对)。
 - `builtin/07_input.zt` 读取标准输入: `test.sh` 会自动喂入一行输入, 再检查输出 (输入为空时 `input()` 返回 null, 不会打印 "all passed", 判定失败)。
 - `super.method()` 的语义是"跳过当前方法所属的类, 从父类开始向上查找", 支持任意层数的继承链 (见 `class/06_super.zt`); 调用祖父类的方法也可以直接用类名调用, 如 `B.who(instance)`。
 
 ## GC 测试 (`tests/gc/`)
 
-GC 测试是内存压力下的黑盒测试: 通过大量分配触发垃圾回收, 再校验保留数据的内容正确性。运行脚本按各文件声明的 `// EXPECT:` 判定成败 (默认: 输出包含 `all passed`。运行期错误如 `assert` 失败后进程仍以 0 退出, 所以输出检查才是关键; OOM 用例则检查退出码 2 与报错信息, 见下)。
+GC 测试是内存压力下的黑盒测试: 通过大量分配触发垃圾回收, 再校验保留数据的内容正确性。运行脚本按各文件声明的 `// EXPECT:` 判定成败 (默认: 退出码为 `0` 且输出包含 `all passed`。运行时错误现在以退出码 `3` 退出, OOM (VM 异常) 以 `2` 退出; 输出检查仍是关键, 见下)。
 
 ### 文件头约定
 

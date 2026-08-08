@@ -21,7 +21,7 @@
 
 namespace Zeta {
 
-class Module;
+struct Module;
 
 class VM {
 public:

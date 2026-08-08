@@ -50,7 +50,7 @@ file(GLOB CORE_SRC
     src/vm/*.cpp
 )
 
-set(LIB_SRC ${CORE_SRC} ${LEXER_OUTPUT} ${PARSER_OUTPUT})
+set(LIB_SRC src/compiler/compiler.cpp ${CORE_SRC} ${LEXER_OUTPUT} ${PARSER_OUTPUT})
 set(APP_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp)
 
 configure_file(
@@ -87,14 +87,14 @@ foreach(HEADER ${PUBLIC_HEADERS})
         COMMAND ${CMAKE_COMMAND} -E make_directory ${DEST_DIR}
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             ${HEADER} ${DEST_FILE}
-        DEPENDS ${HEADER}
+        # DEPENDS ${HEADER}
         COMMENT "Copying public header: ${REL_PATH}"
     )
 endforeach()
 add_custom_command(
     TARGET zeta_core PRE_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${GEN_DIR}/config.h ${PUBLIC_INCLUDE_DIR}/zeta/config.h
-    DEPENDS ${GEN_DIR}/config.h
+    # DEPENDS ${GEN_DIR}/config.h
 )
 
 target_include_directories(zeta_core PUBLIC ${PUBLIC_INCLUDE_DIR})

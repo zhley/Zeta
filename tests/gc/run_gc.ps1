@@ -15,15 +15,16 @@ $exe = ".\build\bin\zeta.exe"
 $pass = 0
 $fail = 0
 
-foreach ($f in Get-ChildItem -Path "tests/gc" -Filter "[0-9]*.zt" | Sort-Object Name) {
+foreach ($f in Get-ChildItem -Path "tests/gc" -Filter "*.zt" |
+    Where-Object { $_.Name -match '^[0-9]' } | Sort-Object Name) {
     $path = $f.FullName
-    $header = Get-Content $path -TotalCount 5
+    $header = Get-Content $path
     $argsLine = $header | Where-Object { $_ -match '^// ARGS:' } | Select-Object -First 1
     $expectLine = $header | Where-Object { $_ -match '^// EXPECT:' } | Select-Object -First 1
 
     $argsets = @()
     if ($argsLine -match '^// ARGS:\s*(.*)$') {
-        $argsets = $Matches[1].Split(';;')
+        $argsets = $Matches[1] -split ';;'
     }
     $expect = "all_passed"
     if ($expectLine -match '^// EXPECT:\s*(\S+)') {
@@ -42,7 +43,8 @@ foreach ($f in Get-ChildItem -Path "tests/gc" -Filter "[0-9]*.zt" | Sort-Object 
         if ($s -eq "") {
             $output = & $exe $path 2>&1 | Out-String
         } else {
-            $output = & $exe $s $path 2>&1 | Out-String
+            $vmArgs = $s -split '\s+'
+            $output = & $exe @vmArgs $path 2>&1 | Out-String
         }
         $code = $LASTEXITCODE
         $n = $n + 1
@@ -57,18 +59,21 @@ foreach ($f in Get-ChildItem -Path "tests/gc" -Filter "[0-9]*.zt" | Sort-Object 
             }
         }
         if (-not $ok) {
-            Write-Host "FAIL  $path (args: [$s], exit=$code)" -ForegroundColor Red
+            Write-Host "FAIL" -ForegroundColor Red -NoNewline
+            Write-Host "  $path (args: [$s], exit=$code)"
             $allOk = $false
         }
         if ($null -eq $firstOut) {
             $firstOut = $output
         } elseif ($firstOut -ne $output) {
-            Write-Host "FAIL  $path (output differs between configurations, args: [$s])" -ForegroundColor Red
+            Write-Host "FAIL" -ForegroundColor Red -NoNewline
+            Write-Host "  $path (output differs between configurations, args: [$s])"
             $allOk = $false
         }
     }
     if ($allOk) {
-        Write-Host "PASS  $path ($n runs)" -ForegroundColor Green
+        Write-Host "PASS" -ForegroundColor Green -NoNewline
+        Write-Host "  $path ($n runs)"
         $pass = $pass + 1
     } else {
         $fail = $fail + 1
@@ -76,9 +81,8 @@ foreach ($f in Get-ChildItem -Path "tests/gc" -Filter "[0-9]*.zt" | Sort-Object 
 }
 
 Write-Host ""
-if ($fail -gt 0) {
-    Write-Host "gc tests: $pass passed, $fail failed" -ForegroundColor Red
-    exit 1
-} else {
-    Write-Host "gc tests: $pass passed, $fail failed" -ForegroundColor Green
-}
+Write-Host "gc tests: $pass " -NoNewline
+Write-Host "passed" -ForegroundColor Green -NoNewline
+Write-Host ", $fail " -NoNewline
+Write-Host "failed" -ForegroundColor Red
+if ($fail -gt 0) { exit 1 }

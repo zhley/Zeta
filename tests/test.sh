@@ -7,8 +7,8 @@
 #   bash tests/test.sh clear     delete every *.ztc / *.dump under tests/
 #
 # Conventions:
-#   - every test prints "<name>: all passed" on success. Runtime errors and
-#     assert failures still exit 0, so the output check is what matters.
+#   - every test prints "<name>: all passed" on success. Runtime errors now
+#     exit 3 (VM exceptions exit 2), so each run must also exit 0.
 #   - tests/builtin/01_print.zt verifies the exact output of print(); its
 #     expected output lives in tests/builtin/01_print.expected.
 #   - tests/builtin/07_input.zt reads stdin; the runner feeds it a value.
@@ -35,19 +35,20 @@ pass=0
 fail=0
 
 run_test() {
-    local f="$1" out=""
+    local f="$1" out="" code=0
     if [ "$f" = "tests/builtin/01_print.zt" ]; then
         out="$("$BIN" "$f" 2>&1)"
+        code=$?
         if [ "$VERBOSE" -eq 1 ]; then
             echo ""
             echo "=== $f ==="
             printf '%s\n' "$out"
         fi
-        if printf '%s\n' "$out" | diff - tests/builtin/01_print.expected >/dev/null; then
+        if [ "$code" -eq 0 ] && printf '%s\n' "$out" | diff - tests/builtin/01_print.expected >/dev/null; then
             echo -e "${GREEN}PASS${NC}  $f"
             pass=$((pass + 1))
         else
-            echo -e "${RED}FAIL${NC}  $f (output differs from 01_print.expected)"
+            echo -e "${RED}FAIL${NC}  $f (exit=$code, output differs from 01_print.expected)"
             printf '%s\n' "$out" | diff - tests/builtin/01_print.expected | head -8
             fail=$((fail + 1))
         fi
@@ -56,19 +57,21 @@ run_test() {
 
     if [ "$f" = "tests/builtin/07_input.zt" ]; then
         out="$(printf 'hello\n' | "$BIN" "$f" 2>&1)"
+        code=$?
     else
         out="$("$BIN" "$f" 2>&1)"
+        code=$?
     fi
     if [ "$VERBOSE" -eq 1 ]; then
         echo ""
         echo "=== $f ==="
         printf '%s\n' "$out"
     fi
-    if printf '%s' "$out" | grep -q "all passed"; then
+    if [ "$code" -eq 0 ] && printf '%s' "$out" | grep -q "all passed"; then
         echo -e "${GREEN}PASS${NC}  $f"
         pass=$((pass + 1))
     else
-        echo -e "${RED}FAIL${NC}  $f"
+        echo -e "${RED}FAIL${NC}  $f (exit=$code)"
         printf '%s\n' "$out" | tail -5
         fail=$((fail + 1))
     fi
