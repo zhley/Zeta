@@ -1,5 +1,6 @@
 fn main() {
-    // These are manual inspection tests: verify the printed output by eye.
+    // Verifies the exact output of print(). The runner diffs this test's
+    // output against tests/builtin/01_print.expected (see tests/test.sh).
 
     // print null
     print("print_null: ");

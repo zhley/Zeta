@@ -1,0 +1,9 @@
+print_null: expect(null)=<null>
+print_bool: expect(true)=<true> expect(false)=<false>
+print_int: expect(42)=<42>
+print_float: expect(3.14)=<3.14>
+print_str: expect(hello)=<hello>
+print_array: expect(<array>)=<<array>>
+print_map: expect(<map>)=<<map>>
+print_fn: expect(<function>)=<<function>>
+print: all passed

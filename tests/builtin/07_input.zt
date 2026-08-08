@@ -1,6 +1,7 @@
 fn main() {
-    // This test requires user input - can't be fully automated
-    // Just print a message. Manual test.
+    // Reads one line from stdin. The runner feeds a value automatically
+    // (see tests/test.sh); "all passed" is only printed when input()
+    // returned a non-null string, so a broken input() fails the check.
     print("Input test: type something and press enter\n");
     var s = input();
     print("You typed: ");
@@ -11,6 +12,7 @@ fn main() {
         print("Input received (StrObj type, len=");
         print(s.len());
         print(")\n");
+        print("input: all passed\n");
     }
     return 0;
 }

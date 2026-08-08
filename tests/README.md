@@ -42,13 +42,14 @@ tests/
 │   ├── 06_super.zt         # super.method() 调用 (2 层继承)
 │   └── 07_class_value.zt   # 类作为一等值
 ├── builtin/                # 内置函数 & 方法测试
-│   ├── 01_print.zt         # 打印输出 (人工检查)
+│   ├── 01_print.zt         # 打印输出 (与 01_print.expected 比对)
+│   ├── 01_print.expected   # 01_print.zt 的期望输出
 │   ├── 02_array.zt
 │   ├── 03_map.zt
 │   ├── 04_iter_next.zt
 │   ├── 05_error_check.zt
 │   ├── 06_intern.zt
-│   ├── 07_input.zt         # 交互测试,需手动运行
+│   ├── 07_input.zt         # 标准输入 (runner 自动喂值)
 │   ├── 08_type.zt          # type() 类型名
 │   └── 09_conversions.zt   # int()/float()/str() 转换
 ├── module/                 # 模块系统测试
@@ -89,8 +90,11 @@ tests/
 # 单个测试
 ./build/bin/zeta tests/lex/01_integer_literals.zt
 
-# 批量运行 (bash)
+# 批量运行 (bash) - 自动检查每个测试的输出 (PASS/FAIL + 汇总)
 bash tests/test.sh
+
+# 清理 tests/ 下所有 *.ztc / *.dump 文件
+bash tests/test.sh clear
 
 # 批量运行 (powershell)
 powershell -File tests/test.ps1
@@ -106,7 +110,8 @@ powershell -File tests/test.ps1
 - **`assert()` 只接受 Bool 类型的条件**: 非 Bool 会报 `[Runtime Error][line N]: Assert: condition must be a boolean`。因此需要把表达式转为比较/`is`/`check()` 等 Bool 形式后再断言 (注意 `&&`/`||` 返回的是操作数值本身, 不一定为 Bool)。
 - 断言失败时 VM 打印 `[Runtime Error][line N]: Assertion failed` 并立即终止, 不会打印汇总行。
 - 所有断言通过后, 输出类似 `tests_name: all passed` 的汇总行。
-- `builtin/01_print.zt` 是人工检查输出的测试 (打印期望值对比); `builtin/07_input.zt` 读取标准输入, 需手动运行。
+- `builtin/01_print.zt` 校验 `print()` 的精确输出: 其输出须与 `tests/builtin/01_print.expected` 逐字节一致 (由 `test.sh` 比对)。
+- `builtin/07_input.zt` 读取标准输入: `test.sh` 会自动喂入一行输入, 再检查输出 (输入为空时 `input()` 返回 null, 不会打印 "all passed", 判定失败)。
 - `super.method()` 的语义是"跳过当前方法所属的类, 从父类开始向上查找", 支持任意层数的继承链 (见 `class/06_super.zt`); 调用祖父类的方法也可以直接用类名调用, 如 `B.who(instance)`。
 
 ## GC 测试 (`tests/gc/`)
