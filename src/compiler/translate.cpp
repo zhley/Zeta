@@ -139,12 +139,10 @@ void Translator::visit(AST::VarDec& varDec) {
         }
         if(varDec.init){
             varDec.init->accept(*this);
-        } else {
-            pushOpcode(Opcode::LoadConst);
-            push4B(makeConstIdx(CompileValue()));
+            pushOpcode(Opcode::StoreVar);
+            push4B(index);
         }
-        pushOpcode(Opcode::StoreVar);
-        push4B(index);
+        // vm will initialize all local variables to Null.
     }
 }
 

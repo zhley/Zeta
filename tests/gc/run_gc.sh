@@ -7,16 +7,22 @@
 #       multiple sets are given (separated by ";;"), every run's output
 #       must be byte-identical (determinism check).
 #   // EXPECT: all_passed | out_of_memory       default: all_passed
-#       all_passed    - output must contain "all passed" (exit code is
-#                       meaningless: runtime errors also exit 0).
-#       out_of_memory - output must contain "Out of memory" and the process
-#                       must exit normally (no signal death). Currently
-#                       expected to FAIL: the GC OOM path crashes with a
-#                       null-pointer dereference (see tests/README.md).
+#       all_passed    - exit code 0 and output must contain "all passed".
+#                       (Assert failures and runtime errors still exit 0,
+#                       so the output check is what actually matters.)
+#       out_of_memory - exit code 2 and output must contain "Heap limit
+#                       exceeded": when the heap hits the -m limit the VM
+#                       throws VMException, main() prints the message and
+#                       returns 2 (see tests/README.md).
 
 set -u
 cd "$(dirname "$0")/../.." || exit 1
 BIN=${BIN:-./build/bin/zeta}
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
 
 pass=0
 fail=0
@@ -40,14 +46,14 @@ run_once() {
             fi
             ;;
         out_of_memory)
-            if [ "$code" -eq 0 ] && printf '%s' "$out" | grep -q "Out of memory"; then
+            if [ "$code" -eq 2 ] && printf '%s' "$out" | grep -q "Heap limit exceeded"; then
                 ok=1
             else
                 ok=0
             fi
             ;;
         *)
-            echo "FAIL  $f (unknown EXPECT: $expect)"
+            echo -e "${RED}FAIL${NC}  $f (unknown EXPECT: $expect)"
             ok=0
             ;;
     esac
@@ -59,10 +65,10 @@ for f in tests/gc/[0-9]*.zt; do
     if [ -z "$argsets" ]; then
         run_once "$f" ""
         if [ "$ok" -eq 1 ]; then
-            echo "PASS  $f"
+            echo -e "${GREEN}PASS${NC}  $f"
             pass=$((pass + 1))
         else
-            echo "FAIL  $f (exit=$code)"
+            echo -e "${RED}FAIL${NC}  $f (exit=$code)"
             printf '%s\n' "$out" | tail -5
             fail=$((fail + 1))
         fi
@@ -79,19 +85,19 @@ for f in tests/gc/[0-9]*.zt; do
         run_once "$f" "$s"
         n=$((n + 1))
         if [ "$ok" -ne 1 ]; then
-            echo "FAIL  $f (args: [$s], exit=$code)"
+            echo -e "${RED}FAIL${NC}  $f (args: [$s], exit=$code)"
             printf '%s\n' "$out" | tail -5
             all_ok=0
         fi
         if [ -z "$first_out" ]; then
             first_out="$out"
         elif [ "$first_out" != "$out" ]; then
-            echo "FAIL  $f (output differs between configurations, args: [$s])"
+            echo -e "${RED}FAIL${NC}  $f (output differs between configurations, args: [$s])"
             all_ok=0
         fi
     done
     if [ "$all_ok" -eq 1 ]; then
-        echo "PASS  $f ($n runs)"
+        echo -e "${GREEN}PASS${NC}  $f ($n runs)"
         pass=$((pass + 1))
     else
         fail=$((fail + 1))
@@ -99,5 +105,5 @@ for f in tests/gc/[0-9]*.zt; do
 done
 
 echo ""
-echo "gc tests: $pass passed, $fail failed"
+echo -e "gc tests: $pass ${GREEN}passed${NC}, $fail ${RED}failed${NC}"
 [ "$fail" -eq 0 ]

@@ -1,8 +1,13 @@
 .vscode/
 .cache/
 build/
+
 tmp/
+
 tests/**/*.dump
 tests/**/*.ztc
+tests/tmp.zt
+
 tools/
+
 CLAUDE.md

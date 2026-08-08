@@ -1,12 +1,8 @@
 // ARGS: -i 8 -m 64
 // EXPECT: out_of_memory
-// GC: exceeding the max heap must produce a clean "Out of memory" VM
-// error, not a crash. All strings below are retained (~200 KB over a
-// 64 KiB max heap), which forces the OOM path.
-//
-// KNOWN-FAILING: the current GC null-dereferences on this path (the OOM
-// error handler prints, then the allocator returns null and the caller
-// crashes). This test is expected to go green after that bug is fixed.
+// GC: exceeding the max heap must produce a clean "Heap limit exceeded"
+// error (exit code 2), not a crash. All strings below are retained
+// (~200 KB over a 64 KiB max heap), which forces the OOM path.
 
 fn main() {
     var keep = array(0);

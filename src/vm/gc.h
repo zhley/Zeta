@@ -157,8 +157,19 @@ private:
 
 备注:
  - 从分配一个对象, 到将其存储到根集或者其他已存储对象对象的字段中, 如果该过程中可能产生其他对象的分配, 
-   则必须将该过程包裹在 lock() 和 unlock() 之间, 否则刚分配出的对象可能会被立即回收.
-
+   则必须将该过程包裹在 lock() 和 unlock() 之间, 否则刚分配出的对象可能会被立即回收. 必须保证加锁期间
+   可能产生的最大堆分配不超过 ZETA_GC_TEMP_SIZE. 
+   准确来说, 任何分配对象的行为都可能触发 GC, 而触发 GC 会产生对象移动, GC 只会更新根集中的指针,
+   对于缓存在 C++ 端的指针, 可能会失效, 例如:
+       Array* arr = POP();
+       ......
+       arr->add(POP());
+       ......
+       PUSH(arr->size);
+   这里 add 函数内部有对象分配, 可能触发 GC, 数组对象可能移动, 导致 arr 失效, 这个时候访问 arr->size
+   是未定义行为, 可能会崩溃. 所以在 C++ 端, 对象的引用必须在 lock() 和 unlock() 之间, 或者在 GC 之后重新获取.
+ - offset 为 0 的地方是 eden 区, 所以 forward 字段可以用 0 来表示无效.
+ - 针对 64 位架构设计, 32 位能否正常运行存疑.
 */
 
 // TODO: 缺少测试
@@ -170,14 +181,12 @@ private:
 #define ZETA_GC_SURVIVOR_SCALE 2
 #define ZETA_GC_AGE_THRESHOLD 10
 #define ZETA_GC_BIG_OBJECT 512
-#define ZETA_GC_TEMP_SIZE 16384 // 16 KiB
 
 class GC {
 public:
     GC(VM* vm);
     ~GC();
 
-    // TODO: 目前 OOM 分配失败的路径由于没做空指针检查, 程序会崩溃.
     template<typename T, typename... Args>
     requires (std::is_base_of_v<Object, T> && !std::is_same_v<T, Block>)
     T* allocate(Args&&... args) {
@@ -188,7 +197,7 @@ public:
         return new (obj) T(std::forward<Args>(args)...);
     }
 
-    Block* allocateBlock(int size);
+    Block* allocateBlock(int size, Block::ElemType elemType);
     void writeBarrier(Object* src, Object** field, Object* value); // must be called when src->field = value.
     void writeBarrier(Object* src, Value* field, Value value);
 
@@ -197,9 +206,20 @@ public:
     }
     void unlock(){
         --locked;
-        if(locked == 0 && curTempPtr != temp) {
-            fullGC();
-            curTempPtr = temp;
+        if(locked == 0) {
+            if(waitingMinorGC) {
+                minorGC();
+                waitingMinorGC = false;
+            }
+            if(waitingFullGC) {
+                assert(!temp.empty());
+                fullGC();
+                for(auto ptr : temp) {
+                    std::free(ptr);
+                }
+                temp.clear();
+                waitingFullGC = false;
+            }
         }
     }
 
@@ -228,10 +248,10 @@ private:
 
     PointerHashSet rememberedSet; // the location of the field in old generation that points to young generation
 
-    void* temp;
-    void* tempEnd;
-    void* curTempPtr;
+    std::vector<void*> temp; 
     int locked = false;
+    bool waitingMinorGC = false;
+    bool waitingFullGC = false;
 
     bool isYoung(void* obj);
     bool isOld(void* obj);
@@ -247,7 +267,7 @@ private:
 
     void minorGC(); // for young generation
     void fullGC(); // for the entire heap
-
+    
     template<typename F>
     requires std::is_invocable_v<F, Value&>
     void forEachRoot(F&& f);

@@ -90,21 +90,16 @@ fn tree_count(t) {
 }
 
 fn tree_find(t, v) {
-    // NOTE: written with while instead of for-in + early return, because
-    // "return" inside a for-in loop crashes the compiler (see tests/gc/02
-    // notes in tests/README.md).
     if (t.value == v) {
         return true;
     }
     if (t.children == null) {
         return false;
     }
-    var i = 0;
-    while (i < t.children.size()) {
-        if (tree_find(t.children[i], v)) {
+    for (c : t.children) {
+        if (tree_find(c, v)) {
             return true;
         }
-        i = i + 1;
     }
     return false;
 }

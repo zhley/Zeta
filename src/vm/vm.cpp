@@ -23,6 +23,7 @@ VM::VM(Config config, ErrorHandler handler) : config(config), errorHandler(handl
     stack.top = stack.base;
     if(!stack.base) {
         errorHandler({Error::Type::VMError, 0, "Failed to allocate initial stack"});
+        throw VMException(VMException::Type::OutOfMemory);
     }
     for(const auto& path : config.moduleSearchPaths) {
         std::error_code ec;
@@ -518,6 +519,7 @@ Value VM::execute() {
     while(true){
         uint8_t opcode;
         READ_BYTE(opcode);
+        gc->lock();
         switch(static_cast<Opcode>(opcode)) {
             case Opcode::Nop: break;
             case Opcode::LoadConst: {
@@ -1033,11 +1035,12 @@ Value VM::execute() {
                         errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), std::format("Function expects {} arguments, but {} were provided", routine->arity, argCount)});
                         return Value::Error;
                     }
+                    StackFrame* frame = pushFrame(newFrame);
+                    curFrame = frame - 1;
                     for(int i = routine->arity - 1; i >= 0; i--) {
                         newFrame.base[i] = POP();
                     }
-                    pushFrame(newFrame);
-                    curFrame = &stackFrames.back();
+                    curFrame = frame;
                     curRoutine = curFrame->routine;
                 } else if(callee.type == Value::Type::Object && callee.ptrValue->type == Object::Type::Class) {
                     Class* cls = static_cast<Class*>(callee.ptrValue);
@@ -1057,13 +1060,14 @@ Value VM::execute() {
                             errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), std::format("Constructor expects {} arguments, but {} were provided", routine->arity - 1, argCount)});
                             return Value::Error;
                         }
+                        StackFrame* frame = pushFrame(newFrame);
+                        curFrame = frame - 1;
                         newFrame.base[0] = Value(instance); // push 'this' as the first argument
-                        gc->unlock();
                         for(int i = routine->arity - 1; i >= 1; i--) {
                             newFrame.base[i] = POP();
                         }
-                        pushFrame(newFrame);
-                        curFrame = &stackFrames.back();
+                        gc->unlock();
+                        curFrame = frame;
                         curRoutine = curFrame->routine;
                     } else {
                         PUSH(Value(instance));
@@ -1217,12 +1221,13 @@ Value VM::execute() {
                                 errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), std::format("Method expects {} arguments, but {} were provided", routine->arity - 1, argCount)});
                                 return Value::Error;
                             }
+                            StackFrame* frame = pushFrame(newFrame);
+                            curFrame = frame - 1;
                             newFrame.base[0] = objVal; // push 'this' as the first argument
                             for(int i = routine->arity - 1; i >= 1; i--) {
                                 newFrame.base[i] = POP();
                             }
-                            pushFrame(newFrame);
-                            curFrame = &stackFrames.back();
+                            curFrame = frame;
                             curRoutine = curFrame->routine;
                             break;
                         }
@@ -1245,11 +1250,12 @@ Value VM::execute() {
                                 errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), std::format("Method expects {} arguments (the first is 'this'), but {} were provided", routine->arity, argCount)});
                                 return Value::Error;
                             }
+                            StackFrame* frame = pushFrame(newFrame);
+                            curFrame = frame - 1;
                             for(int i = routine->arity - 1; i >= 0; i--) {
                                 newFrame.base[i] = POP();
                             }
-                            pushFrame(newFrame);
-                            curFrame = &stackFrames.back();
+                            curFrame = frame;
                             curRoutine = curFrame->routine;
                             break;
                         }
@@ -1303,12 +1309,13 @@ Value VM::execute() {
                     errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), std::format("Super method expects {} arguments, but {} were provided", routine->arity - 1, argCount)});
                     return Value::Error;
                 }
+                StackFrame* frame = pushFrame(newFrame);
+                curFrame = frame - 1;
                 newFrame.base[0] = objVal; // push 'this' as the first argument
                 for(int i = routine->arity - 1; i >= 1; i--) {
                     newFrame.base[i] = POP();
                 }
-                pushFrame(newFrame);
-                curFrame = &stackFrames.back();
+                curFrame = frame;
                 curRoutine = curFrame->routine;
                 break;
             }
@@ -1433,9 +1440,9 @@ Value VM::execute() {
                                 errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), std::format("GetIter: class \"{}\" does not have an _iter method with 0 arguments", instance->cls->name->data)});
                                 return Value::Error;
                             }
+                            StackFrame* frame = pushFrame(newFrame);
                             newFrame.base[0] = objVal; // push 'this' as the first argument
-                            pushFrame(newFrame);
-                            curFrame = &stackFrames.back();
+                            curFrame = frame;
                             curRoutine = curFrame->routine;
                         } else {
                             errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), "GetIter: object must be an array, map or class instance"});
@@ -1472,9 +1479,9 @@ Value VM::execute() {
                                 errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), std::format("IterNext: class \"{}\" does not have a _next method with 0 arguments", instance->cls->name->data)});
                                 return Value::Error;
                             }
+                            StackFrame* frame = pushFrame(newFrame);
                             newFrame.base[0] = iterVal; // push 'this' as the first argument
-                            pushFrame(newFrame);
-                            curFrame = &stackFrames.back();
+                            curFrame = frame;
                             curRoutine = curFrame->routine;
                         } else {
                             errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), "IterNext: object must be an iterator or class instance"});
@@ -1724,6 +1731,7 @@ Value VM::execute() {
                 return Value::Error;
             }
         }
+        gc->unlock();
     }
 }
 
@@ -1738,12 +1746,16 @@ String* VM::internString(const std::string& str) {
     return internedPtr;
 }
 
-void VM::pushFrame(const StackFrame& frame) {
+VM::StackFrame* VM::pushFrame(const StackFrame& frame) {
     stackFrames.push_back(frame);
     stack.top += frame.routine->localCount + frame.routine->maxStackSize;
     if(stack.top > stack.base + stack.capacity) {
         errorHandler({Error::Type::RuntimeError, 0, "Stack overflow"});
+        throw VMException(VMException::Type::StackOverflow);
     }
+    // Initialize local variables to null, avoid garbage values
+    std::memset(frame.base, 0, sizeof(Value) * frame.routine->localCount);
+    return &stackFrames.back();
 }
 
 void VM::popFrame() {

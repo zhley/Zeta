@@ -12,25 +12,24 @@ const Value Value::Error = Value(Value::Type::Error, 0);
 
 // Array
 Array::Array(GC* gc) : Object(Object::Type::Array), size(0), capacity(8), gc(gc){
-    Block* blk = gc->allocateBlock(capacity * sizeof(Value));
+    Block* blk = gc->allocateBlock(capacity * sizeof(Value), Block::ElemType::Array);
     gc->writeBarrier(this, (Object**)(&data), blk);
+    std::memset(data->getData(), 0, data->size);
 }
 
 Array::Array(GC* gc, uint32_t size) : Object(Object::Type::Array), size(size), gc(gc){
     capacity = 1;
     while(capacity < size) capacity <<= 1;
-    Block* blk = gc->allocateBlock(capacity * sizeof(Value));
+    Block* blk = gc->allocateBlock(capacity * sizeof(Value), Block::ElemType::Array);
     gc->writeBarrier(this, (Object**)(&data), blk);
-    Value* ptr = (Value*)(data->getData());
-    for(uint32_t i = 0; i < size; i++){
-        new (ptr + i) Value();
-    }
+    std::memset(data->getData(), 0, data->size);
 }
 
 void Array::add(const Value& value){
     if(size == capacity){
         capacity <<= 1;
-        Block* newData = gc->allocateBlock(capacity * sizeof(Value));
+        Block* newData = gc->allocateBlock(capacity * sizeof(Value), Block::ElemType::Array);
+        std::memset(newData->getData(), 0, newData->size);
         for(int i = 0; i < size; i++){
             gc->writeBarrier(newData, (Value*)(newData->getData()) + i, ((Value*)(data->getData()))[i]);
         }
@@ -55,7 +54,7 @@ Value Array::get(uint32_t index) const{
 
 // Map
 Map::Map(GC* gc) : Object(Object::Type::Map), capacity(8), size(0), deletedCnt(0), gc(gc){
-    Block* blk = gc->allocateBlock(capacity * sizeof(Entry));
+    Block* blk = gc->allocateBlock(capacity * sizeof(Entry), Block::ElemType::Map);
     gc->writeBarrier(this, (Object**)(&data), blk);
     std::memset(data->getData(), 0, data->size);
 } 
@@ -63,7 +62,7 @@ Map::Map(GC* gc) : Object(Object::Type::Map), capacity(8), size(0), deletedCnt(0
 Map::Map(GC* gc, uint32_t minCapacity) : Object(Object::Type::Map), size(0), deletedCnt(0), gc(gc){
     capacity = 4;
     while(capacity < minCapacity) capacity <<= 1;
-    Block* blk = gc->allocateBlock(capacity * sizeof(Entry));
+    Block* blk = gc->allocateBlock(capacity * sizeof(Entry), Block::ElemType::Map);
     gc->writeBarrier(this, (Object**)(&data), blk);
     std::memset(data->getData(), 0, data->size);
 }
@@ -139,7 +138,7 @@ void Map::rehash(uint32_t newCapacity){
     uint32_t oldCapacity = capacity;
 
     capacity = newCapacity;
-    Block* newData = gc->allocateBlock(capacity * sizeof(Entry));
+    Block* newData = gc->allocateBlock(capacity * sizeof(Entry), Block::ElemType::Map);
     std::memset(newData->getData(), 0, newData->size);
     gc->writeBarrier(this, (Object**)(&data), newData);
     Entry* entries = (Entry*)(data->getData());
@@ -190,14 +189,14 @@ Iterator::Iterator(GC* gc, Object* container) : Object(Type::Iterator), index(0)
 
 // String object
 StrObj::StrObj(GC* gc, const char* str, uint32_t len) : Object(Object::Type::StrObj), length(len) {
-    Block* blk = gc->allocateBlock(len + 1);
+    Block* blk = gc->allocateBlock(len + 1, Block::ElemType::StrObj);
     std::memcpy(blk->getData(), str, len);
     ((char*)blk->getData())[len] = '\0';
     gc->writeBarrier(this, (Object**)(&data), blk);
 }
 
 StrObj::StrObj(GC* gc, StrView str1, StrView str2) : Object(Object::Type::StrObj), length(str1.length + str2.length) {
-    Block* blk = gc->allocateBlock(length + 1);
+    Block* blk = gc->allocateBlock(length + 1, Block::ElemType::StrObj);
     std::memcpy(blk->getData(), str1.data, str1.length);
     std::memcpy((char*)blk->getData() + str1.length, str2.data, str2.length);
     ((char*)blk->getData())[length] = '\0';

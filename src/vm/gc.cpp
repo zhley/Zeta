@@ -4,6 +4,7 @@
 #include "vm/value.h"
 
 #include <cassert>
+#include <iostream>
 
 #pragma GCC optimize("no-strict-aliasing")
 
@@ -14,11 +15,12 @@ namespace Zeta {
 #define HEAP_PTR(offset) ((void*)((char*)heap + (offset)))
 
 GC::GC(VM* vm) : vm(vm), rememberedSet(512) {
-    maxHeapSize = vm->config.maxHeapSize * 1024;
+    maxHeapSize = vm->config.maxHeapSize == -1 ? -1 : vm->config.maxHeapSize * 1024;
     heapSize = vm->config.initHeapSize * 1024;
     heap = std::malloc(heapSize);
     if (!heap) {
         vm->errorHandler({VM::Error::VMError, 0, "Failed to allocate heap memory"});
+        throw VMException(VMException::Type::OutOfMemory);
         return;
     }
     heapEnd = static_cast<char*>(heap) + heapSize;
@@ -39,34 +41,41 @@ GC::GC(VM* vm) : vm(vm), rememberedSet(512) {
     curEdenPtr = edenStart;
     curOldPtr = oldStart;
     curFromPtr = fromStart;
-
-    temp = std::malloc(ZETA_GC_TEMP_SIZE);
-    if (!temp) {
-        vm->errorHandler({VM::Error::VMError, 0, "Failed to allocate temp memory"});
-        return;
-    }
-    tempEnd = static_cast<char*>(temp) + ZETA_GC_TEMP_SIZE;
-    curTempPtr = temp;
 }
 
 GC::~GC() {
     std::free(heap);
-    std::free(temp);
+    if(!temp.empty()) {
+        for(auto ptr : temp) {
+            std::free(ptr);
+        }
+        temp.clear();
+    }
 }
 
-Block* GC::allocateBlock(int size) {
+Block* GC::allocateBlock(int size, Block::ElemType elemType) {
     size = ALIGN8(size);
     Object* obj = allocateImpl(sizeof(Block) + size);
     obj->age = 0;
     obj->gcWord.marked = false;
     obj->gcWord.forward = 0;
-    Block* block = new (obj) Block(size);
+    Block* block = new (obj) Block(size, elemType);
     return block;
 }
 
 void GC::writeBarrier(Object* src, Object** field, Object* value) {
-    if (isOld(src) && isYoung(value)) {
-        rememberedSet.insert(field);
+    // if src or value is in temp, rememberedSet is not needed, because fullGC will be triggered soon.
+    if (isOld(src)) {
+        if (isYoung(value)) {
+            rememberedSet.insert(field);
+        } else if (isYoung(*field)) {
+            rememberedSet.erase(field);
+        }
+        // if (isYoung(value)) {
+        //     rememberedSet.insert(field);
+        // } else {
+        //     rememberedSet.erase(field);
+        // }
     }
     *field = value;
 }
@@ -75,9 +84,14 @@ void GC::writeBarrier(Object* src, Value* field, Value value) {
     if (isOld(src)) {
         if(value.type == Value::Type::Object && isYoung(value.ptrValue)) {
             rememberedSet.insert(&field->ptrValue);
-        } else if(value.type != Value::Type::Object && field->type == Value::Type::Object) {
+        } else if(field->type == Value::Type::Object && isYoung(field->ptrValue)) {
             rememberedSet.erase(&field->ptrValue);
         }
+        // if(value.type == Value::Type::Object && isYoung(value.ptrValue)) {
+        //     rememberedSet.insert(&field->ptrValue);
+        // } else {
+        //     rememberedSet.erase(&field->ptrValue);
+        // }
     }
     *field = value;
 }
@@ -106,10 +120,6 @@ bool GC::inHeap(void* ptr) {
     return ptr >= heap && ptr < heapEnd;
 }
 
-bool GC::inTemp(void* ptr) {
-    return ptr >= temp && ptr < tempEnd;
-}
-
 Object* GC::allocateImpl(int size) {
     // 8 bytes alignment
     size = ALIGN8(size);
@@ -122,6 +132,7 @@ Object* GC::allocateImpl(int size) {
     curEdenPtr = (char*)curEdenPtr + size;
     if(curEdenPtr > (char*)edenEnd) {
         if(locked) {
+            waitingMinorGC = true;
             return allocateInOld(size);
         } else{
             minorGC();
@@ -141,13 +152,10 @@ Object* GC::allocateInOld(int size) {
     curOldPtr = (char*)curOldPtr + size;
     if(curOldPtr > (char*)oldEnd) {
         if(locked){
-            ptr = curTempPtr;
-            curTempPtr = (char*)curTempPtr + size;
-            assert(curTempPtr <= (char*)tempEnd);
-            // if(curTempPtr > (char*)tempEnd) {
-            //     vm->errorHandler({VM::Error::VMError, 0, "Out of memory"}); // TODO: 详细一点
-            //     return nullptr;
-            // }
+            waitingFullGC = true;
+            curOldPtr = ptr;
+            ptr = std::malloc(size);
+            temp.push_back(ptr);
         } else {
             fullGC();
             ptr = curOldPtr;
@@ -155,7 +163,8 @@ Object* GC::allocateInOld(int size) {
             if(curOldPtr > (char*)oldEnd) {
                 curOldPtr = (char*)curOldPtr - size;
                 if(!growHeap(size * (ZETA_GC_YOUNG_SCALE + ZETA_GC_OLD_SCALE) / ZETA_GC_OLD_SCALE)) {
-                    vm->errorHandler({VM::Error::VMError, 0, "Out of memory"}); // TODO: 详细一点
+                    vm->errorHandler({VM::Error::VMError, 0, std::format("Heap limit exceeded [current heap size: {} bytes, max heap size: {} bytes]", heapSize, maxHeapSize)});
+                    throw VMException(VMException::Type::HeapLimitExceeded);
                     return nullptr;
                 }
                 ptr = curOldPtr;
@@ -189,6 +198,7 @@ bool GC::growHeap(int minSize) {
     newSize = ALIGN8(newSize);
     // all survivors are in old generation.
     void* newHeap = std::malloc(newSize);
+    if (!newHeap) throw VMException(VMException::Type::OutOfMemory);
     int newYoungSize = ALIGN8(newSize * ZETA_GC_YOUNG_SCALE / (ZETA_GC_YOUNG_SCALE + ZETA_GC_OLD_SCALE));
     char* newOldStart = (char*)newHeap + newYoungSize;
     int offset = (char*)newOldStart - (char*)oldStart;
@@ -196,12 +206,13 @@ bool GC::growHeap(int minSize) {
     while(ptr < (char*)curOldPtr) {
         Object* obj = (Object*)ptr;
         obj->trace([&offset](Object** child){
+            assert(*child != nullptr);
             *child = (Object*)((char*)(*child) + offset);
         });
         ptr += obj->getSize();
     }
     forEachRoot([this, &offset](Value& v){
-        if(v.type == Value::Type::Object && inHeap(v.ptrValue)) {
+        if(v.type == Value::Type::Object) {
             assert(isOld(v.ptrValue));
             v.ptrValue = (Object*)((char*)v.ptrValue + offset);
         }
@@ -233,6 +244,7 @@ bool GC::growHeap(int minSize) {
 }
 
 void GC::minorGC() {
+    // std::cerr << "Minor GC" << std::endl; // TODO: 调试用, 正式输出时注释掉
     assert(!locked);
     std::vector<Object*> worklist;
     // get root
@@ -250,15 +262,17 @@ void GC::minorGC() {
             worklist.push_back(*root);
         }
     }
-    rememberedSet.forEach([this](Object** field){
+    rememberedSet.forEach([this, &worklist](Object** field){
         if(!(*field)->gcWord.marked) {
             assert(isYoung(*field));
             (*field)->gcWord.marked = true;
+            worklist.push_back(*field);
         }
     });
     
     int p = 0;
     char* toPtr = (char*)toStart;
+    char* prevOldPtr = (char*)curOldPtr;
     bool overflow = false;
     while(p < worklist.size()) {
         Object* obj = worklist[p];
@@ -278,11 +292,11 @@ void GC::minorGC() {
                 break;
             }
         }
-        // copy to to-space
+        // copy to to-space / old generation
         Object* newObj = (Object*)targetPtr;
         std::memcpy(newObj, obj, size);
         obj->gcWord.forward = HEAP_OFFSET(newObj);
-        newObj->trace([&worklist, this](Object** child){
+        obj->trace([&worklist, this, &newObj](Object** child){
             if(isYoung(*child) && !(*child)->gcWord.marked) {
                 (*child)->gcWord.marked = true;
                 worklist.push_back(*child);
@@ -293,12 +307,10 @@ void GC::minorGC() {
     }
     if(overflow) {
         // clear marked and forward for worklist
-        for(int i = 0; i < p; ++i) {
+        curOldPtr = prevOldPtr;
+        for(int i = 0; i < worklist.size(); ++i) {
             worklist[i]->gcWord.marked = false;
             worklist[i]->gcWord.forward = 0;
-        }
-        for(int i = p; i < worklist.size(); ++i) {
-            worklist[i]->gcWord.marked = false;
         }
         fullGC();
         return;
@@ -330,6 +342,22 @@ void GC::minorGC() {
         obj->gcWord.forward = 0;
         scan += obj->getSize();
     }
+    scan = prevOldPtr;
+    while(scan < (char*)curOldPtr) {
+        Object* obj = (Object*)scan;
+        obj->trace([this](Object** child){
+            if(isYoung(*child)) {
+                assert((*child)->gcWord.forward);
+                *child = (Object*)HEAP_PTR((*child)->gcWord.forward);
+                if (isYoung(*child)) {
+                    rememberedSet.insert(child);
+                }
+            }
+        });
+        obj->gcWord.marked = false;
+        obj->gcWord.forward = 0;
+        scan += obj->getSize();
+    }
 
     // swap from and to
     std::swap(fromStart, toStart);
@@ -340,6 +368,7 @@ void GC::minorGC() {
 
 // recycle the entire heap.
 void GC::fullGC(){
+    // std::cerr << "Full GC" << std::endl; // TODO: 调试用, 正式输出时注释掉
     assert(!locked);
     std::vector<Object*> worklist;
     std::vector<Object**> roots;
@@ -368,9 +397,12 @@ void GC::fullGC(){
     }
 
     // set forwarding
+    // sort: old - young - temp
     std::sort(worklist.begin(), worklist.end(), [this](Object* a, Object* b){
-        if(!inTemp(a) && inTemp(b)) return true;
+        if(inHeap(a) && !inHeap(b)) return true;
+        if(!inHeap(a) && inHeap(b)) return false;
         if(isOld(a) && isYoung(b)) return true;
+        if(isYoung(a) && isOld(b)) return false;
         return a < b;
     });
     int totalSize = 0;
@@ -383,7 +415,8 @@ void GC::fullGC(){
         int minSize = ALIGN8(totalSize * (ZETA_GC_YOUNG_SCALE + ZETA_GC_OLD_SCALE) / ZETA_GC_OLD_SCALE);
         bool unlimited = (maxHeapSize == -1);
         if(!unlimited && heapSize >= maxHeapSize) {
-            vm->errorHandler({VM::Error::VMError, 0, "Out of memory"}); // TODO: 详细一点
+            vm->errorHandler({VM::Error::VMError, 0, std::format("Heap limit exceeded [current heap size: {} bytes, max heap size: {} bytes]", heapSize, maxHeapSize)});
+            throw VMException(VMException::Type::HeapLimitExceeded);
             return;
         }
         int newSize = heapSize * 2;
@@ -394,10 +427,15 @@ void GC::fullGC(){
             newSize = maxHeapSize;
         }
         if(newSize < heapSize + minSize) {
-            vm->errorHandler({VM::Error::VMError, 0, "Out of memory"}); // TODO: 详细一点
+            vm->errorHandler({VM::Error::VMError, 0, std::format("Heap limit exceeded [current heap size: {} bytes, max heap size: {} bytes]", heapSize, maxHeapSize)});
+            throw VMException(VMException::Type::HeapLimitExceeded);
             return;
         }
         void* newHeap = std::malloc(newSize);
+        if (!newHeap) {
+            vm->errorHandler({VM::Error::VMError, 0, "Out of memory"});
+            throw VMException(VMException::Type::OutOfMemory);
+        }
         int newYoungSize = ALIGN8(newSize * ZETA_GC_YOUNG_SCALE / (ZETA_GC_YOUNG_SCALE + ZETA_GC_OLD_SCALE));
         int newHalfSurvivorSize = ALIGN8(newYoungSize * ZETA_GC_SURVIVOR_SCALE / (ZETA_GC_EDEN_SCALE + ZETA_GC_SURVIVOR_SCALE) / 2);
         int newEdenSize = newYoungSize - newHalfSurvivorSize * 2;
@@ -434,9 +472,10 @@ void GC::fullGC(){
 
     // compact
     for(auto& obj : worklist){
-        std::memmove(HEAP_PTR(obj->gcWord.forward), obj, obj->getSize());
-        obj->gcWord.marked = false;
-        obj->gcWord.forward = 0;
+        Object* newObj = (Object*)HEAP_PTR(obj->gcWord.forward);
+        std::memmove(newObj, obj, obj->getSize());
+        newObj->gcWord.marked = false;
+        newObj->gcWord.forward = 0;
     }
 
     curOldPtr = compactPtr;

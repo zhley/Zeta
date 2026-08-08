@@ -102,7 +102,7 @@ private:
     Value callFunction(Routine* func, int argc, Value* args);
     Value execute();
 
-    void pushFrame(const StackFrame& frame);
+    StackFrame* pushFrame(const StackFrame& frame);
     void popFrame();
 
     static void defaultErrorHandler(const Error& error) {
@@ -183,6 +183,32 @@ public:
         internString("null"),
         internString("_cpp_ptr")
     };
+};
+
+// Severe errors that cannot be handled by the VM itself, will throw this exception. The user of the VM should catch this exception and handle it appropriately.
+class VMException : public std::exception {
+public:
+    enum class Type { 
+        StackOverflow,
+        HeapLimitExceeded,  // heap size exceeds max heap size
+        OutOfMemory         // memory exhaustion
+    };
+
+    explicit VMException(Type type) : type(type) {}
+
+    const char* what() const noexcept override {
+        switch(type) {
+            case Type::StackOverflow:       return "VMException: Stack overflow";
+            case Type::HeapLimitExceeded:   return "VMException: Heap limit exceeded";
+            case Type::OutOfMemory:         return "VMException: Out of memory";
+            default:                        return "VMException: Unknown error";
+        }
+    }
+
+    Type getType() const noexcept { return this->type; }
+
+private:
+    Type type;
 };
 
 }

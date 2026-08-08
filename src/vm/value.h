@@ -25,6 +25,7 @@ struct StrView {
 
 using NativeFunction = Value(*)(int argc, Value* argv);
 
+// 16 Bytes
 struct Value{
     static const Value Null;
     static const Value Error;
@@ -47,7 +48,7 @@ struct Value{
         String* strValue;
         Routine* funcValue;
         NativeFunction nativeFuncValue;
-        Object* ptrValue;
+        Object* ptrValue; // NOTE: 只要类型是 Object, ptrValue 就必定不是 nullptr, 也就是程序需要在任何情况下都能断言assert(ptrValue != nullptr)
         uint64_t val;
     };
 
@@ -85,50 +86,8 @@ struct Routine{
     Class* ownerClass = nullptr; // the class this method is defined in, nullptr for plain functions; set at module load time
 };
 
-// allocated on heap, managed by GC
-struct Object {
-    enum class Type : uint8_t {
-        Block, // 8 bytes head + (size - 8) bytes data
-        Array,
-        Map,
-        Class,
-        Instance, 
-        Iterator,
-        StrObj
-    };
-
-    // head (8 bytes)
-    Type type;
-    uint8_t age;
-    struct {
-        uint64_t forward: 63;
-        bool marked : 1;
-    } gcWord; // for GC
-
-    Object(Type t) : type(t) {}
-    int getSize() const;
-
-    template<typename F>
-    requires std::is_invocable_v<F, Object**>
-    void trace(F&& f);
-};
-
-// Block can only be allocated by GC::allocateBlock().
-struct Block : public Object {
-    friend class GC;
-
-    int64_t size; // size of the valid data, exclude the size of the Block instance itself.
-
-    void* getData() { return static_cast<void*>(this + 1); } // 8 bytes alignment
-    
-private:
-    Block() = delete;
-    Block(int64_t size) : Object(Type::Block), size(size) {}
-};
-
 // immutable string
-// TODO: 这个是VM直接管理的字符串, GC管理的字符串要改实现. 目前 String* 都是VM直接管理的常量字符串
-// TODO: 实现对象级字符串后, VM::execute()的一些指令逻辑要改
+// String directly managed by VM
 struct String {
     char* data;
     uint32_t length;
@@ -145,6 +104,60 @@ struct String {
     }
 };
 
+// TODO: 由于这部分和 GC 强相关, 还是得加上访问控制, 尽量避免外部直接访问成员, 以避免GC写屏障遗漏
+// TODO: 构造函数先0初始化一次再调用writeBarrier.
+
+// allocated on heap, managed by GC
+// 16 Bytes
+struct Object {
+    enum class Type : uint8_t {
+        Block, // 16 bytes head + (size - 16) bytes data
+        Array,
+        Map,
+        Class,
+        Instance, 
+        Iterator,
+        StrObj
+    };
+
+    // head (16 bytes)
+    Type type;
+    uint8_t age;
+    struct {
+        uint64_t forward: 63;
+        bool marked : 1;
+    } gcWord; // for GC
+
+    Object(Type t) : type(t) {}
+    int getSize() const;
+
+    template<typename F>
+    requires std::is_invocable_v<F, Object**>
+    void trace(F&& f);
+};
+
+// Block can only be allocated by GC::allocateBlock().
+// (24 + size) Bytes
+struct Block : public Object {
+    friend class GC;
+
+    enum class ElemType : uint8_t {
+        Array,
+        Map,
+        StrObj
+    };
+
+    ElemType elemType;
+    uint32_t size; // size of the valid data, exclude the size of the Block instance itself.
+
+    void* getData() { return static_cast<void*>(this + 1); } // 8 bytes alignment
+    
+private:
+    Block() = delete;
+    Block(uint32_t size, ElemType elemType) : Object(Type::Block), size(size), elemType(elemType) {}
+};
+
+// 40 Bytes
 struct Array : public Object {
     uint32_t size;
     uint32_t capacity;
@@ -169,6 +182,7 @@ struct Array : public Object {
     }
 };
 
+// 48 Bytes
 struct Map : public Object {
     struct Entry {
         String* key;
@@ -213,6 +227,7 @@ private:
     void rehash(uint32_t newCapacity);
 };
 
+// 48 Bytes
 struct Class : public Object {
     String* name;
     Class* base;
@@ -222,6 +237,7 @@ struct Class : public Object {
     Class(GC* gc, String* name, Class* base, Map* fields, Map* methods);
 };
 
+// 32 Bytes
 struct Instance : public Object {
     Class* cls;
     Map* fields; // field name -> value
@@ -229,6 +245,7 @@ struct Instance : public Object {
     Instance(GC* gc, Class* cls);
 };
 
+// 32 Bytes
 struct Iterator : public Object {
     Object* container; // array or map;
     int index;
@@ -260,6 +277,7 @@ struct Iterator : public Object {
 };
 
 // normal immutable string object, allocated on heap, managed by GC 
+// 32 Bytes
 struct StrObj : public Object {
     Block* data;
     uint32_t length;
@@ -281,37 +299,54 @@ inline int Object::getSize() const {
     return 0;
 }
 
+// nullptr should not be traced.
 template<typename F>
 requires std::is_invocable_v<F, Object**>
 inline void Object::trace(F&& f) {
     switch (type) {
-        case Object::Type::Block: break; // actually, Block may contain references to other objects, but it does not know how to trace them, so they will be traced by the owner of the Block. (The owner of the Block is responsible for tracing the references in the Block.)
+        case Object::Type::Block: {
+            Block* blk = static_cast<Block*>(this);
+            switch (blk->elemType) {
+                case Block::ElemType::Array: {
+                    Value* elem = (Value*)(blk->getData());
+                    uint32_t capacity = (blk->size) / sizeof(Value);
+                    for(uint32_t i = 0; i < capacity; i++){
+                        if(elem[i].type == Value::Type::Object){
+                            f(&elem[i].ptrValue);
+                        }
+                    }
+                    break;
+                }
+                case Block::ElemType::Map: {
+                    Map::Entry* entries = (Map::Entry*)(blk->getData());
+                    uint32_t capacity = (blk->size) / sizeof(Map::Entry);
+                    for(uint32_t i = 0; i < capacity; i++){
+                        if(entries[i].key != Map::EMPTY && entries[i].key != Map::DELETED && entries[i].value.type == Value::Type::Object){
+                            f(&entries[i].value.ptrValue);
+                        }
+                    }
+                    break;
+                }
+                case Block::ElemType::StrObj: break; // StrObj does not contain any Object*
+                default: assert(false); break;
+            }
+            break;
+        }
         case Object::Type::Array: {
             Array* arr = static_cast<Array*>(this);
             f((Object**)(&(arr->data)));
-            // equivalent to arr->data->trace(f)
-            Value* elem = (Value*)(arr->data->getData());
-            for(uint32_t i = 0; i < arr->size; i++){
-                if(elem->type == Value::Type::Object){
-                    f(&elem->ptrValue);
-                }
-            }
             break;
         }
         case Object::Type::Map: {
             Map* map = static_cast<Map*>(this);
             f((Object**)(&(map->data)));
-            // equivalent to map->data->trace(f)
-            map->forEach([&f](const String* key, Value value){
-                if(value.type == Value::Type::Object){
-                    f(&value.ptrValue);
-                }
-            });
             break;
         }
         case Object::Type::Class: {
             Class* cls = static_cast<Class*>(this);
-            f((Object**)(&(cls->base)));
+            if(cls->base) {
+                f((Object**)(&cls->base));
+            }
             f((Object**)(&(cls->fields)));
             f((Object**)(&(cls->methods)));
             break;

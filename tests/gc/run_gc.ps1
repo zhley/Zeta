@@ -1,6 +1,15 @@
 # GC black-box test runner (PowerShell; mirrors tests/gc/run_gc.sh).
 # See tests/README.md, section "GC 测试", for the // ARGS: and // EXPECT:
 # header conventions.
+#
+# // EXPECT: all_passed | out_of_memory       default: all_passed
+#     all_passed    - exit code 0 and output must contain "all passed".
+#                     (Assert failures and runtime errors still exit 0,
+#                     so the output check is what actually matters.)
+#     out_of_memory - exit code 2 and output must contain "Heap limit
+#                     exceeded": when the heap hits the -m limit the VM
+#                     throws VMException, main() prints the message and
+#                     returns 2 (see tests/README.md).
 
 $exe = ".\build\bin\zeta.exe"
 $pass = 0
@@ -44,22 +53,22 @@ foreach ($f in Get-ChildItem -Path "tests/gc" -Filter "[0-9]*.zt" | Sort-Object 
                 if ($code -eq 0 -and $output -match "all passed") { $ok = $true }
             }
             "out_of_memory" {
-                if ($code -eq 0 -and $output -match "Out of memory") { $ok = $true }
+                if ($code -eq 2 -and $output -match "Heap limit exceeded") { $ok = $true }
             }
         }
         if (-not $ok) {
-            Write-Host "FAIL  $path (args: [$s], exit=$code)"
+            Write-Host "FAIL  $path (args: [$s], exit=$code)" -ForegroundColor Red
             $allOk = $false
         }
         if ($null -eq $firstOut) {
             $firstOut = $output
         } elseif ($firstOut -ne $output) {
-            Write-Host "FAIL  $path (output differs between configurations, args: [$s])"
+            Write-Host "FAIL  $path (output differs between configurations, args: [$s])" -ForegroundColor Red
             $allOk = $false
         }
     }
     if ($allOk) {
-        Write-Host "PASS  $path ($n runs)"
+        Write-Host "PASS  $path ($n runs)" -ForegroundColor Green
         $pass = $pass + 1
     } else {
         $fail = $fail + 1
@@ -67,5 +76,9 @@ foreach ($f in Get-ChildItem -Path "tests/gc" -Filter "[0-9]*.zt" | Sort-Object 
 }
 
 Write-Host ""
-Write-Host "gc tests: $pass passed, $fail failed"
-if ($fail -gt 0) { exit 1 }
+if ($fail -gt 0) {
+    Write-Host "gc tests: $pass passed, $fail failed" -ForegroundColor Red
+    exit 1
+} else {
+    Write-Host "gc tests: $pass passed, $fail failed" -ForegroundColor Green
+}
