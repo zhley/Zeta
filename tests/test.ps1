@@ -3,6 +3,7 @@
 #
 # Usage:
 #   powershell -File tests/test.ps1           run all tests and check pass/fail
+#   powershell -File tests/test.ps1 v         also print each test's raw output
 #   powershell -File tests/test.ps1 clear     delete every *.ztc / *.dump under tests/
 
 param([string]$action = "")
@@ -15,6 +16,7 @@ if ($action -eq "clear") {
     exit 0
 }
 
+$verbose = ($action -eq "v")
 $pass = 0
 $fail = 0
 
@@ -24,6 +26,10 @@ function Run-Test {
         # exact output check against the expected file
         $output = & $exe $path 2>&1 | Out-String
         $expected = Get-Content "tests/builtin/01_print.expected" | Out-String
+        if ($verbose) {
+            Write-Host "=== $path ==="
+            Write-Host $output
+        }
         if ($output -eq $expected) {
             Write-Host "PASS  $path" -ForegroundColor Green
             $script:pass++
@@ -41,6 +47,10 @@ function Run-Test {
         $output = "hello`n" | & $exe $path 2>&1 | Out-String
     } else {
         $output = & $exe $path 2>&1 | Out-String
+    }
+    if ($verbose) {
+        Write-Host "=== $path ==="
+        Write-Host $output
     }
     if ($output -match "all passed") {
         Write-Host "PASS  $path" -ForegroundColor Green

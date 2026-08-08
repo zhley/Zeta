@@ -93,6 +93,9 @@ tests/
 # 批量运行 (bash) - 自动检查每个测试的输出 (PASS/FAIL + 汇总)
 bash tests/test.sh
 
+# 同时打印每个测试的原始输出
+bash tests/test.sh v
+
 # 清理 tests/ 下所有 *.ztc / *.dump 文件
 bash tests/test.sh clear
 

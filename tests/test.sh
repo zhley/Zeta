@@ -3,6 +3,7 @@
 #
 # Usage:
 #   bash tests/test.sh           run all tests and check pass/fail
+#   bash tests/test.sh v         also print each test's raw output
 #   bash tests/test.sh clear     delete every *.ztc / *.dump under tests/
 #
 # Conventions:
@@ -27,6 +28,9 @@ if [ "${1:-}" = "clear" ]; then
     exit 0
 fi
 
+VERBOSE=0
+[ "${1:-}" = "v" ] && VERBOSE=1
+
 pass=0
 fail=0
 
@@ -34,6 +38,11 @@ run_test() {
     local f="$1" out=""
     if [ "$f" = "tests/builtin/01_print.zt" ]; then
         out="$("$BIN" "$f" 2>&1)"
+        if [ "$VERBOSE" -eq 1 ]; then
+            echo ""
+            echo "=== $f ==="
+            printf '%s\n' "$out"
+        fi
         if printf '%s\n' "$out" | diff - tests/builtin/01_print.expected >/dev/null; then
             echo -e "${GREEN}PASS${NC}  $f"
             pass=$((pass + 1))
@@ -49,6 +58,11 @@ run_test() {
         out="$(printf 'hello\n' | "$BIN" "$f" 2>&1)"
     else
         out="$("$BIN" "$f" 2>&1)"
+    fi
+    if [ "$VERBOSE" -eq 1 ]; then
+        echo ""
+        echo "=== $f ==="
+        printf '%s\n' "$out"
     fi
     if printf '%s' "$out" | grep -q "all passed"; then
         echo -e "${GREEN}PASS${NC}  $f"
