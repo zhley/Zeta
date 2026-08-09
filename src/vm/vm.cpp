@@ -2,6 +2,7 @@
 
 #include "compiler/bytecode.h"
 #include "compiler/compiler.h"
+#include "vm/gc.h"
 #include "vm/value.h"
 
 #include <cassert>
@@ -289,17 +290,15 @@ void VM::importModule(const Module* module) {
         auto& proto = module->protos[i];
         auto& routine = routines[moduleInfo.protoBaseIndex + i];
         for(const auto& constVal : proto->constants) {
-            gc->lock();
+            GCLockGuard lock(gc.get());
             routine->constants.push_back(makeValue(makeValue, constVal));
-            gc->unlock();
         }
     }
 
     for(const auto& [symName, sym] : module->globalSyms) {
         uint32_t index = global.size();
-        gc->lock();
+        GCLockGuard lock(gc.get());
         global.push_back(makeValue(makeValue, sym.initValue));
-        gc->unlock();
         moduleInfo.symbolMap[symName] = index;
         for(const auto& pos : sym.relocations) {
             uint32_t routineIndex = moduleInfo.getRoutineIndex(pos.protoIndex);
@@ -519,7 +518,6 @@ Value VM::execute() {
     while(true){
         uint8_t opcode;
         READ_BYTE(opcode);
-        gc->lock();
         switch(static_cast<Opcode>(opcode)) {
             case Opcode::Nop: break;
             case Opcode::LoadConst: {
@@ -577,10 +575,9 @@ Value VM::execute() {
                         break;
                     }
                 } else if(a.isString() && b.isString()) {
-                    gc->lock();
+                    GCLockGuard lock(gc.get());
                     StrObj* str = gc->allocate<StrObj>(gc.get(), a.asString(), b.asString());
                     PUSH(Value(str));
-                    gc->unlock();
                     break;
                 }
                 errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), "Unsupported operand types for Add"});
@@ -1043,8 +1040,8 @@ Value VM::execute() {
                     curFrame = frame;
                     curRoutine = curFrame->routine;
                 } else if(callee.type == Value::Type::Object && callee.ptrValue->type == Object::Type::Class) {
+                    GCLockGuard lock(gc.get());
                     Class* cls = static_cast<Class*>(callee.ptrValue);
-                    gc->lock();
                     Instance* instance = gc->allocate<Instance>(gc.get(), cls);
                     auto constructor = cls->methods->get(STRINGS._init);
                     if(constructor.has_value()) {
@@ -1066,12 +1063,10 @@ Value VM::execute() {
                         for(int i = routine->arity - 1; i >= 1; i--) {
                             newFrame.base[i] = POP();
                         }
-                        gc->unlock();
                         curFrame = frame;
                         curRoutine = curFrame->routine;
                     } else {
                         PUSH(Value(instance));
-                        gc->unlock();
                     }
                 } else {
                     errorHandler({Error::Type::RuntimeError, getLine(curRoutine, curFrame->ip - 1), "Call: callee must be a function"});
@@ -1114,10 +1109,12 @@ Value VM::execute() {
                 Value nameVal = curRoutine->constants[nameIndex];
                 assert(nameVal.type == Value::Type::String);
                 String* fieldName = nameVal.strValue;
+                GCLockGuard lock(gc.get());
                 instance->fields->set(fieldName, fieldVal);
                 break;
             }
             case Opcode::CallMethod: {
+                GCLockGuard lock(gc.get());
                 uint8_t argCount;
                 READ_BYTE(argCount);
                 Value objVal = POP();
@@ -1358,6 +1355,7 @@ Value VM::execute() {
                 break;
             }
             case Opcode::IndexSet: {
+                GCLockGuard lock(gc.get());
                 Value value = POP();
                 Value index = POP();
                 Value objVal = POP();
@@ -1400,6 +1398,7 @@ Value VM::execute() {
             }
             // TODO: 内置函数内部错误有些是可恢复的, 应该返回错误码而不是报运行时错误.
             case Opcode::CallBuiltin: {
+                GCLockGuard lock(gc.get());
                 uint8_t builtinId;
                 READ_BYTE(builtinId);
                 switch(static_cast<Builtin>(builtinId)) {
@@ -1411,16 +1410,12 @@ Value VM::execute() {
                         }
                         if(objVal.ptrValue->type == Object::Type::Array) {
                             Array* arr = static_cast<Array*>(objVal.ptrValue);
-                            gc->lock();
                             Iterator* iter = gc->allocate<Iterator>(gc.get(), arr);
                             PUSH(Value(iter));
-                            gc->unlock();
                         } else if(objVal.ptrValue->type == Object::Type::Map) {
                             Map* map = static_cast<Map*>(objVal.ptrValue);
-                            gc->lock();
                             Iterator* iter = gc->allocate<Iterator>(gc.get(), map);
                             PUSH(Value(iter));
-                            gc->unlock();
                         } else if (objVal.ptrValue->type == Object::Type::Instance) {
                             Instance* instance = static_cast<Instance*>(objVal.ptrValue);
                             auto iterMethodOpt = instance->cls->methods->get(STRINGS._iter);
@@ -1494,10 +1489,8 @@ Value VM::execute() {
                         assert(sizeVal.type == Value::Type::Int);
                         int64_t size = sizeVal.intValue;
                         assert(size >= 0);
-                        gc->lock();
                         Array* arr = gc->allocate<Array>(gc.get(), static_cast<uint32_t>(size));
                         PUSH(Value(arr));
-                        gc->unlock();
                         break;
                     }
                     case Builtin::NewMap: {
@@ -1505,10 +1498,8 @@ Value VM::execute() {
                         assert(sizeVal.type == Value::Type::Int);
                         int64_t size = sizeVal.intValue;
                         assert(size >= 0);
-                        gc->lock();
                         Map* map = gc->allocate<Map>(gc.get(), static_cast<uint32_t>(size));
                         PUSH(Value(map));
-                        gc->unlock();
                         break;
                     }
                     case Builtin::Print: {
@@ -1577,10 +1568,8 @@ Value VM::execute() {
                     case Builtin::Input: {
                         std::string input;
                         std::cin >> input;
-                        gc->lock();
                         StrObj* str = gc->allocate<StrObj>(gc.get(), input.c_str(), input.size());
                         PUSH(Value(str));
-                        gc->unlock();
                         break;
                     }
                     case Builtin::Error: {
@@ -1682,16 +1671,12 @@ Value VM::execute() {
                         Value val = POP();
                         if(val.type == Value::Type::Int) {
                             std::string str = std::to_string(val.intValue);
-                            gc->lock();
                             StrObj* strObj = gc->allocate<StrObj>(gc.get(), str.c_str(), str.size());
                             PUSH(Value(strObj));
-                            gc->unlock();
                         } else if(val.type == Value::Type::Float) {
                             std::string str = std::to_string(val.floatValue);
-                            gc->lock();
                             StrObj* strObj = gc->allocate<StrObj>(gc.get(), str.c_str(), str.size());
                             PUSH(Value(strObj));
-                            gc->unlock();
                         } else if(val.type == Value::Type::Bool) {
                             PUSH(Value(val.boolValue ? STRINGS.true_ : STRINGS.false_));
                         } else if(val.type == Value::Type::Null) {
@@ -1731,7 +1716,6 @@ Value VM::execute() {
                 return Value::Error;
             }
         }
-        gc->unlock();
     }
 }
 

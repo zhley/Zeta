@@ -4,7 +4,6 @@
 #include "vm/value.h"
 
 #include <cassert>
-#include <iostream>
 
 #pragma GCC optimize("no-strict-aliasing")
 
@@ -244,7 +243,8 @@ bool GC::growHeap(int minSize) {
 }
 
 void GC::minorGC() {
-    // std::cerr << "Minor GC" << std::endl; // TODO: 调试用, 正式输出时注释掉
+    // std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
+
     assert(!locked);
     std::vector<Object*> worklist;
     // get root
@@ -364,11 +364,16 @@ void GC::minorGC() {
     std::swap(fromEnd, toEnd);
     curEdenPtr = edenStart;
     curFromPtr = toEndPtr;
+
+    // std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
+    // std::chrono::duration<double, std::milli> duration = t1 - t0;
+    // std::cerr << "Minor GC took " << duration.count() << " ms" << std::endl;
 }
 
 // recycle the entire heap.
 void GC::fullGC(){
-    // std::cerr << "Full GC" << std::endl; // TODO: 调试用, 正式输出时注释掉
+    // std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
+
     assert(!locked);
     std::vector<Object*> worklist;
     std::vector<Object**> roots;
@@ -486,6 +491,10 @@ void GC::fullGC(){
     if(prevHeap != heap) {
         std::free(prevHeap);
     }
+
+    // std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
+    // std::chrono::duration<double, std::milli> duration = t1 - t0;
+    // std::cerr << "Full GC took " << duration.count() << " ms" << std::endl;
 }
 
 template<typename F>

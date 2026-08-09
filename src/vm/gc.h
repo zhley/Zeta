@@ -273,4 +273,18 @@ private:
     void forEachRoot(F&& f);
 };
 
+class GCLockGuard {
+public:
+    explicit GCLockGuard(GC* gc) : gc(gc) {
+        gc->lock();
+    }
+    ~GCLockGuard() noexcept(false) {
+        // must ensure that there is no GCLockGuard object on any stack unwinding path of any exception, otherwise it may crash with double exceptions
+        gc->unlock();
+    }
+
+private:
+    GC* gc;
+};
+
 }
