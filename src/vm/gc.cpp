@@ -18,7 +18,7 @@ GC::GC(VM* vm) : vm(vm), rememberedSet(512) {
     heapSize = vm->config.initHeapSize * 1024;
     heap = std::malloc(heapSize);
     if (!heap) {
-        vm->errorHandler({VM::Error::VMError, 0, "Failed to allocate heap memory"});
+        vm->reportError("Failed to allocate heap memory", VM::Error::Type::VMError);
         throw VMException(VMException::Type::OutOfMemory);
         return;
     }
@@ -162,7 +162,7 @@ Object* GC::allocateInOld(int size) {
             if(curOldPtr > (char*)oldEnd) {
                 curOldPtr = (char*)curOldPtr - size;
                 if(!growHeap(size * (ZETA_GC_YOUNG_SCALE + ZETA_GC_OLD_SCALE) / ZETA_GC_OLD_SCALE)) {
-                    vm->errorHandler({VM::Error::VMError, 0, std::format("Heap limit exceeded [current heap size: {} bytes, max heap size: {} bytes]", heapSize, maxHeapSize)});
+                    vm->reportError(std::format("Heap limit exceeded [current heap size: {} bytes, max heap size: {} bytes]", heapSize, maxHeapSize), VM::Error::Type::VMError);
                     throw VMException(VMException::Type::HeapLimitExceeded);
                     return nullptr;
                 }
@@ -420,7 +420,7 @@ void GC::fullGC(){
         int minSize = ALIGN8(totalSize * (ZETA_GC_YOUNG_SCALE + ZETA_GC_OLD_SCALE) / ZETA_GC_OLD_SCALE);
         bool unlimited = (maxHeapSize == -1);
         if(!unlimited && heapSize >= maxHeapSize) {
-            vm->errorHandler({VM::Error::VMError, 0, std::format("Heap limit exceeded [current heap size: {} bytes, max heap size: {} bytes]", heapSize, maxHeapSize)});
+            vm->reportError(std::format("Heap limit exceeded [current heap size: {} bytes, max heap size: {} bytes]", heapSize, maxHeapSize), VM::Error::Type::VMError);
             throw VMException(VMException::Type::HeapLimitExceeded);
             return;
         }
@@ -432,13 +432,13 @@ void GC::fullGC(){
             newSize = maxHeapSize;
         }
         if(newSize < heapSize + minSize) {
-            vm->errorHandler({VM::Error::VMError, 0, std::format("Heap limit exceeded [current heap size: {} bytes, max heap size: {} bytes]", heapSize, maxHeapSize)});
+            vm->reportError(std::format("Heap limit exceeded [current heap size: {} bytes, max heap size: {} bytes]", heapSize, maxHeapSize), VM::Error::Type::VMError);
             throw VMException(VMException::Type::HeapLimitExceeded);
             return;
         }
         void* newHeap = std::malloc(newSize);
         if (!newHeap) {
-            vm->errorHandler({VM::Error::VMError, 0, "Out of memory"});
+            vm->reportError("Out of memory", VM::Error::Type::VMError);
             throw VMException(VMException::Type::OutOfMemory);
         }
         int newYoungSize = ALIGN8(newSize * ZETA_GC_YOUNG_SCALE / (ZETA_GC_YOUNG_SCALE + ZETA_GC_OLD_SCALE));

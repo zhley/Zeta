@@ -45,8 +45,9 @@ public:
         Value* top;
         uint32_t ip;
     };
-    struct Error{
+    struct Error{ // TODO: 需要加上模块名
         enum Type{ RuntimeError, VMError } type;
+        std::string moduleName;
         uint32_t line;
         std::string message;
     };
@@ -66,11 +67,14 @@ public:
 
     void setErrorHandler(const ErrorHandler& handler) { errorHandler = handler; }
 
+    // TODO: 加入卸载模块的支持
     void loadModule(const Module* module);
 
     Value callFunction(const std::string& moduleName, const std::string& funcName, int argc, Value* args);
+    Value callFunction(Value func, int argc, Value* args);
     Value callMethod(Value instance, const std::string& methodName, int argc, Value* args);
     Value* instantiate(const std::string& moduleName, const std::string& className, int argc, Value* args);
+    Value* instantiate(Value classVal, int argc, Value* args);
     void discardInstance(Value* instance);
     void registerFunction(const std::string& name, NativeFunction func);
     void registerClass(const std::string& name, const std::vector<std::pair<std::string, Value>>& fields, const std::vector<std::pair<std::string, NativeFunction>>& methods);
@@ -79,6 +83,17 @@ public:
     Value getGlobal(const std::string& moduleName, const std::string& globalName);
 
     String* internString(const std::string& str);
+
+    void reportError(const std::string& message, Error::Type type = Error::Type::RuntimeError) {
+        Routine* currentRoutine = stackFrames.empty() ? nullptr : stackFrames.back().routine;
+        if (currentRoutine) {
+            uint32_t currentIP = stackFrames.back().ip - 1;
+            uint32_t line = getLine(currentRoutine, currentIP);
+            errorHandler({type, currentRoutine->moduleName, line, message});
+        } else {
+            errorHandler({type, "<unknown>", 0, message});
+        }
+    }
 
 private:
     Config config;
@@ -90,7 +105,7 @@ private:
     std::unordered_map<std::string, std::unique_ptr<String>> stringTable; // for string interning.
 
     std::vector<StackFrame> stackFrames;
-    std::unordered_map<std::string, ModuleInfo> loadedModules; // module path -> module info
+    std::unordered_map<std::string, ModuleInfo> loadedModules; // module name -> module info
     std::unordered_map<std::string, uint32_t> registeredSyms;
     std::vector<std::unique_ptr<Routine>> routines; // [module1.protos[0], module1.protos[1], ..., module2.protos[0], ...]
     std::vector<std::unique_ptr<Value>> tempRoots;
@@ -106,7 +121,11 @@ private:
     void popFrame();
 
     static void defaultErrorHandler(const Error& error) {
-        std::cout << std::format("[{}][line {}]: {}\n", error.type == Error::RuntimeError ? "Runtime Error" : "VM Error", error.line, error.message);
+        if (error.type == Error::RuntimeError) {
+            std::cout << std::format("[Runtime Error][line {} in {}]: {}\n", error.line, error.moduleName, error.message);
+        } else {
+            std::cout << std::format("[VM Error]: {}\n", error.message);
+        }
     }
 
     static uint32_t getLine(const Routine* routine, uint32_t ip) {

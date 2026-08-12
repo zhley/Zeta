@@ -172,8 +172,6 @@ private:
  - 针对 64 位架构设计, 32 位能否正常运行存疑.
 */
 
-// TODO: 缺少测试
-
 // fixed configuration
 #define ZETA_GC_YOUNG_SCALE 1
 #define ZETA_GC_OLD_SCALE 3

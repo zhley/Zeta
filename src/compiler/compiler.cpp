@@ -32,7 +32,7 @@ std::unique_ptr<Module> compileModule(const std::string& path, std::string* outE
         Translator translator;
         std::unique_ptr<Module> module = translator.translate(root.get());
         if(CompileErrorCollector::get().hasErrors()) goto ERROR;
-        module->name = path.substr(0, path.find_last_of('.'));
+        module->name = std::filesystem::canonical(path).replace_extension("").string();
         fclose(file);
         return module;
     }
@@ -544,7 +544,7 @@ std::unique_ptr<Module> deserializeModule(const std::string& path, std::string* 
 
     std::free(buffer);
     fclose(file);
-    module->name = path.substr(0, path.find_last_of('.'));
+    module->name = std::filesystem::canonical(path).replace_extension("").string();
     return module;
 }
 

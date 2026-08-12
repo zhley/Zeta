@@ -1,29 +1,31 @@
 #pragma once
 
-#include "../utils/utils.h"
-
 #include <cassert>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <optional>
 #include <vector>
+#include <string>
+
+#include "../utils/utils.h"
 
 namespace Zeta {
 
 struct Object;
 struct String;
-struct GC;
+class GC;
 struct Routine;
 struct Class;
 struct Value;
+class VM;
 
 struct StrView {
     const char* data;
     uint32_t length;
 };
 
-using NativeFunction = Value(*)(int argc, Value* argv);
+using NativeFunction = Value(*)(VM* vm, int argc, Value* argv);
 
 // 16 Bytes
 struct Value{
@@ -79,6 +81,7 @@ struct Value{
 struct Routine{
     std::vector<uint8_t> bytecode;
     std::vector<std::pair<uint32_t, uint32_t>> lineInfo;
+    std::string moduleName; // the module this routine belongs to
     std::vector<Value> constants;
     uint32_t arity;
     uint32_t localCount;

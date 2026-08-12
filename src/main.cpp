@@ -91,7 +91,11 @@ int runModule(const std::unique_ptr<Zeta::Module>& module, const RuntimeConfig& 
     bool runtimeErrorOccurred = false;
     Zeta::VM vm(Zeta::VM::Config{config.stackSize, config.initHeapSize, config.maxHeapSize, config.moduleSearchPaths});
     vm.setErrorHandler([&runtimeErrorOccurred](const Zeta::VM::Error& error) {
-        std::cerr << std::format("[{}][line {}]: {}\n", error.type == Zeta::VM::Error::RuntimeError ? "Runtime Error" : "VM Error", error.line, error.message);
+        if (error.type == Zeta::VM::Error::RuntimeError) {
+            std::cerr << std::format("[Runtime Error][line {} in {}]: {}\n", error.line, error.moduleName, error.message);
+        } else {
+            std::cerr << std::format("[VM Error]: {}\n", error.message);
+        }
         runtimeErrorOccurred = true;
     });
     vm.loadModule(module.get());
