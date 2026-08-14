@@ -1,0 +1,11 @@
+// Driven by cpp_interop_test; not run standalone.
+// Zeta instantiates the C++-registered native class "NativePoint"
+// and reads its fields / calls its native methods.
+fn main() {
+    var p = NativePoint();
+    expect_eq(p.x, 1);
+    expect_eq(p.y, 2);
+    expect_eq(p.get_x(), 1);
+    expect_eq(p.get_y(), 2);
+    return 0;
+}

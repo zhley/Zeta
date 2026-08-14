@@ -101,3 +101,6 @@ target_include_directories(zeta_core PUBLIC ${PUBLIC_INCLUDE_DIR})
 
 add_executable(zeta ${APP_SRC})
 target_link_libraries(zeta zeta_core)
+
+# C++ 互操作测试（tests/cpp/）
+add_subdirectory(tests/cpp)

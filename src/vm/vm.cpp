@@ -115,6 +115,11 @@ Value VM::pop() {
     return *(--stackFrames.back().top);
 } 
 
+// NOTE: 同样, pop 过头会破坏栈结构, 调用方有责任保证 count 不超过当前栈内元素个数.
+void VM::pop(int count) {
+    stackFrames.back().top -= count;
+}
+
 // NOTE: offset <= -1. 修改不属于自己的元素是未定义行为, 也就是 offset 不能过小
 Value* VM::peek(int offset) {
     assert(offset <= -1);
@@ -675,7 +680,7 @@ void VM::execute() {
                     break;
                 }
                 reportError("Unsupported operand types for Add", Error::Type::RuntimeError);
-                PUSH(Value::Error);
+                push(Value::Error);
                 return;
             }
             case Opcode::Sub: {
@@ -691,7 +696,7 @@ void VM::execute() {
                     PUSH(Value(a.floatValue - static_cast<double>(b.intValue)));
                 } else {
                     reportError("Unsupported operand types for Sub", Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 break;
@@ -709,7 +714,7 @@ void VM::execute() {
                     PUSH(Value(a.floatValue * static_cast<double>(b.intValue)));
                 } else {
                     reportError("Unsupported operand types for Mul", Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 break;
@@ -720,7 +725,7 @@ void VM::execute() {
                 if(a.type == Value::Type::Int && b.type == Value::Type::Int) {
                     if(b.intValue == 0) {
                         reportError("Division by zero", Error::Type::RuntimeError);
-                        PUSH(Value::Error);
+                        push(Value::Error);
                         return;
                     }
                     PUSH(Value(a.intValue / b.intValue));
@@ -732,7 +737,7 @@ void VM::execute() {
                     PUSH(Value(a.floatValue / static_cast<double>(b.intValue)));
                 } else {
                     reportError("Unsupported operand types for Div", Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 break;
@@ -743,13 +748,13 @@ void VM::execute() {
                 if(a.type == Value::Type::Int && b.type == Value::Type::Int) {
                     if(b.intValue == 0) {
                         reportError("Modulo by zero", Error::Type::RuntimeError);
-                        PUSH(Value::Error);
+                        push(Value::Error);
                         return;
                     }
                     PUSH(Value(a.intValue % b.intValue));
                 } else {
                     reportError("Unsupported operand types for Mod", Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 break;
@@ -762,7 +767,7 @@ void VM::execute() {
                     PUSH(Value(-a.floatValue));
                 } else {
                     reportError("Unsupported operand type for Neg", Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 break;
@@ -774,7 +779,7 @@ void VM::execute() {
                     PUSH(Value(a.intValue & b.intValue));
                 } else {
                     reportError("Unsupported operand types for BitAnd", Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 break;
@@ -786,7 +791,7 @@ void VM::execute() {
                     PUSH(Value(a.intValue | b.intValue));
                 } else {
                     reportError("Unsupported operand types for BitOr", Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 break;
@@ -798,7 +803,7 @@ void VM::execute() {
                     PUSH(Value(a.intValue ^ b.intValue));
                 } else {
                     reportError("Unsupported operand types for BitXor", Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 break;
@@ -809,7 +814,7 @@ void VM::execute() {
                     PUSH(Value(~a.intValue));
                 } else {
                     reportError("Unsupported operand type for BitNot", Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 break;
@@ -821,7 +826,7 @@ void VM::execute() {
                     PUSH(Value(a.intValue << b.intValue));
                 } else {
                     reportError("Unsupported operand types for Shl", Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 break;
@@ -833,7 +838,7 @@ void VM::execute() {
                     PUSH(Value(a.intValue >> b.intValue));
                 } else {
                     reportError("Unsupported operand types for Shr", Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 break;
@@ -902,7 +907,7 @@ void VM::execute() {
                                 Routine* func = equalsMethodVal.funcValue;
                                 if(func->arity != 2) {
                                     reportError(std::format("Eq: _equals method of class \"{}\" should have 2 arguments", aInst->cls->name->data), Error::Type::RuntimeError);
-                                    PUSH(Value::Error);
+                                    push(Value::Error);
                                     return;
                                 }
                                 PUSH(a);
@@ -911,7 +916,7 @@ void VM::execute() {
                                 Value ret = POP();
                                 if(ret.type != Value::Type::Bool) {
                                     reportError(std::format("Eq: _equals method of class \"{}\" should return a boolean value", aInst->cls->name->data), Error::Type::RuntimeError);
-                                    PUSH(Value::Error);
+                                    push(Value::Error);
                                     return;
                                 }
                                 PUSH(ret);
@@ -996,7 +1001,7 @@ void VM::execute() {
                                 Routine* func = equalsMethodVal.funcValue;
                                 if(func->arity != 2) {
                                     reportError(std::format("Neq: _equals method of class \"{}\" should have 2 arguments", aInst->cls->name->data), Error::Type::RuntimeError);
-                                    PUSH(Value::Error);
+                                    push(Value::Error);
                                     return;
                                 }
                                 PUSH(a);
@@ -1005,7 +1010,7 @@ void VM::execute() {
                                 Value ret = POP();
                                 if(ret.type != Value::Type::Bool) {
                                     reportError(std::format("Neq: _equals method of class \"{}\" should return a boolean value", aInst->cls->name->data), Error::Type::RuntimeError);
-                                    PUSH(Value::Error);
+                                    push(Value::Error);
                                     return;
                                 }
                                 PUSH(Value(!ret.boolValue));
@@ -1044,7 +1049,7 @@ void VM::execute() {
                     PUSH(Value(a.floatValue < static_cast<double>(b.intValue)));
                 } else {
                     reportError("Unsupported operand types for Lt", Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 break;
@@ -1062,7 +1067,7 @@ void VM::execute() {
                     PUSH(Value(a.floatValue > static_cast<double>(b.intValue)));
                 } else {
                     reportError("Unsupported operand types for Gt", Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 break;
@@ -1080,7 +1085,7 @@ void VM::execute() {
                     PUSH(Value(a.floatValue <= static_cast<double>(b.intValue)));
                 } else {
                     reportError("Unsupported operand types for Le", Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 break;
@@ -1098,7 +1103,7 @@ void VM::execute() {
                     PUSH(Value(a.floatValue >= static_cast<double>(b.intValue)));
                 } else {
                     reportError("Unsupported operand types for Ge", Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 break;
@@ -1158,7 +1163,7 @@ void VM::execute() {
                     newFrame.ip = 0;
                     if(argCount != routine->arity) {
                         reportError(std::format("Function expects {} arguments, but {} were provided", routine->arity, argCount), Error::Type::RuntimeError);
-                        PUSH(Value::Error);
+                        push(Value::Error);
                         return;
                     }
                     StackFrame* frame = pushFrame(newFrame);
@@ -1187,7 +1192,7 @@ void VM::execute() {
                         newFrame.ip = 0;
                         if(argCount != routine->arity - 1) {
                             reportError(std::format("Constructor expects {} arguments, but {} were provided", routine->arity - 1, argCount), Error::Type::RuntimeError);
-                            PUSH(Value::Error);
+                            push(Value::Error);
                             return;
                         }
                         StackFrame* frame = pushFrame(newFrame);
@@ -1203,7 +1208,7 @@ void VM::execute() {
                     }
                 } else {
                     reportError("Call: callee must be a function", Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 break;
@@ -1212,7 +1217,7 @@ void VM::execute() {
                 Value objVal = POP();
                 if(objVal.type != Value::Type::Object || objVal.ptrValue->type != Object::Type::Instance) {
                     reportError("GetField: object must be a class instance", Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 Instance* instance = static_cast<Instance*>(objVal.ptrValue);
@@ -1225,7 +1230,7 @@ void VM::execute() {
                 auto fieldValOpt = instance->fields->get(fieldName);
                 if(!fieldValOpt.has_value()) {
                     reportError(std::format("GetField: field \"{}\" not found in instance of class \"{}\"", fieldName->data, instance->cls->name->data), Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 PUSH(fieldValOpt.value());
@@ -1236,7 +1241,7 @@ void VM::execute() {
                 Value objVal = POP();
                 if(objVal.type != Value::Type::Object || objVal.ptrValue->type != Object::Type::Instance) {
                     reportError("SetField: object must be a class instance", Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 Instance* instance = static_cast<Instance*>(objVal.ptrValue);
@@ -1264,14 +1269,14 @@ void VM::execute() {
                     if(methodName == STRINGS.len){
                         if(argCount != 0) {
                             reportError(std::format("Method \"len\" expects 0 arguments, but {} were provided", argCount), Error::Type::RuntimeError);
-                            PUSH(Value::Error);
+                            push(Value::Error);
                             return;
                         }
                         PUSH(Value(static_cast<int64_t>(objVal.strValue->length)));
                         break;
                     } else {
                         reportError(std::format("CallMethod: string does not have method \"{}\"", methodName->data), Error::Type::RuntimeError);
-                        PUSH(Value::Error);
+                        push(Value::Error);
                         return;
                     }
                 } else if(objVal.type == Value::Type::Object) {
@@ -1281,7 +1286,7 @@ void VM::execute() {
                             if(methodName == STRINGS.size) {
                                 if(argCount != 0) {
                                     reportError(std::format("Method \"size\" expects 0 arguments, but {} were provided", argCount), Error::Type::RuntimeError);
-                                    PUSH(Value::Error);
+                                    push(Value::Error);
                                     return;
                                 }
                                 Array* arr = static_cast<Array*>(obj);
@@ -1291,7 +1296,7 @@ void VM::execute() {
                                 GCLockGuard lock(gc.get());
                                 if(argCount != 1) {
                                     reportError(std::format("Method \"add\" expects 1 argument, but {} were provided", argCount), Error::Type::RuntimeError);
-                                    PUSH(Value::Error);
+                                    push(Value::Error);
                                     return;
                                 }
                                 Array* arr = static_cast<Array*>(obj);
@@ -1301,7 +1306,7 @@ void VM::execute() {
                                 break;
                             } else {
                                 reportError(std::format("CallMethod: array does not have method \"{}\"", methodName->data), Error::Type::RuntimeError);
-                                PUSH(Value::Error);
+                                push(Value::Error);
                                 return;
                             }
                         }
@@ -1309,7 +1314,7 @@ void VM::execute() {
                             if(methodName == STRINGS.size) {
                                 if(argCount != 0) {
                                     reportError(std::format("Method \"size\" expects 0 arguments, but {} were provided", argCount), Error::Type::RuntimeError);
-                                    PUSH(Value::Error);
+                                    push(Value::Error);
                                     return;
                                 }
                                 Map* map = static_cast<Map*>(obj);
@@ -1317,7 +1322,7 @@ void VM::execute() {
                                 break;
                             } else {
                                 reportError(std::format("CallMethod: map does not have method \"{}\"", methodName->data), Error::Type::RuntimeError);
-                                PUSH(Value::Error);
+                                push(Value::Error);
                                 return;
                             }
                         }
@@ -1325,7 +1330,7 @@ void VM::execute() {
                             if(methodName == STRINGS.len) {
                                 if(argCount != 0) {
                                     reportError(std::format("Method \"len\" expects 0 arguments, but {} were provided", argCount), Error::Type::RuntimeError);
-                                    PUSH(Value::Error);
+                                    push(Value::Error);
                                     return;
                                 }
                                 StrObj* strObj = static_cast<StrObj*>(obj);
@@ -1333,7 +1338,7 @@ void VM::execute() {
                                 break;
                             } else {
                                 reportError(std::format("CallMethod: string object does not have method \"{}\"", methodName->data), Error::Type::RuntimeError);
-                                PUSH(Value::Error);
+                                push(Value::Error);
                                 return;
                             }
                         }
@@ -1350,7 +1355,7 @@ void VM::execute() {
                             }
                             if(!methodValOpt.has_value()) {
                                 reportError(std::format("CallMethod: method \"{}\" not found in class \"{}\" or its superclasses", methodName->data, instance->cls->name->data), Error::Type::RuntimeError);
-                                PUSH(Value::Error);
+                                push(Value::Error);
                                 return;
                             }
                             Value methodVal = methodValOpt.value();
@@ -1363,7 +1368,7 @@ void VM::execute() {
                                 newFrame.ip = 0;
                                 if(argCount != routine->arity - 1) {
                                     reportError(std::format("Method expects {} arguments, but {} were provided", routine->arity - 1, argCount), Error::Type::RuntimeError);
-                                    PUSH(Value::Error);
+                                    push(Value::Error);
                                     return;
                                 }
                                 StackFrame* frame = pushFrame(newFrame);
@@ -1381,7 +1386,7 @@ void VM::execute() {
                             } else {
                                 assert(false);
                                 reportError(std::format("CallMethod: method \"{}\" is not a function", methodName->data), Error::Type::RuntimeError);
-                                PUSH(Value::Error);
+                                push(Value::Error);
                                 return;
                             }
                             break;
@@ -1391,7 +1396,7 @@ void VM::execute() {
                             auto methodValOpt = cls->methods->get(methodName);
                             if(!methodValOpt.has_value()) {
                                 reportError(std::format("CallMethod: method \"{}\" not found in class \"{}\"", methodName->data, static_cast<Class*>(objVal.ptrValue)->name->data), Error::Type::RuntimeError);
-                                PUSH(Value::Error);
+                                push(Value::Error);
                                 return;
                             }
                             Value methodVal = methodValOpt.value();
@@ -1404,7 +1409,7 @@ void VM::execute() {
                                 newFrame.ip = 0;
                                 if(argCount != routine->arity) {
                                     reportError(std::format("Method expects {} arguments (the first is 'this'), but {} were provided", routine->arity, argCount), Error::Type::RuntimeError);
-                                    PUSH(Value::Error);
+                                    push(Value::Error);
                                     return;
                                 }
                                 StackFrame* frame = pushFrame(newFrame);
@@ -1423,14 +1428,14 @@ void VM::execute() {
                             } else {
                                 assert(false);
                                 reportError(std::format("CallMethod: method \"{}\" is not a function", methodName->data), Error::Type::RuntimeError);
-                                PUSH(Value::Error);
+                                push(Value::Error);
                                 return;
                             }
                             break;
                         }
                         default: {
                             reportError("CallMethod: object must be an array, map, string or class instance", Error::Type::RuntimeError);
-                            PUSH(Value::Error);
+                            push(Value::Error);
                             return;
                         }
                     }
@@ -1465,7 +1470,7 @@ void VM::execute() {
                 }
                 if(!methodValOpt.has_value()) {
                     reportError(std::format("SuperCall: method \"{}\" not found in superclass of class \"{}\"", methodName->data, instance->cls->name->data), Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 Value methodVal = methodValOpt.value();
@@ -1478,7 +1483,7 @@ void VM::execute() {
                     newFrame.ip = 0;
                     if(argCount != routine->arity - 1) {
                         reportError(std::format("Super method expects {} arguments, but {} were provided", routine->arity - 1, argCount), Error::Type::RuntimeError);
-                        PUSH(Value::Error);
+                        push(Value::Error);
                         return;
                     }
                     StackFrame* frame = pushFrame(newFrame);
@@ -1496,7 +1501,7 @@ void VM::execute() {
                 } else {
                     assert(false);
                     reportError(std::format("SuperCall: method \"{}\" is not a function", methodName->data), Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 break;
@@ -1506,20 +1511,20 @@ void VM::execute() {
                 Value objVal = POP();
                 if(objVal.type != Value::Type::Object) {
                     reportError("IndexGet: object must be an array or map", Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 if(objVal.ptrValue->type == Object::Type::Array) {
                     Array* arr = static_cast<Array*>(objVal.ptrValue);
                     if(index.type != Value::Type::Int) {
                         reportError("IndexGet: array index must be an integer", Error::Type::RuntimeError);
-                        PUSH(Value::Error);
+                        push(Value::Error);
                         return;
                     }
                     int64_t idx = index.intValue;
                     if(idx < 0 || idx >= arr->size) {
                         reportError("IndexGet: array index out of bounds", Error::Type::RuntimeError);
-                        PUSH(Value::Error);
+                        push(Value::Error);
                         return;
                     }
                     PUSH(arr->get(idx));
@@ -1528,19 +1533,19 @@ void VM::execute() {
                     // NOTE: map 只能使用常驻字符串来访问, 对象型字符串必须调用内置函数 intern 驻留后访问.
                     if(index.type != Value::Type::String) {
                         reportError("IndexGet: map key must be a string", Error::Type::RuntimeError);
-                        PUSH(Value::Error);
+                        push(Value::Error);
                         return;
                     }
                     auto valOpt = map->get(index.strValue);
                     if(!valOpt.has_value()) {
                         reportError(std::format("IndexGet: key \"{}\" not found in map", index.strValue->data), Error::Type::RuntimeError);
-                        PUSH(Value::Error);
+                        push(Value::Error);
                         return;
                     }
                     PUSH(valOpt.value());
                 } else {
                     reportError("IndexGet: object must be an array or map", Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 break;
@@ -1552,20 +1557,20 @@ void VM::execute() {
                 Value objVal = POP();
                 if(objVal.type != Value::Type::Object) {
                     reportError("IndexSet: object must be an array or map", Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 if(objVal.ptrValue->type == Object::Type::Array) {
                     Array* arr = static_cast<Array*>(objVal.ptrValue);
                     if(index.type != Value::Type::Int) {
                         reportError("IndexSet: array index must be an integer", Error::Type::RuntimeError);
-                        PUSH(Value::Error);
+                        push(Value::Error);
                         return;
                     }
                     int64_t idx = index.intValue;
                     if(idx < 0 || idx >= arr->size) {
                         reportError("IndexSet: array index out of bounds", Error::Type::RuntimeError);
-                        PUSH(Value::Error);
+                        push(Value::Error);
                         return;
                     }
                     arr->set(idx, value);
@@ -1573,13 +1578,13 @@ void VM::execute() {
                     Map* map = static_cast<Map*>(objVal.ptrValue);
                     if(index.type != Value::Type::String) {
                         reportError("IndexSet: map key must be a string", Error::Type::RuntimeError);
-                        PUSH(Value::Error);
+                        push(Value::Error);
                         return;
                     }
                     map->set(index.strValue, value);
                 } else {
                     reportError("IndexSet: object must be an array or map", Error::Type::RuntimeError);
-                    PUSH(Value::Error);
+                    push(Value::Error);
                     return;
                 }
                 break;
@@ -1602,7 +1607,7 @@ void VM::execute() {
                         Value objVal = POP();
                         if(objVal.type != Value::Type::Object) {
                             reportError("GetIter: object must be an array, map or class instance", Error::Type::RuntimeError);
-                            PUSH(Value::Error);
+                            push(Value::Error);
                             return;
                         }
                         if(objVal.ptrValue->type == Object::Type::Array) {
@@ -1618,7 +1623,7 @@ void VM::execute() {
                             auto iterMethodOpt = instance->cls->methods->get(STRINGS._iter);
                             if(!iterMethodOpt.has_value()) {
                                 reportError(std::format("GetIter: class \"{}\" does not have an _iter method with 0 arguments", instance->cls->name->data), Error::Type::RuntimeError);
-                                PUSH(Value::Error);
+                                push(Value::Error);
                                 return;
                             }
                             Value iterMethodVal = iterMethodOpt.value();
@@ -1631,7 +1636,7 @@ void VM::execute() {
                             newFrame.ip = 0;
                             if(routine->arity != 1) {
                                 reportError(std::format("GetIter: class \"{}\" does not have an _iter method with 0 arguments", instance->cls->name->data), Error::Type::RuntimeError);
-                                PUSH(Value::Error);
+                                push(Value::Error);
                                 return;
                             }
                             StackFrame* frame = pushFrame(newFrame);
@@ -1640,7 +1645,7 @@ void VM::execute() {
                             curRoutine = curFrame->routine;
                         } else {
                             reportError("GetIter: object must be an array, map or class instance", Error::Type::RuntimeError);
-                            PUSH(Value::Error);
+                            push(Value::Error);
                             return;
                         }
                         break;
@@ -1649,7 +1654,7 @@ void VM::execute() {
                         Value iterVal = POP();
                         if(iterVal.type != Value::Type::Object) {
                             reportError("IterNext: object must be an iterator or class instance", Error::Type::RuntimeError);
-                            PUSH(Value::Error);
+                            push(Value::Error);
                             return;
                         }
                         if(iterVal.ptrValue->type == Object::Type::Iterator) {
@@ -1661,7 +1666,7 @@ void VM::execute() {
                             auto nextMethodOpt = instance->cls->methods->get(STRINGS._next);
                             if(!nextMethodOpt.has_value()) {
                                 reportError(std::format("IterNext: class \"{}\" does not have a _next method with 0 arguments", instance->cls->name->data), Error::Type::RuntimeError);
-                                PUSH(Value::Error);
+                                push(Value::Error);
                                 return;
                             }
                             Value nextMethodVal = nextMethodOpt.value();
@@ -1674,7 +1679,7 @@ void VM::execute() {
                             newFrame.ip = 0;
                             if(routine->arity != 1) {
                                 reportError(std::format("IterNext: class \"{}\" does not have a _next method with 0 arguments", instance->cls->name->data), Error::Type::RuntimeError);
-                                PUSH(Value::Error);
+                                push(Value::Error);
                                 return;
                             }
                             StackFrame* frame = pushFrame(newFrame);
@@ -1683,7 +1688,7 @@ void VM::execute() {
                             curRoutine = curFrame->routine;
                         } else {
                             reportError("IterNext: object must be an iterator or class instance", Error::Type::RuntimeError);
-                            PUSH(Value::Error);
+                            push(Value::Error);
                             return;
                         }
                         break;
@@ -1795,7 +1800,7 @@ void VM::execute() {
                         }
                         if(!(strVal.type == Value::Type::Object && strVal.ptrValue->type == Object::Type::StrObj)) {
                             reportError("Intern: argument must be a StrObj", Error::Type::RuntimeError);
-                            PUSH(Value::Error);
+                            push(Value::Error);
                             return;
                         }
                         String* internedStr = internString(static_cast<StrObj*>(strVal.ptrValue));
@@ -1842,12 +1847,12 @@ void VM::execute() {
                                 PUSH(Value(static_cast<int64_t>(std::stoll(std::string(strView.data, strView.length)))));
                             } catch(const std::exception&) {
                                 reportError("Int: invalid string format", Error::Type::RuntimeError);
-                                PUSH(Value::Error);
+                                push(Value::Error);
                                 return;
                             }
                         } else {
                             reportError("Int: unexpected type", Error::Type::RuntimeError);
-                            PUSH(Value::Error);
+                            push(Value::Error);
                             return;
                         }
                         break;
@@ -1866,12 +1871,12 @@ void VM::execute() {
                                 PUSH(Value(std::stod(std::string(strView.data, strView.length))));
                             } catch(const std::exception&) {
                                 reportError("Float: invalid string format", Error::Type::RuntimeError);
-                                PUSH(Value::Error);
+                                push(Value::Error);
                                 return;
                             }
                         } else {
                             reportError("Float: unexpected type", Error::Type::RuntimeError);
-                            PUSH(Value::Error);
+                            push(Value::Error);
                             return;
                         }
                         break;
@@ -1892,7 +1897,7 @@ void VM::execute() {
                             PUSH(Value(STRINGS.null));
                         } else {
                             reportError("Str: unexpected type", Error::Type::RuntimeError);
-                            PUSH(Value::Error);
+                            push(Value::Error);
                             return;
                         }
                         break;
@@ -1901,12 +1906,12 @@ void VM::execute() {
                         Value condition = POP();
                         if(condition.type != Value::Type::Bool) {
                             reportError("Assert: condition must be a boolean", Error::Type::RuntimeError);
-                            PUSH(Value::Error);
+                            push(Value::Error);
                             return;
                         }
                         if(!condition.boolValue) {
                             reportError("Assertion failed", Error::Type::RuntimeError);
-                            PUSH(Value::Error);
+                            push(Value::Error);
                             return;
                         }
                         PUSH(Value::Null); 
@@ -1914,7 +1919,7 @@ void VM::execute() {
                     }
                     default: {
                         reportError(std::format("Unknown builtin function: {:#04x}", builtinId), Error::Type::RuntimeError);
-                        PUSH(Value::Error);
+                        push(Value::Error);
                         return;
                     }
                 }
@@ -1922,12 +1927,12 @@ void VM::execute() {
             }
             case Opcode::Halt: {
                 reportError("Program halted", Error::Type::RuntimeError);
-                PUSH(Value::Error);
+                push(Value::Error);
                 return;
             }
             default: {
                 reportError(std::format("Unknown opcode: {:#04x}", static_cast<int>(opcode)), Error::Type::RuntimeError);
-                PUSH(Value::Error);
+                push(Value::Error);
                 return;
             }
         }

@@ -1,0 +1,9 @@
+// Driven by cpp_interop_test; not run standalone.
+// Defines a mutable global that the C++ host writes via setGlobal;
+// main() reads it back through expect_eq.
+var g = 0;
+
+fn main() {
+    expect_eq(g, 42);
+    return 0;
+}

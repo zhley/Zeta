@@ -1,0 +1,9 @@
+// Driven by cpp_interop_test; not run standalone.
+// Defines a Zeta function that the C++ host calls directly.
+fn multiply(a, b) {
+    return a * b;
+}
+
+fn main() {
+    return 0;
+}

@@ -1,0 +1,11 @@
+// Driven by cpp_interop_test; not run standalone.
+// Defines a Zeta class whose method the C++ host calls directly.
+class Calc {
+    fn add(a, b) {
+        return a + b;
+    }
+}
+
+fn main() {
+    return 0;
+}

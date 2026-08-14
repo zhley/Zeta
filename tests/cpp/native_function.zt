@@ -1,0 +1,8 @@
+// Driven by cpp_interop_test; not run standalone.
+// Zeta calls the C++-registered native function "add".
+fn main() {
+    expect_eq(add(2, 3), 5);
+    expect_eq(add(-1, 10), 9);
+    expect_eq(add(0, 0), 0);
+    return 0;
+}

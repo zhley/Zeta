@@ -13,6 +13,7 @@
 #     expected output lives in tests/builtin/01_print.expected.
 #   - tests/builtin/07_input.zt reads stdin; the runner feeds it a value.
 #   - tests/gc/* are delegated to tests/gc/run_gc.sh (heap-config-aware).
+#   - tests/cpp/* are delegated to tests/cpp/run_cpp.sh (C++ interop).
 
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -90,4 +91,10 @@ echo ""
 echo "=== tests/gc (run_gc.sh) ==="
 bash tests/gc/run_gc.sh
 gc_ok=$?
-[ "$fail" -eq 0 ] && [ "$gc_ok" -eq 0 ]
+
+echo ""
+echo "=== tests/cpp (run_cpp.sh) ==="
+bash tests/cpp/run_cpp.sh
+cpp_ok=$?
+
+[ "$fail" -eq 0 ] && [ "$gc_ok" -eq 0 ] && [ "$cpp_ok" -eq 0 ]

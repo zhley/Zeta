@@ -94,4 +94,10 @@ Write-Host ""
 Write-Host "=== tests/gc (run_gc.ps1) ==="
 & powershell -NoProfile -ExecutionPolicy Bypass -File ".\tests\gc\run_gc.ps1"
 $gcOk = $LASTEXITCODE
-if ($fail -gt 0 -or $gcOk -ne 0) { exit 1 }
+
+Write-Host ""
+Write-Host "=== tests/cpp (run_cpp.ps1) ==="
+& powershell -NoProfile -ExecutionPolicy Bypass -File ".\tests\cpp\run_cpp.ps1"
+$cppOk = $LASTEXITCODE
+
+if ($fail -gt 0 -or $gcOk -ne 0 -or $cppOk -ne 0) { exit 1 }
