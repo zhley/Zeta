@@ -12,12 +12,14 @@ const Value Value::Error = Value(Value::Type::Error, 0);
 
 // Array
 Array::Array(GC* gc) : Object(Object::Type::Array), size(0), capacity(8), gc(gc){
+    GCLockGuard lock(gc);
     Block* blk = gc->allocateBlock(capacity * sizeof(Value), Block::ElemType::Array);
     gc->writeBarrier(this, (Object**)(&data), blk);
     std::memset(data->getData(), 0, data->size);
 }
 
 Array::Array(GC* gc, uint32_t size) : Object(Object::Type::Array), size(size), gc(gc){
+    GCLockGuard lock(gc);
     capacity = 1;
     while(capacity < size) capacity <<= 1;
     Block* blk = gc->allocateBlock(capacity * sizeof(Value), Block::ElemType::Array);
@@ -26,6 +28,7 @@ Array::Array(GC* gc, uint32_t size) : Object(Object::Type::Array), size(size), g
 }
 
 void Array::add(const Value& value){
+    GCLockGuard lock(gc);
     if(size == capacity){
         capacity <<= 1;
         Block* newData = gc->allocateBlock(capacity * sizeof(Value), Block::ElemType::Array);
@@ -54,12 +57,14 @@ Value Array::get(uint32_t index) const{
 
 // Map
 Map::Map(GC* gc) : Object(Object::Type::Map), capacity(8), size(0), deletedCnt(0), gc(gc){
+    GCLockGuard lock(gc);
     Block* blk = gc->allocateBlock(capacity * sizeof(Entry), Block::ElemType::Map);
     gc->writeBarrier(this, (Object**)(&data), blk);
     std::memset(data->getData(), 0, data->size);
 } 
 
 Map::Map(GC* gc, uint32_t minCapacity) : Object(Object::Type::Map), size(0), deletedCnt(0), gc(gc){
+    GCLockGuard lock(gc);
     capacity = 4;
     while(capacity < minCapacity) capacity <<= 1;
     Block* blk = gc->allocateBlock(capacity * sizeof(Entry), Block::ElemType::Map);
@@ -134,6 +139,8 @@ bool Map::remove(String* key){
 
 // newCapacity must be the power of 2 and larger than old capacity.
 void Map::rehash(uint32_t newCapacity){
+    GCLockGuard lock(gc);
+
     Entry* oldEntries = (Entry*)(data->getData());
     uint32_t oldCapacity = capacity;
 
@@ -167,6 +174,7 @@ Class::Class(GC* gc, String* name, Class* base, Map* fields, Map* methods) : Obj
 
 // Instance
 Instance::Instance(GC* gc, Class* cls) : Object(Object::Type::Instance) {
+    GCLockGuard lock(gc);
     gc->writeBarrier(this, (Object**)(&this->cls), cls);
     Map* fields = gc->allocate<Map>(gc, cls->fields->size);
     Class* classes = cls;
@@ -189,6 +197,7 @@ Iterator::Iterator(GC* gc, Object* container) : Object(Type::Iterator), index(0)
 
 // String object
 StrObj::StrObj(GC* gc, const char* str, uint32_t len) : Object(Object::Type::StrObj), length(len) {
+    GCLockGuard lock(gc);
     Block* blk = gc->allocateBlock(len + 1, Block::ElemType::StrObj);
     std::memcpy(blk->getData(), str, len);
     ((char*)blk->getData())[len] = '\0';
@@ -196,6 +205,7 @@ StrObj::StrObj(GC* gc, const char* str, uint32_t len) : Object(Object::Type::Str
 }
 
 StrObj::StrObj(GC* gc, StrView str1, StrView str2) : Object(Object::Type::StrObj), length(str1.length + str2.length) {
+    GCLockGuard lock(gc);
     Block* blk = gc->allocateBlock(length + 1, Block::ElemType::StrObj);
     std::memcpy(blk->getData(), str1.data, str1.length);
     std::memcpy((char*)blk->getData() + str1.length, str2.data, str2.length);

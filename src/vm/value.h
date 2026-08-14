@@ -25,7 +25,7 @@ struct StrView {
     uint32_t length;
 };
 
-using NativeFunction = Value(*)(VM* vm, int argc, Value* argv);
+using NativeFunction = void(*)(VM* vm, int argc);
 
 // 16 Bytes
 struct Value{
