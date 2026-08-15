@@ -1842,9 +1842,8 @@ void VM::execute() {
                         } else if(val.type == Value::Type::Bool) {
                             PUSH(Value(static_cast<int64_t>(val.boolValue ? 1 : 0)));
                         } else if(val.type == Value::Type::String || (val.type == Value::Type::Object && val.ptrValue->type == Object::Type::StrObj)) {
-                            StrView strView = val.asString();
                             try {
-                                PUSH(Value(static_cast<int64_t>(std::stoll(std::string(strView.data, strView.length)))));
+                                PUSH(Value(static_cast<int64_t>(std::stoll(std::string(val.asString())))));
                             } catch(const std::exception&) {
                                 reportError("Int: invalid string format", Error::Type::RuntimeError);
                                 push(Value::Error);
@@ -1866,9 +1865,8 @@ void VM::execute() {
                         } else if(val.type == Value::Type::Bool) {
                             PUSH(Value(static_cast<double>(val.boolValue ? 1 : 0)));
                         } else if(val.type == Value::Type::String || (val.type == Value::Type::Object && val.ptrValue->type == Object::Type::StrObj)) {
-                            StrView strView = val.asString();
                             try {
-                                PUSH(Value(std::stod(std::string(strView.data, strView.length))));
+                                PUSH(Value(std::stod(std::string(val.asString()))));
                             } catch(const std::exception&) {
                                 reportError("Float: invalid string format", Error::Type::RuntimeError);
                                 push(Value::Error);

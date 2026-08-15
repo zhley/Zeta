@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <optional>
+#include <string_view>
 #include <vector>
 #include <string>
 
@@ -19,11 +20,6 @@ struct Routine;
 struct Class;
 struct Value;
 class VM;
-
-struct StrView {
-    const char* data;
-    uint32_t length;
-};
 
 using NativeFunction = void(*)(VM* vm, int argc);
 
@@ -73,9 +69,18 @@ struct Value{
         return !(*this == other);
     }
 
+    bool isNumber() const {
+        return type == Type::Int || type == Type::Float;
+    }
+    double asNumber() const {
+        assert(isNumber());
+        if(type == Type::Int) return static_cast<double>(intValue);
+        return floatValue;
+    }
+
     explicit operator bool() const;
     bool isString() const;
-    StrView asString() const;
+    std::string_view asString() const;
 };
 
 struct Routine{
@@ -286,7 +291,7 @@ struct StrObj : public Object {
     uint32_t length;
 
     StrObj(GC* gc, const char* str, uint32_t len);
-    StrObj(GC* gc, StrView str1, StrView str2);
+    StrObj(GC* gc, std::string_view str1, std::string_view str2);
 };
 
 inline int Object::getSize() const {
@@ -403,13 +408,13 @@ inline bool Value::isString() const {
     return type == Type::String || (type == Type::Object && ptrValue->type == Object::Type::StrObj);
 }
 
-inline StrView Value::asString() const {
+inline std::string_view Value::asString() const {
     assert(isString());
     if(type == Type::String){
-        return {strValue->data, strValue->length};
+        return std::string_view(strValue->data, strValue->length);
     } else {
         StrObj* strObj = static_cast<StrObj*>(ptrValue);
-        return {static_cast<const char*>(strObj->data->getData()), strObj->length};
+        return std::string_view(static_cast<char*>(strObj->data->getData()), strObj->length);
     }
 }
 

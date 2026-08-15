@@ -204,11 +204,11 @@ StrObj::StrObj(GC* gc, const char* str, uint32_t len) : Object(Object::Type::Str
     gc->writeBarrier(this, (Object**)(&data), blk);
 }
 
-StrObj::StrObj(GC* gc, StrView str1, StrView str2) : Object(Object::Type::StrObj), length(str1.length + str2.length) {
+StrObj::StrObj(GC* gc, std::string_view str1, std::string_view str2) : Object(Object::Type::StrObj), length(str1.length() + str2.length()) {
     GCLockGuard lock(gc);
     Block* blk = gc->allocateBlock(length + 1, Block::ElemType::StrObj);
-    std::memcpy(blk->getData(), str1.data, str1.length);
-    std::memcpy((char*)blk->getData() + str1.length, str2.data, str2.length);
+    std::memcpy(blk->getData(), str1.data(), str1.length());
+    std::memcpy((char*)blk->getData() + str1.length(), str2.data(), str2.length());
     ((char*)blk->getData())[length] = '\0';
     gc->writeBarrier(this, (Object**)(&data), blk);
 }
