@@ -6,6 +6,7 @@
 #include <cstring>
 #include <optional>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 #include <string>
 
@@ -13,18 +14,18 @@
 
 namespace Zeta {
 
-struct Object;
-struct String;
+class Object;
+class String;
 class GC;
 struct Routine;
-struct Class;
+class Class;
 struct Value;
 class VM;
 
 using NativeFunction = void(*)(VM* vm, int argc);
 
 // 16 Bytes
-struct Value{
+struct Value {
     static const Value Null;
     static const Value Error;
 
@@ -69,18 +70,42 @@ struct Value{
         return !(*this == other);
     }
 
-    bool isNumber() const {
-        return type == Type::Int || type == Type::Float;
-    }
-    double asNumber() const {
-        assert(isNumber());
-        if(type == Type::Int) return static_cast<double>(intValue);
-        return floatValue;
-    }
-
     explicit operator bool() const;
+
+    class ProxyInt {
+    private:
+        Value& value;
+        uint32_t index;
+    public:
+        ProxyInt(Value& value, uint32_t index) : value(value), index(index) {}
+        operator Value() const;
+        ProxyInt& operator=(const Value& val);
+    };
+    class ProxyStr {
+    private:
+        Value& value;
+        String* key;
+    public:
+        ProxyStr(Value& value, String* key) : value(value), key(key) {}
+        operator Value() const;
+        ProxyStr& operator=(const Value& val);
+    };
+
+    ProxyInt operator[](uint32_t index) { return ProxyInt(*this, index); }
+    Value operator[](uint32_t index) const;
+    ProxyStr operator[](String* key) { return ProxyStr(*this, key); }
+    Value operator[](String* key) const;
+
+    bool isNumber() const;
     bool isString() const;
-    std::string_view asString() const;
+    bool isFunction() const;
+    bool isArray() const;
+    bool isMap() const;
+    bool isClass() const;
+    bool isInstance() const;
+
+    template<typename T>
+    std::optional<T> as() const;
 };
 
 struct Routine{
@@ -96,7 +121,21 @@ struct Routine{
 
 // immutable string
 // String directly managed by VM
-struct String {
+class String {
+public:
+    friend class VM;
+    friend class Map;
+    friend class Value;
+
+    const char* getData() const { return data; }
+    uint32_t getLength() const { return length; }
+    uint32_t getHash() const { return hash; }
+
+    ~String() {
+        std::free(data);
+    }
+
+private:
     char* data;
     uint32_t length;
     uint32_t hash;
@@ -107,17 +146,17 @@ struct String {
         data[len] = '\0';
         hash = Utils::hashString(data, len);
     }
-    ~String() {
-        std::free(data);
-    }
 };
-
-// TODO: 由于这部分和 GC 强相关, 还是得加上访问控制, 尽量避免外部直接访问成员, 以避免GC写屏障遗漏
-// TODO: 构造函数先0初始化一次再调用writeBarrier.
 
 // allocated on heap, managed by GC
 // 16 Bytes
-struct Object {
+class Object {
+public:
+    friend class GC;
+    friend class VM;
+    friend class Iterator;
+    friend class Value;
+
     enum class Type : uint8_t {
         Block, // 16 bytes head + (size - 16) bytes data
         Array,
@@ -128,6 +167,9 @@ struct Object {
         StrObj
     };
 
+    Type getType() const { return type; }
+
+protected:
     // head (16 bytes)
     Type type;
     uint8_t age;
@@ -146,8 +188,16 @@ struct Object {
 
 // Block can only be allocated by GC::allocateBlock().
 // (24 + size) Bytes
-struct Block : public Object {
+class Block : public Object {
+public:
     friend class GC;
+    friend class VM;
+    friend class Array;
+    friend class Map;
+    friend class StrObj;
+    friend class Iterator;
+    friend class Object;
+    friend class Value;
 
     enum class ElemType : uint8_t {
         Array,
@@ -155,25 +205,27 @@ struct Block : public Object {
         StrObj
     };
 
+private:
     ElemType elemType;
     uint32_t size; // size of the valid data, exclude the size of the Block instance itself.
 
     void* getData() { return static_cast<void*>(this + 1); } // 8 bytes alignment
     
-private:
     Block() = delete;
     Block(uint32_t size, ElemType elemType) : Object(Type::Block), size(size), elemType(elemType) {}
 };
 
 // 40 Bytes
-struct Array : public Object {
-    uint32_t size;
-    uint32_t capacity;
-    Block* data;
-    GC* gc;
+class Array : public Object {
+public:
+    friend class GC;
+    friend class VM;
+    friend class Iterator;
+    friend class Object;
+    friend class Value;
 
-    Array(GC* gc);
-    Array(GC* gc, uint32_t size);
+    uint32_t getSize() const { return size; }
+    uint32_t getCapacity() const { return capacity; }
 
     void add(const Value& value);
     void set(uint32_t index, const Value& value);
@@ -188,26 +240,32 @@ struct Array : public Object {
             f(entries[i]);
         }
     }
+
+private:
+    uint32_t size;
+    uint32_t capacity;
+    Block* data;
+    GC* gc;
+
+    Array(GC* gc);
+    Array(GC* gc, uint32_t size);
 };
 
 // 48 Bytes
-struct Map : public Object {
+class Map : public Object {
+public:
+    friend class GC;
+    friend class VM;
+    friend class Iterator;
+    friend class Object;
+    friend class Value;
+    friend class Instance;
+
     struct Entry {
         String* key;
         Value value;
     };
-    
-    Block* data;
-    uint32_t capacity;
-    uint32_t size;
-    uint32_t deletedCnt;
-    GC* gc;
 
-    inline static String* const EMPTY = nullptr;
-    inline static String* const DELETED = reinterpret_cast<String*>(0x1);
-
-    Map(GC* gc);
-    Map(GC* gc, uint32_t capacity);
     void set(String* key, const Value& value);
     std::optional<Value> get(String* key) const;
     bool contains(String* key) const;
@@ -231,12 +289,35 @@ struct Map : public Object {
         // String interning ensures that the second path is generally not triggered
         return a == b || (a->length == b->length && std::memcmp(a->data, b->data, a->length) == 0); 
     }
+
 private:
+    Block* data;
+    uint32_t capacity;
+    uint32_t size;
+    uint32_t deletedCnt;
+    GC* gc;
+
+    inline static String* const EMPTY = nullptr;
+    inline static String* const DELETED = reinterpret_cast<String*>(0x1);
+
+    Map(GC* gc);
+    Map(GC* gc, uint32_t capacity);
     void rehash(uint32_t newCapacity);
 };
 
 // 48 Bytes
-struct Class : public Object {
+class Class : public Object {
+public:
+    friend class GC;
+    friend class VM;
+    friend class Object;
+    friend class Instance;
+
+    String* getName() const { return name; }
+    Class* getBase() const { return base; }
+    std::optional<Value> getMethod(String* methodName) const { return methods->get(methodName); }
+
+private:
     String* name;
     Class* base;
     Map* fields; // field name -> default value
@@ -246,7 +327,40 @@ struct Class : public Object {
 };
 
 // 32 Bytes
-struct Instance : public Object {
+class Instance : public Object {
+public:
+    friend class GC;
+    friend class VM;
+    friend class Object;
+
+    Class* getClass() const { return cls; }
+    std::optional<Value> getField(String* fieldName) const { return fields->get(fieldName); }
+    void setField(String* fieldName, const Value& value) { fields->set(fieldName, value); }
+
+    class Proxy {
+    private:
+        Instance& instance;
+        String* fieldName;
+    public:
+        Proxy(Instance& instance, String* fieldName) : instance(instance), fieldName(fieldName) {}
+        operator Value() const {
+            return instance.getField(fieldName).value_or(Value::Error);
+        }
+        Proxy& operator=(const Value& value) {
+            instance.setField(fieldName, value);
+            return *this;
+        }
+    };
+
+    Proxy operator[](String* fieldName) {
+        return Proxy(*this, fieldName);
+    }
+    
+    Value operator[](String* fieldName) const {
+        return getField(fieldName).value_or(Value::Error);
+    }
+
+private:
     Class* cls;
     Map* fields; // field name -> value
 
@@ -254,7 +368,13 @@ struct Instance : public Object {
 };
 
 // 32 Bytes
-struct Iterator : public Object {
+class Iterator : public Object {
+public:
+    friend class GC;
+    friend class VM;
+    friend class Object;
+
+private:
     Object* container; // array or map;
     int index;
 
@@ -286,7 +406,17 @@ struct Iterator : public Object {
 
 // normal immutable string object, allocated on heap, managed by GC 
 // 32 Bytes
-struct StrObj : public Object {
+class StrObj : public Object {
+public:
+    friend class GC;
+    friend class VM;
+    friend class Object;
+    friend class Value;
+
+    const char* getData() const { return static_cast<char*>(data->getData()); }
+    uint32_t getLength() const { return length; }
+
+private:
     Block* data;
     uint32_t length;
 
@@ -403,18 +533,154 @@ inline Value::operator bool() const  {
     return false;
 }
 
+inline Value::ProxyInt::operator Value() const {
+    if (value.type == Value::Type::Object && value.ptrValue->type == Object::Type::Array) {
+        Array* arr = static_cast<Array*>(value.ptrValue);
+        return arr->get(index);
+    }
+    return Value::Error;
+}
+
+inline Value::ProxyInt& Value::ProxyInt::operator=(const Value& val) {
+    if (value.type == Value::Type::Object && value.ptrValue->type == Object::Type::Array) {
+        Array* arr = static_cast<Array*>(value.ptrValue);
+        arr->set(index, val);
+    }
+    return *this;
+}
+
+inline Value::ProxyStr::operator Value() const {
+    if (value.type == Value::Type::Object && value.ptrValue->type == Object::Type::Map) {
+        Map* map = static_cast<Map*>(value.ptrValue);
+        return map->get(key).value_or(Value::Error);
+    } else if (value.type == Value::Type::Object && value.ptrValue->type == Object::Type::Instance) {
+        Instance* inst = static_cast<Instance*>(value.ptrValue);
+        return inst->getField(key).value_or(Value::Error);
+    }
+    return Value::Error;
+}
+
+inline Value::ProxyStr& Value::ProxyStr::operator=(const Value& val) {
+    if (value.type == Value::Type::Object && value.ptrValue->type == Object::Type::Map) {
+        Map* map = static_cast<Map*>(value.ptrValue);
+        map->set(key, val);
+    } else if (value.type == Value::Type::Object && value.ptrValue->type == Object::Type::Instance) {
+        Instance* inst = static_cast<Instance*>(value.ptrValue);
+        inst->setField(key, val);
+    }
+    return *this;
+}
+
+inline Value Value::operator[](uint32_t index) const {
+    if (type == Value::Type::Object && ptrValue->type == Object::Type::Array) {
+        Array* arr = static_cast<Array*>(ptrValue);
+        return arr->get(index);
+    }
+    return Value::Error;
+}
+
+inline Value Value::operator[](String* key) const {
+    if (type == Value::Type::Object && ptrValue->type == Object::Type::Map) {
+        Map* map = static_cast<Map*>(ptrValue);
+        return map->get(key).value_or(Value::Error);
+    } else if (type == Value::Type::Object && ptrValue->type == Object::Type::Instance) {
+        Instance* inst = static_cast<Instance*>(ptrValue);
+        return inst->getField(key).value_or(Value::Error);
+    }
+    return Value::Error;
+}
+
+inline bool Value::isNumber() const {
+    return type == Type::Int || type == Type::Float;
+}
 
 inline bool Value::isString() const {
     return type == Type::String || (type == Type::Object && ptrValue->type == Object::Type::StrObj);
 }
 
-inline std::string_view Value::asString() const {
-    assert(isString());
-    if(type == Type::String){
-        return std::string_view(strValue->data, strValue->length);
+inline bool Value::isFunction() const {
+    return type == Type::Function || type == Type::NativeFunc;
+}
+
+inline bool Value::isArray() const {
+    return type == Type::Object && ptrValue->type == Object::Type::Array;
+}
+
+inline bool Value::isMap() const {
+    return type == Type::Object && ptrValue->type == Object::Type::Map;
+}
+
+inline bool Value::isClass() const {
+    return type == Type::Object && ptrValue->type == Object::Type::Class;
+}
+
+inline bool Value::isInstance() const {
+    return type == Type::Object && ptrValue->type == Object::Type::Instance;
+}
+
+// NOTE: 指针类型和 string_view 需要注意生命周期和潜在的 GC 时机, 避免悬空. 不要长期保存.
+template<typename T>
+inline std::optional<T> Value::as() const {
+    if constexpr (std::is_integral_v<T> && !std::is_same_v<T, bool>) {
+        if (type == Value::Type::Int) {
+            return std::make_optional(static_cast<T>(intValue));
+        } else if (type == Value::Type::Float) {
+            return std::make_optional(static_cast<T>(floatValue));
+        } else {
+            return std::nullopt;
+        }
+    } else if constexpr (std::is_floating_point_v<T>) {
+        if (type == Value::Type::Float) {
+            return std::make_optional(static_cast<T>(floatValue));
+        } else if (type == Value::Type::Int) {
+            return std::make_optional(static_cast<T>(intValue));
+        } else {
+            return std::nullopt;
+        }
+    } else if constexpr (std::is_same_v<T, bool>) {
+        return type == Value::Type::Bool ? std::make_optional(boolValue) : std::nullopt;
+    } else if constexpr (std::is_same_v<T, String*>) {
+        return type == Value::Type::String ? std::make_optional(strValue) : std::nullopt;
+    } else if constexpr (std::is_same_v<T, Routine*>) {
+        return type == Value::Type::Function ? std::make_optional(funcValue) : std::nullopt;
+    } else if constexpr (std::is_same_v<T, NativeFunction>) {
+        return type == Value::Type::NativeFunc ? std::make_optional(nativeFuncValue) : std::nullopt;
+    } else if constexpr (std::is_same_v<T, Object*>) {
+        return type == Value::Type::Object ? std::make_optional(ptrValue) : std::nullopt;
+    } else if constexpr (std::is_same_v<T, Block*>) {
+        return (type == Value::Type::Object && ptrValue->type == Object::Type::Block) ? std::make_optional(static_cast<Block*>(ptrValue)) : std::nullopt;
+    } else if constexpr (std::is_same_v<T, Array*>) {
+        return (type == Value::Type::Object && ptrValue->type == Object::Type::Array) ? std::make_optional(static_cast<Array*>(ptrValue)) : std::nullopt;
+    } else if constexpr (std::is_same_v<T, Map*>) {
+        return (type == Value::Type::Object && ptrValue->type == Object::Type::Map) ? std::make_optional(static_cast<Map*>(ptrValue)) : std::nullopt;
+    } else if constexpr (std::is_same_v<T, Class*>) {
+        return (type == Value::Type::Object && ptrValue->type == Object::Type::Class) ? std::make_optional(static_cast<Class*>(ptrValue)) : std::nullopt;
+    } else if constexpr (std::is_same_v<T, Instance*>) {
+        return (type == Value::Type::Object && ptrValue->type == Object::Type::Instance) ? std::make_optional(static_cast<Instance*>(ptrValue)) : std::nullopt;
+    } else if constexpr (std::is_same_v<T, Iterator*>) {
+        return (type == Value::Type::Object && ptrValue->type == Object::Type::Iterator) ? std::make_optional(static_cast<Iterator*>(ptrValue)) : std::nullopt;
+    } else if constexpr (std::is_same_v<T, StrObj*>) {
+        return (type == Value::Type::Object && ptrValue->type == Object::Type::StrObj) ? std::make_optional(static_cast<StrObj*>(ptrValue)) : std::nullopt;
+    } else if constexpr (std::is_same_v<T, std::string_view>) {
+        if (type == Value::Type::String) {
+            return std::make_optional(std::string_view(strValue->data, strValue->length));
+        } else if (type == Value::Type::Object && ptrValue->type == Object::Type::StrObj) {
+            StrObj* strObj = static_cast<StrObj*>(ptrValue);
+            return std::make_optional(std::string_view(strObj->getData(), strObj->length));
+        } else {
+            return std::nullopt;
+        }
+    } else if constexpr (std::is_same_v<T, std::string>) {
+        if (type == Value::Type::String) {
+            return std::make_optional(std::string(strValue->data, strValue->length));
+        } else if (type == Value::Type::Object && ptrValue->type == Object::Type::StrObj) {
+            StrObj* strObj = static_cast<StrObj*>(ptrValue);
+            return std::make_optional(std::string(strObj->getData(), strObj->length));
+        } else {
+            return std::nullopt;
+        }
     } else {
-        StrObj* strObj = static_cast<StrObj*>(ptrValue);
-        return std::string_view(static_cast<char*>(strObj->data->getData()), strObj->length);
+        static_assert(false, "Unsupported type for Value::as<T>()");
     }
 }
 

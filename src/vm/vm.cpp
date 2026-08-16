@@ -12,6 +12,7 @@
 #include <memory>
 #include <optional>
 #include <format>
+#include <string_view>
 #include <utility>
 
 // NOTE: VM 不会校验编译模块的合法性, 假设所有输入的模块都是合法的, 任何不合预期的模块输入都使用断言终止
@@ -675,7 +676,7 @@ void VM::execute() {
                     }
                 } else if(a.isString() && b.isString()) {
                     GCLockGuard lock(gc.get());
-                    StrObj* str = gc->allocate<StrObj>(gc.get(), a.asString(), b.asString());
+                    StrObj* str = gc->allocate<StrObj>(gc.get(), *a.as<std::string_view>(), *b.as<std::string_view>());
                     PUSH(Value(str));
                     break;
                 }
@@ -1843,7 +1844,7 @@ void VM::execute() {
                             PUSH(Value(static_cast<int64_t>(val.boolValue ? 1 : 0)));
                         } else if(val.type == Value::Type::String || (val.type == Value::Type::Object && val.ptrValue->type == Object::Type::StrObj)) {
                             try {
-                                PUSH(Value(static_cast<int64_t>(std::stoll(std::string(val.asString())))));
+                                PUSH(Value(static_cast<int64_t>(std::stoll(std::string(*val.as<std::string_view>())))));
                             } catch(const std::exception&) {
                                 reportError("Int: invalid string format", Error::Type::RuntimeError);
                                 push(Value::Error);
@@ -1866,7 +1867,7 @@ void VM::execute() {
                             PUSH(Value(static_cast<double>(val.boolValue ? 1 : 0)));
                         } else if(val.type == Value::Type::String || (val.type == Value::Type::Object && val.ptrValue->type == Object::Type::StrObj)) {
                             try {
-                                PUSH(Value(std::stod(std::string(val.asString()))));
+                                PUSH(Value(std::stod(std::string(*val.as<std::string_view>()))));
                             } catch(const std::exception&) {
                                 reportError("Float: invalid string format", Error::Type::RuntimeError);
                                 push(Value::Error);
@@ -1942,7 +1943,7 @@ String* VM::internString(const std::string& str) {
     if(it != stringTable.end()) {
         return it->second.get();
     }
-    auto interned = std::make_unique<String>(str.c_str(), str.size());
+    auto interned = std::unique_ptr<String>(new String(str.c_str(), str.size()));
     String* internedPtr = interned.get();
     stringTable[str] = std::move(interned);
     return internedPtr;

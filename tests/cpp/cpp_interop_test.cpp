@@ -82,17 +82,13 @@ void nativeExpectEq(Zeta::VM* vm, int argc) {
 void nativeGetX(Zeta::VM* vm, int argc) {
     check(argc == 1, "native method argc == 形参个数 + 1");
     Zeta::Value inst = vm->pop(); // instance is the topmost argument
-    auto* instance = static_cast<Zeta::Instance*>(inst.ptrValue);
-    auto val = instance->fields->get(vm->internString("x"));
-    vm->push(val.value_or(Zeta::Value::Error));
+    vm->push(inst[vm->internString("x")]);
 }
 
 // get_y(): returns the instance's "y" field.
 void nativeGetY(Zeta::VM* vm, int argc) {
     Zeta::Value inst = vm->pop();
-    auto* instance = static_cast<Zeta::Instance*>(inst.ptrValue);
-    auto val = instance->fields->get(vm->internString("y"));
-    vm->push(val.value_or(Zeta::Value::Error));
+    vm->push(inst[vm->internString("y")]);
 }
 
 // ---- test cases ----
@@ -133,7 +129,7 @@ void testInternString() {
     Zeta::String* a = vm.internString("abc");
     Zeta::String* b = vm.internString("abc");
     check(a == b, "internString 相同内容返回同一指针");
-    check(std::string(a->data, a->length) == "abc", "internString 内容正确");
+    check(std::string(a->getData(), a->getLength()) == "abc", "internString 内容正确");
 
     vm.newStrObj("abc");
     Zeta::Value strObjVal = vm.pop();
@@ -150,30 +146,30 @@ void testNewObjects() {
     vm.newArray();
     Zeta::Value arr = vm.pop();
     check(arr.type == Zeta::Value::Type::Object &&
-              arr.ptrValue->type == Zeta::Object::Type::Array,
+              arr.ptrValue->getType() == Zeta::Object::Type::Array,
           "newArray() 类型为 Array");
-    check(static_cast<Zeta::Array*>(arr.ptrValue)->size == 0, "newArray() 大小为 0");
+    check(static_cast<Zeta::Array*>(arr.ptrValue)->getSize() == 0, "newArray() 大小为 0");
 
     vm.newArray(5);
     Zeta::Value arr5 = vm.pop();
     check(arr5.type == Zeta::Value::Type::Object &&
-              arr5.ptrValue->type == Zeta::Object::Type::Array,
+              arr5.ptrValue->getType() == Zeta::Object::Type::Array,
           "newArray(5) 类型为 Array");
-    check(static_cast<Zeta::Array*>(arr5.ptrValue)->size == 5, "newArray(5) 大小为 5");
+    check(static_cast<Zeta::Array*>(arr5.ptrValue)->getSize() == 5, "newArray(5) 大小为 5");
 
     vm.newMap();
     Zeta::Value map = vm.pop();
     check(map.type == Zeta::Value::Type::Object &&
-              map.ptrValue->type == Zeta::Object::Type::Map,
+              map.ptrValue->getType() == Zeta::Object::Type::Map,
           "newMap() 类型为 Map");
 
     vm.newStrObj("hello");
     Zeta::Value str = vm.pop();
     check(str.type == Zeta::Value::Type::Object &&
-              str.ptrValue->type == Zeta::Object::Type::StrObj,
+              str.ptrValue->getType() == Zeta::Object::Type::StrObj,
           "newStrObj() 类型为 StrObj");
     auto* strObj = static_cast<Zeta::StrObj*>(str.ptrValue);
-    check(std::string(static_cast<char*>(strObj->data->getData()), strObj->length) == "hello",
+    check(std::string(strObj->getData(), strObj->getLength()) == "hello",
           "newStrObj() 内容正确");
 }
 
@@ -256,10 +252,10 @@ void testTempRoot() {
     }
 
     check(root->type == Zeta::Value::Type::Object &&
-              root->ptrValue->type == Zeta::Object::Type::StrObj,
+              root->ptrValue->getType() == Zeta::Object::Type::StrObj,
           "临时根类型仍为 StrObj");
     auto* strObj = static_cast<Zeta::StrObj*>(root->ptrValue);
-    check(std::string(static_cast<char*>(strObj->data->getData()), strObj->length) == "persistent",
+    check(std::string(strObj->getData(), strObj->getLength()) == "persistent",
           "临时根对象跨 GC 存活");
 
     vm.popTempRoot(root);
