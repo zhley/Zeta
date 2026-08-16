@@ -19,6 +19,7 @@ namespace AST {
     class ReturnStmt;
     class BreakStmt;
     class ContinueStmt;
+    class EmptyStmt;
     class Exp;
     class ConditionalExp;
     class BinaryExp;
@@ -58,6 +59,7 @@ public:
     virtual void visit(AST::ReturnStmt& returnStmt) = 0;
     virtual void visit(AST::BreakStmt& breakStmt) = 0;
     virtual void visit(AST::ContinueStmt& continueStmt) = 0;
+    virtual void visit(AST::EmptyStmt& emptyStmt) = 0;
     virtual void visit(AST::ConditionalExp& conditionalExp) = 0;
     virtual void visit(AST::BinaryExp& binaryExp) = 0;
     virtual void visit(AST::UnaryExp& unaryExp) = 0;

@@ -419,6 +419,10 @@ void Translator::visit(AST::ContinueStmt& continueStmt) {
     curFunc->continuePosStack.top().push_back(continuePos);
 }
 
+void Translator::visit(AST::EmptyStmt& emptyStmt) {
+    recordLineno(emptyStmt.line);
+}
+
 void Translator::visit(AST::ConditionalExp& conditionalExp) {
     recordLineno(conditionalExp.line);
     conditionalExp.cond->accept(*this);

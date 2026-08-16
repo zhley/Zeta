@@ -36,6 +36,14 @@ fn main() {
     }
     assert(count == 2);
 
+    // StrObj access
+    var m3 = {greeting: "hi"};
+    var s = "greet";
+    var str_obj = s + "ing"; // creates a StrObj
+    assert(m3[str_obj] == "hi");
+    m3[str_obj] = "hello";
+    assert(m3["greeting"] == "hello");
+
     print("map: all passed\n");
     return 0;
 }

@@ -159,7 +159,7 @@ Stmt: VarDec SEMI { auto s = std::make_unique<VarDecStmt>(); SET_POS(s, @$); s->
     | CONTINUE SEMI { auto s = std::make_unique<ContinueStmt>(); SET_POS(s, @$); $$ = std::move(s); }
     | RETURN SEMI { auto s = std::make_unique<ReturnStmt>(); SET_POS(s, @$); $$ = std::move(s); }
     | RETURN Exp SEMI { auto s = std::make_unique<ReturnStmt>(); SET_POS(s, @$); s->value = std::move($2); $$ = std::move(s); }
-    | SEMI { $$ = nullptr; }
+    | SEMI { auto s = std::make_unique<EmptyStmt>(); SET_POS(s, @$); $$ = std::move(s); }
     ;
 
 Exp: Exp QMARK Exp COLON Exp { auto e = std::make_unique<ConditionalExp>(); SET_POS(e, @$); e->cond = std::move($1); e->thenBranch = std::move($3); e->elseBranch = std::move($5); $$ = tryExpFold(std::move(e)); }
@@ -538,6 +538,8 @@ std::unique_ptr<Zeta::AST::Exp> tryExpFold(std::unique_ptr<Zeta::AST::Exp> exp) 
             }
             if(allLiteral){
                 auto out = std::make_unique<Zeta::AST::ArrayLitExp>();
+                out->line = line;
+                out->column = column;
                 for(auto& elem : arrayExp->elements){
                     out->elements.push_back(std::unique_ptr<Zeta::AST::LiteralExp>(static_cast<Zeta::AST::LiteralExp*>(elem.release())));
                 }
@@ -556,6 +558,8 @@ std::unique_ptr<Zeta::AST::Exp> tryExpFold(std::unique_ptr<Zeta::AST::Exp> exp) 
             }
             if(allLiteral){
                 auto out = std::make_unique<Zeta::AST::MapLitExp>();
+                out->line = line;
+                out->column = column;
                 for(auto& entry : mapExp->entries){
                     out->entries.emplace_back(std::move(entry.first), std::unique_ptr<Zeta::AST::LiteralExp>(static_cast<Zeta::AST::LiteralExp*>(entry.second.release())));
                 }

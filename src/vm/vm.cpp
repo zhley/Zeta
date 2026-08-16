@@ -1531,15 +1531,19 @@ void VM::execute() {
                     PUSH(arr->get(idx));
                 } else if(objVal.ptrValue->type == Object::Type::Map) {
                     Map* map = static_cast<Map*>(objVal.ptrValue);
-                    // NOTE: map 只能使用常驻字符串来访问, 对象型字符串必须调用内置函数 intern 驻留后访问.
-                    if(index.type != Value::Type::String) {
+                    String* key;
+                    if(index.type == Value::Type::String) {
+                        key = index.strValue;
+                    } else if(index.type == Value::Type::Object && index.ptrValue->type == Object::Type::StrObj) {
+                        key = internString(static_cast<StrObj*>(index.ptrValue));
+                    } else {
                         reportError("IndexGet: map key must be a string", Error::Type::RuntimeError);
                         push(Value::Error);
                         return;
                     }
-                    auto valOpt = map->get(index.strValue);
+                    auto valOpt = map->get(key);
                     if(!valOpt.has_value()) {
-                        reportError(std::format("IndexGet: key \"{}\" not found in map", index.strValue->data), Error::Type::RuntimeError);
+                        reportError(std::format("IndexGet: key \"{}\" not found in map", key->data), Error::Type::RuntimeError);
                         push(Value::Error);
                         return;
                     }
@@ -1577,12 +1581,17 @@ void VM::execute() {
                     arr->set(idx, value);
                 } else if(objVal.ptrValue->type == Object::Type::Map) {
                     Map* map = static_cast<Map*>(objVal.ptrValue);
-                    if(index.type != Value::Type::String) {
+                    String* key;
+                    if(index.type == Value::Type::String) {
+                        key = index.strValue;
+                    } else if(index.type == Value::Type::Object && index.ptrValue->type == Object::Type::StrObj) {
+                        key = internString(static_cast<StrObj*>(index.ptrValue));
+                    } else {
                         reportError("IndexSet: map key must be a string", Error::Type::RuntimeError);
                         push(Value::Error);
                         return;
                     }
-                    map->set(index.strValue, value);
+                    map->set(key, value);
                 } else {
                     reportError("IndexSet: object must be an array or map", Error::Type::RuntimeError);
                     push(Value::Error);

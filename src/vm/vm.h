@@ -3,6 +3,7 @@
 #include "value.h"
 #include "gc.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <iostream>
 #include <unordered_map>
@@ -349,19 +350,17 @@ private:
     }
 
     static uint32_t getLine(const Routine* routine, uint32_t ip) {
-        if(routine->lineInfo.empty()) return 0;
-        int left = 0, right = routine->lineInfo.size() - 1;
-        while(left <= right) {
+        if (routine->lineInfo.empty()) return 0;
+        int left = 0, right = routine->lineInfo.size();
+        while (left < right) {
             int mid = left + (right - left) / 2;
-            if(ip >= routine->lineInfo[mid].first && ip < routine->lineInfo[mid + 1].first) {
-                return routine->lineInfo[mid].second;
-            } else if(ip < routine->lineInfo[mid].first) {
-                right = mid - 1;
+            if (routine->lineInfo[mid].first > ip) {
+                right = mid;
             } else {
                 left = mid + 1;
             }
         }
-        return left;
+        return left > 0 ? routine->lineInfo[left - 1].second : 0;
     }
 
 public:

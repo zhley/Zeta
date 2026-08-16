@@ -84,7 +84,7 @@ Zeta 是动态类型语言。运行时类型如下：
 | `Iterator` | 迭代器（通常由内置函数 `iter()` 产生） |
 | `Error` | 错误标记值，携带一个整数错误码 |
 
-> **String vs StrObj**: `String` 是 VM 级别的驻留字符串（字面量、标识符），`StrObj` 是运行时动态创建的堆字符串（拼接结果、`input()` 返回值）。两者都代表不可变字符串，且在大多数场景下行为一致。Map 键只能用驻留 `String`，如需用 `StrObj` 访问 Map，请先调用 `intern()` 驻留。
+> **String vs StrObj**: `String` 是 VM 级别的驻留字符串（字面量、标识符），`StrObj` 是运行时动态创建的堆字符串（拼接结果、`input()` 返回值）。两者都代表不可变字符串，且在大多数场景下行为一致。Map 键只能用驻留 `String`，如需用 `StrObj` 访问 Map，请先调用 `intern()` 驻留。直接访问会自动驻留.
 
 ---
 

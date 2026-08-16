@@ -60,6 +60,7 @@ public:
     void visit(AST::ReturnStmt& returnStmt) override;
     void visit(AST::BreakStmt& breakStmt) override;
     void visit(AST::ContinueStmt& continueStmt) override;
+    void visit(AST::EmptyStmt& emptyStmt) override;
     void visit(AST::ConditionalExp& conditionalExp) override;
     void visit(AST::BinaryExp& binaryExp) override;
     void visit(AST::UnaryExp& unaryExp) override;

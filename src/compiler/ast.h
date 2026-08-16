@@ -88,7 +88,8 @@ public:
         For,
         Return,
         Break,
-        Continue
+        Continue,
+        Empty
     } type;
 };
 
@@ -154,6 +155,7 @@ public:
 
 class BreakStmt: public Stmt { public: ACCEPT };
 class ContinueStmt: public Stmt { public: ACCEPT };
+class EmptyStmt: public Stmt { public: ACCEPT };
 
 class Exp: public Node {
 public:
