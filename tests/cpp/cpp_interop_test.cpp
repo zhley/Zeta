@@ -59,6 +59,7 @@ void callMain(Zeta::VM& vm, const Zeta::Module& module) {
     int mainIdx = vm.findGlobal(module.name, "main");
     vm.push(vm.getGlobal(mainIdx));
     vm.call(0);
+    vm.pop();
 }
 
 // ---- native functions registered into the VM by the tests ----

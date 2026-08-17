@@ -103,6 +103,7 @@ int runModule(const std::unique_ptr<Zeta::Module>& module, const RuntimeConfig& 
         int mainIndex = vm.findGlobal(module->name, "main");
         vm.push(vm.getGlobal(mainIndex));
         vm.call(0);
+        vm.pop();
     } catch (const Zeta::VMException& e) {
         std::cerr << e.what() << std::endl;
         return 2;

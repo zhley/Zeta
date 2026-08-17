@@ -41,6 +41,7 @@ VM::VM(Config config, ErrorHandler handler) : config(config), errorHandler(handl
     mainFrame.top = stack.top;
     mainFrame.ip = -1;
     stackFrames.push_back(mainFrame);
+    curFrame = &stackFrames.back();
 }
 
 VM::~VM() {
@@ -96,16 +97,15 @@ int VM::registerClass(const std::string& name, const std::vector<std::pair<std::
 // NOTE: 在当前帧上压入一个元素, 这可能会超出当前帧原定容量, 此时会自动扩展栈顶.
 // 在没有外部干预的情况下, 函数栈帧都是一次性分配好的, 外部调用了 push() 才可能出现帧容量大于localCount + maxStackSize 的情况.
 Value* VM::push(Value val) {
-    auto& frame = stackFrames.back();
-    Value* ret = frame.top++;
-    if (frame.top > stack.top) {
+    Value* ret = curFrame->top++;
+    if (curFrame->top > stack.top) {
         if (stack.top > stack.base + stack.capacity) {
             reportError("Stack overflow", Error::Type::VMError);
             throw VMException(VMException::Type::StackOverflow);
             return nullptr;
         }
-        assert(frame.top == stack.top + 1);
-        stack.top = frame.top;
+        assert(curFrame->top == stack.top + 1);
+        stack.top = curFrame->top;
     }
     *ret = val;
     return ret;
@@ -113,18 +113,18 @@ Value* VM::push(Value val) {
 
 // NOTE: pop 过头会破坏栈结构, 调用方有责任保证安全性.
 Value VM::pop() {
-    return *(--stackFrames.back().top);
+    return *(--curFrame->top);
 } 
 
 // NOTE: 同样, pop 过头会破坏栈结构, 调用方有责任保证 count 不超过当前栈内元素个数.
 void VM::pop(int count) {
-    stackFrames.back().top -= count;
+    curFrame->top -= count;
 }
 
 // NOTE: offset <= -1. 修改不属于自己的元素是未定义行为, 也就是 offset 不能过小
 Value* VM::peek(int offset) {
     assert(offset <= -1);
-    return stackFrames.back().top + offset;
+    return curFrame->top + offset;
 }
 
 int VM::findGlobal(const std::string& moduleName, const std::string& globalName) {
@@ -198,8 +198,8 @@ void VM::callMethod(String* methodName, int argc) {
                 methodVal.nativeFuncValue(this, argc + 1); 
             } else if(methodVal.type == Value::Type::Function) {
                 push(objVal);
-                std::memmove(stackFrames.back().top - argc, stackFrames.back().top - argc - 1, argc * sizeof(Value));
-                *(stackFrames.back().top - argc - 1) = objVal;
+                std::memmove(curFrame->top - argc, curFrame->top - argc - 1, argc * sizeof(Value));
+                *(curFrame->top - argc - 1) = objVal;
                 call(methodVal.funcValue, argc + 1); 
             } else {
                 reportError(std::format("CallMethod: method \"{}\" is not a function", methodName->data), Error::Type::RuntimeError);
@@ -408,13 +408,13 @@ void VM::importModule(const Module* module) {
     }
     std::vector<std::pair<std::string, std::string>> nameToFullname;
     for(const auto& import : module->imports) {
-        auto importPath = searchModuleFile(moduleName, import);
-        if(importPath.second.empty()) {
+        auto importPath = searchModuleFile(import, moduleName);
+        if(importPath.first.empty()) {
             reportError(std::format("Failed to find imported module: \"{}\" imported by \"{}\"", import, moduleName), Error::Type::VMError);
             return;
         }
-        nameToFullname.push_back({import, std::filesystem::path(importPath.second).replace_extension("").string()});
-        importModule(importPath.second, importPath.first);
+        nameToFullname.push_back({import, std::filesystem::path(importPath.first).replace_extension("").string()});
+        importModule(importPath.first, importPath.second);
     }
     for(const auto& extSym : module->externalSyms) {
         uint32_t index;
@@ -542,36 +542,40 @@ void VM::importModule(const std::filesystem::path& path, bool isSrcFile) {
     importModule(module.get());
 }
 
-std::pair<bool, std::filesystem::path> VM::searchModuleFile(const std::filesystem::path& basePath, const std::string& moduleName) {
-    auto tryFindFile = [](const std::filesystem::path& path) -> std::pair<bool, std::filesystem::path> {
+std::pair<std::filesystem::path, bool> VM::searchModuleFile(const std::string& moduleName, const std::filesystem::path& basePath) {
+    auto tryFindFile = [](const std::filesystem::path& path) -> std::pair<std::filesystem::path, bool> {
         auto bcPath = std::filesystem::path(path).concat(ZETA_BC_EXT);
         if(std::filesystem::exists(bcPath) && std::filesystem::is_regular_file(bcPath)) {
-            return {false, bcPath};
+            return {bcPath, false};
         }
         auto srcPath = std::filesystem::path(path).concat(ZETA_SRC_EXT);
         if(std::filesystem::exists(srcPath) && std::filesystem::is_regular_file(srcPath)) {
-            return {true, srcPath};
+            return {srcPath, true};
         }
-        return {false, std::filesystem::path()};
+        return {std::filesystem::path(), false};
     };
 
+    std::filesystem::path candidate;
+    std::pair<std::filesystem::path, bool> result;
     // 1. based on the directory of the importing module
-    std::filesystem::path candidate = (basePath.parent_path() / moduleName).lexically_normal();
-    auto result = tryFindFile(candidate);
-    if(!result.second.empty()) {
-        return result;
+    if (!basePath.empty()) {
+        candidate = (basePath.parent_path() / moduleName).lexically_normal();
+        result = tryFindFile(candidate);
+        if(!result.first.empty()) {
+            return result;
+        }
     }
     // 2. absolute path or relative to current working directory
     candidate = std::filesystem::path(moduleName);
     if(candidate.is_absolute()) {
         result = tryFindFile(candidate);
-        if(!result.second.empty()) {
+        if(!result.first.empty()) {
             return result;
         }
     } else {
         candidate = (std::filesystem::current_path() / candidate).lexically_normal();
         result = tryFindFile(candidate);
-        if(!result.second.empty()) {
+        if(!result.first.empty()) {
             return result;
         }
     }
@@ -579,7 +583,7 @@ std::pair<bool, std::filesystem::path> VM::searchModuleFile(const std::filesyste
     for(const auto& searchPath : config.moduleSearchPaths) {
         candidate = (std::filesystem::path(searchPath) / moduleName).lexically_normal();
         result = tryFindFile(candidate);
-        if(!result.second.empty()) {
+        if(!result.first.empty()) {
             return result;
         }
     }
@@ -597,7 +601,7 @@ void VM::call(Routine* func, int argc) {
     frame.base = stack.top;
     frame.top = stack.top + func->localCount;
     frame.ip = 0;
-    StackFrame* curFrame = pushFrame(frame);
+    pushFrame(frame);
     StackFrame* prevFrame = curFrame - 1;
     std::memcpy(curFrame->base, prevFrame->top - argc, argc * sizeof(Value));
     prevFrame->top -= argc;
@@ -606,12 +610,10 @@ void VM::call(Routine* func, int argc) {
 
 // TODO: 需要重构
 void VM::execute() {
-    StackFrame* curFrame = &stackFrames.back();
-    Routine* curRoutine = curFrame->routine;
     int initDepth = stackFrames.size();
 
-    #define READ_BYTE(val) (val = curRoutine->bytecode[curFrame->ip++])
-    #define READ_UINT32(val) { std::memcpy(&val, &(curRoutine->bytecode[curFrame->ip]), 4); curFrame->ip += 4; } 
+    #define READ_BYTE(val) (val = curFrame->routine->bytecode[curFrame->ip++])
+    #define READ_UINT32(val) { std::memcpy(&val, &(curFrame->routine->bytecode[curFrame->ip]), 4); curFrame->ip += 4; } 
     #define PUSH(val) (*curFrame->top++ = val)
     #define POP() (*--curFrame->top)
 
@@ -623,8 +625,8 @@ void VM::execute() {
             case Opcode::LoadConst: {
                 uint32_t constIndex;
                 READ_UINT32(constIndex);
-                assert(constIndex < curRoutine->constants.size());
-                PUSH(curRoutine->constants[constIndex]);
+                assert(constIndex < curFrame->routine->constants.size());
+                PUSH(curFrame->routine->constants[constIndex]);
                 break;
             }
             case Opcode::LoadGlobal: {
@@ -644,14 +646,14 @@ void VM::execute() {
             case Opcode::LoadVar: {
                 uint32_t localIndex;
                 READ_UINT32(localIndex);
-                assert(localIndex < curRoutine->localCount);
+                assert(localIndex < curFrame->routine->localCount);
                 PUSH(curFrame->base[localIndex]);
                 break;
             }
             case Opcode::StoreVar: {
                 uint32_t localIndex;
                 READ_UINT32(localIndex);
-                assert(localIndex < curRoutine->localCount);
+                assert(localIndex < curFrame->routine->localCount);
                 curFrame->base[localIndex] = POP();
                 break;
             }
@@ -904,6 +906,7 @@ void VM::execute() {
                                 PUSH(Value(false));
                             } else {
                                 Value equalsMethodVal = equalsMethodOpt.value();
+                                // TODO: 支持原生函数
                                 assert(equalsMethodVal.type == Value::Type::Function);
                                 Routine* func = equalsMethodVal.funcValue;
                                 if(func->arity != 2) {
@@ -1141,10 +1144,8 @@ void VM::execute() {
             }
             case Opcode::Ret:{
                 Value retVal = POP();
-                assert(curFrame->top == curFrame->base + curRoutine->localCount);
+                assert(curFrame->top == curFrame->base + curFrame->routine->localCount);
                 popFrame();
-                curFrame = &stackFrames.back();
-                curRoutine = curFrame->routine;
                 PUSH(retVal);
                 if(stackFrames.size() == initDepth - 1) {
                     return;
@@ -1167,13 +1168,11 @@ void VM::execute() {
                         push(Value::Error);
                         return;
                     }
-                    StackFrame* frame = pushFrame(newFrame);
-                    curFrame = frame - 1;
+                    pushFrame(newFrame);
+                    StackFrame* prevFrame = curFrame - 1;
                     for(int i = routine->arity - 1; i >= 0; i--) {
-                        newFrame.base[i] = POP();
+                        newFrame.base[i] = *(--prevFrame->top);
                     }
-                    curFrame = frame;
-                    curRoutine = curFrame->routine;
                 } else if(callee.type == Value::Type::NativeFunc) {
                     NativeFunction nativeFunc = callee.nativeFuncValue;
                     nativeFunc(this, argCount);
@@ -1196,14 +1195,12 @@ void VM::execute() {
                             push(Value::Error);
                             return;
                         }
-                        StackFrame* frame = pushFrame(newFrame);
-                        curFrame = frame - 1;
+                        pushFrame(newFrame);
+                        StackFrame* prevFrame = curFrame - 1;
                         newFrame.base[0] = Value(instance); // push 'this' as the first argument
                         for(int i = routine->arity - 1; i >= 1; i--) {
-                            newFrame.base[i] = POP();
+                            newFrame.base[i] = *(--prevFrame->top);
                         }
-                        curFrame = frame;
-                        curRoutine = curFrame->routine;
                     } else {
                         PUSH(Value(instance));
                     }
@@ -1224,8 +1221,8 @@ void VM::execute() {
                 Instance* instance = static_cast<Instance*>(objVal.ptrValue);
                 uint32_t nameIndex;
                 READ_UINT32(nameIndex);
-                assert(nameIndex < curRoutine->constants.size());
-                Value nameVal = curRoutine->constants[nameIndex];
+                assert(nameIndex < curFrame->routine->constants.size());
+                Value nameVal = curFrame->routine->constants[nameIndex];
                 assert(nameVal.type == Value::Type::String);
                 String* fieldName = nameVal.strValue;
                 auto fieldValOpt = instance->fields->get(fieldName);
@@ -1248,8 +1245,8 @@ void VM::execute() {
                 Instance* instance = static_cast<Instance*>(objVal.ptrValue);
                 uint32_t nameIndex;
                 READ_UINT32(nameIndex);
-                assert(nameIndex < curRoutine->constants.size());
-                Value nameVal = curRoutine->constants[nameIndex];
+                assert(nameIndex < curFrame->routine->constants.size());
+                Value nameVal = curFrame->routine->constants[nameIndex];
                 assert(nameVal.type == Value::Type::String);
                 String* fieldName = nameVal.strValue;
                 GCLockGuard lock(gc.get());
@@ -1262,8 +1259,8 @@ void VM::execute() {
                 Value objVal = POP();
                 uint32_t nameIndex;
                 READ_UINT32(nameIndex);
-                assert(nameIndex < curRoutine->constants.size());
-                Value nameVal = curRoutine->constants[nameIndex];
+                assert(nameIndex < curFrame->routine->constants.size());
+                Value nameVal = curFrame->routine->constants[nameIndex];
                 assert(nameVal.type == Value::Type::String);
                 String* methodName = nameVal.strValue;
                 if(objVal.type == Value::Type::String) {
@@ -1372,14 +1369,12 @@ void VM::execute() {
                                     push(Value::Error);
                                     return;
                                 }
-                                StackFrame* frame = pushFrame(newFrame);
-                                curFrame = frame - 1;
+                                pushFrame(newFrame);
+                                StackFrame* prevFrame = curFrame - 1;
                                 newFrame.base[0] = objVal; // push 'this' as the first argument
                                 for(int i = routine->arity - 1; i >= 1; i--) {
-                                    newFrame.base[i] = POP();
+                                    newFrame.base[i] = *(--prevFrame->top);
                                 }
-                                curFrame = frame;
-                                curRoutine = curFrame->routine;
                             } else if (methodVal.type == Value::Type::NativeFunc) {
                                 NativeFunction nativeFunc = methodVal.nativeFuncValue;
                                 PUSH(objVal);
@@ -1413,13 +1408,11 @@ void VM::execute() {
                                     push(Value::Error);
                                     return;
                                 }
-                                StackFrame* frame = pushFrame(newFrame);
-                                curFrame = frame - 1;
+                                pushFrame(newFrame);
+                                StackFrame* prevFrame = curFrame - 1;
                                 for(int i = routine->arity - 1; i >= 0; i--) {
-                                    newFrame.base[i] = POP();
+                                    newFrame.base[i] = *(--prevFrame->top);
                                 }
-                                curFrame = frame;
-                                curRoutine = curFrame->routine;
                             } else if (methodVal.type == Value::Type::NativeFunc) {
                                 NativeFunction nativeFunc = methodVal.nativeFuncValue;
                                 Value instanceVal = *(curFrame->top - argCount);
@@ -1449,15 +1442,15 @@ void VM::execute() {
                 Value objVal = POP();
                 uint32_t nameIndex;
                 READ_UINT32(nameIndex);
-                assert(nameIndex < curRoutine->constants.size());
-                Value nameVal = curRoutine->constants[nameIndex];
+                assert(nameIndex < curFrame->routine->constants.size());
+                Value nameVal = curFrame->routine->constants[nameIndex];
                 assert(nameVal.type == Value::Type::String);
                 String* methodName = nameVal.strValue;
                 assert(objVal.type == Value::Type::Object && objVal.ptrValue->type == Object::Type::Instance);
                 Instance* instance = static_cast<Instance*>(objVal.ptrValue);
                 Class* superClass;
-                if(curRoutine->ownerClass) {
-                    superClass = curRoutine->ownerClass->base;
+                if(curFrame->routine->ownerClass) {
+                    superClass = curFrame->routine->ownerClass->base;
                 } else {
                     assert(false);
                 }
@@ -1487,14 +1480,12 @@ void VM::execute() {
                         push(Value::Error);
                         return;
                     }
-                    StackFrame* frame = pushFrame(newFrame);
-                    curFrame = frame - 1;
+                    pushFrame(newFrame);
+                    StackFrame* prevFrame = curFrame - 1;
                     newFrame.base[0] = objVal; // push 'this' as the first argument
                     for(int i = routine->arity - 1; i >= 1; i--) {
-                        newFrame.base[i] = POP();
+                        newFrame.base[i] = *(--prevFrame->top);
                     }
-                    curFrame = frame;
-                    curRoutine = curFrame->routine;
                 } else if (methodVal.type == Value::Type::NativeFunc) {
                     NativeFunction nativeFunc = methodVal.nativeFuncValue;
                     PUSH(objVal);
@@ -1649,10 +1640,8 @@ void VM::execute() {
                                 push(Value::Error);
                                 return;
                             }
-                            StackFrame* frame = pushFrame(newFrame);
+                            pushFrame(newFrame);
                             newFrame.base[0] = objVal; // push 'this' as the first argument
-                            curFrame = frame;
-                            curRoutine = curFrame->routine;
                         } else {
                             reportError("GetIter: object must be an array, map or class instance", Error::Type::RuntimeError);
                             push(Value::Error);
@@ -1692,10 +1681,8 @@ void VM::execute() {
                                 push(Value::Error);
                                 return;
                             }
-                            StackFrame* frame = pushFrame(newFrame);
+                            pushFrame(newFrame);
                             newFrame.base[0] = iterVal; // push 'this' as the first argument
-                            curFrame = frame;
-                            curRoutine = curFrame->routine;
                         } else {
                             reportError("IterNext: object must be an iterator or class instance", Error::Type::RuntimeError);
                             push(Value::Error);
@@ -1963,7 +1950,7 @@ String* VM::internString(StrObj* strObj) {
     return internString(str);
 }
 
-VM::StackFrame* VM::pushFrame(const StackFrame& frame) {
+void VM::pushFrame(const StackFrame& frame) {
     stackFrames.push_back(frame);
     stack.top += frame.routine->localCount + frame.routine->maxStackSize;
     if(stack.top > stack.base + stack.capacity) {
@@ -1972,12 +1959,13 @@ VM::StackFrame* VM::pushFrame(const StackFrame& frame) {
     }
     // Initialize local variables to null, avoid garbage values
     std::memset(frame.base, 0, sizeof(Value) * frame.routine->localCount);
-    return &stackFrames.back();
+    curFrame = &stackFrames.back();
 }
 
 void VM::popFrame() {
     stack.top = stackFrames.back().base;
     stackFrames.pop_back();
+    curFrame = &stackFrames.back();
 }
 
 }

@@ -122,6 +122,15 @@ public:
      */
     void loadModule(const Module* module);
 
+    /**
+     * @brief 搜索模块文件。
+     * @details 依次从 basePath 所在目录、绝对目录或相对工作目录、moduleSearchPaths 的目录中查找字节码文件和源文件，二者同时存在时优先选择字节码文件。
+     * @param moduleName 模块名
+     * @param basePath 基础路径（可选，默认为空），优先从该路径所在目录查找模块文件
+     * @return 模块文件路径及其类型（true 表示源文件，false 表示字节码文件）；未找到时返回空路径
+     */
+    std::pair<std::filesystem::path, bool> searchModuleFile(const std::string& moduleName, const std::filesystem::path& basePath = std::filesystem::path());
+
     // NOTE: 以下是对 C++ 和 Zeta 交互接口的一些说明. 具体使用示例可参看 tests/cpp/
     // - C++ 和 Zeta 通过 VM 栈进行数据交换.
     // - 编写 C++ 端代码时, 对于对象类型的值, 不要缓存在 Value 类型的变量中, 除非确信其生命周期内不会触发 GC, 否则内部指针可能会失效. 替代的缓存方案:
@@ -331,14 +340,15 @@ private:
     std::vector<std::unique_ptr<Routine>> routines; // [module1.protos[0], module1.protos[1], ..., module2.protos[0], ...]
     std::vector<std::unique_ptr<Value>> tempRoots;
 
+    StackFrame* curFrame = nullptr;
+
     void importModule(const Module* module);
     void importModule(const std::filesystem::path& path, bool isSrcFile);
-    std::pair<bool, std::filesystem::path> searchModuleFile(const std::filesystem::path& basePath, const std::string& moduleName);
     
     void call(Routine* func, int argc);
     void execute();
 
-    StackFrame* pushFrame(const StackFrame& frame);
+    void pushFrame(const StackFrame& frame);
     void popFrame();
 
     static void defaultErrorHandler(const Error& error) {
