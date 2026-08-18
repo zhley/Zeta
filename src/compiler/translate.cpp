@@ -496,59 +496,53 @@ void Translator::visit(AST::UnaryExp& unaryExp) {
 
 void Translator::visit(AST::CallExp& callExp) {
     recordLineno(callExp.line);
-    if(callExp.caller){
-        std::string moduleName;
-        if(callExp.caller->type == AST::Exp::ExpType::Identifier){
-            auto* idExp = static_cast<AST::IdentifierExp*>(callExp.caller.get());
-            auto it = aliasToModule.find(idExp->name);
-            if(it != aliasToModule.end()){
-                moduleName = it->second;
-            }
-        }
-        if(!moduleName.empty()){
-            for(auto& arg : callExp.args){
-                arg->accept(*this);
-            }
-            pushOpcode(Opcode::LoadGlobal);
-            uint32_t pos = skip4B();
-            pushOpcode(Opcode::Call);
-            push1B(static_cast<uint8_t>(callExp.args.size()));
-            recordGlobalSym(callExp.funcName, moduleName, pos);
-        }else{
-            // method call
-            for(auto& arg : callExp.args){
-                arg->accept(*this);
-            }
-            callExp.caller->accept(*this);
-            uint32_t funcIdx = makeConstIdx(CompileValue(callExp.funcName));
-            pushOpcode(Opcode::CallMethod);
-            push1B(static_cast<uint8_t>(callExp.args.size()));
-            push4B(funcIdx);
-        }
-    } else {
-        // normal function call
-        for(auto& arg : callExp.args){
-            arg->accept(*this);
-        }
-        if(const BuiltinDesc* builtin = findBuiltin(callExp.funcName)){
+    // normal function call
+    for(auto& arg : callExp.args){
+        arg->accept(*this);
+    }
+    if(callExp.callee->type == AST::Exp::ExpType::Identifier){
+        auto* idExp = static_cast<AST::IdentifierExp*>(callExp.callee.get());
+        if(const BuiltinDesc* builtin = findBuiltin(idExp->name)){
             // built-in function call
             pushOpcode(Opcode::CallBuiltin);
             push1B(static_cast<uint8_t>(builtin->id));
             return;
         }
-        auto* funcSym = curFunc->scopeMgr.resolve(callExp.funcName);
-        if(funcSym){
-            pushOpcode(Opcode::LoadVar);
-            push4B(funcSym->index);
-            pushOpcode(Opcode::Call);
-            push1B(static_cast<uint8_t>(callExp.args.size()));
-        } else {
-            pushOpcode(Opcode::LoadGlobal);
-            uint32_t pos = skip4B();
-            pushOpcode(Opcode::Call);
-            push1B(static_cast<uint8_t>(callExp.args.size()));
-            recordGlobalSym(callExp.funcName, "", pos);
+    }
+    callExp.callee->accept(*this);
+    pushOpcode(Opcode::Call);
+    push1B(static_cast<uint8_t>(callExp.args.size()));
+}
+
+void Translator::visit(AST::MethodCallExp& methodCallExp) {
+    recordLineno(methodCallExp.line);
+    std::string moduleName;
+    if(methodCallExp.caller->type == AST::Exp::ExpType::Identifier){
+        auto* idExp = static_cast<AST::IdentifierExp*>(methodCallExp.caller.get());
+        auto it = aliasToModule.find(idExp->name);
+        if(it != aliasToModule.end()){
+            moduleName = it->second;
         }
+    }
+    if(!moduleName.empty()){
+        for(auto& arg : methodCallExp.args){
+            arg->accept(*this);
+        }
+        pushOpcode(Opcode::LoadGlobal);
+        uint32_t pos = skip4B();
+        pushOpcode(Opcode::Call);
+        push1B(static_cast<uint8_t>(methodCallExp.args.size()));
+        recordGlobalSym(methodCallExp.funcName, moduleName, pos);
+    }else{
+        // method call
+        for(auto& arg : methodCallExp.args){
+            arg->accept(*this);
+        }
+        methodCallExp.caller->accept(*this);
+        uint32_t funcIdx = makeConstIdx(CompileValue(methodCallExp.funcName));
+        pushOpcode(Opcode::CallMethod);
+        push1B(static_cast<uint8_t>(methodCallExp.args.size()));
+        push4B(funcIdx);
     }
 }
 

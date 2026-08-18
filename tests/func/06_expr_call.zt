@@ -1,0 +1,40 @@
+fn inc() {
+    count += 1;
+    return inc;
+}
+
+class Test {
+    var func = fn () { return 233; };
+
+    fn func() { return 666; } 
+}
+
+fn main() {
+    inc();
+    assert(count == 1);
+    inc()()()()()();
+    assert(count == 7);
+
+    var arr = [fn() { return 0; }, fn(x) { return x + 1; }, fn(x, y) { return x * y; }];
+    assert(arr[0]() == 0);
+    assert(arr[1](6) == 7);
+    assert(arr[2](7, 3) == 21);
+
+    var map = {
+        hello: fn() { return "hello"; },
+        div: fn(x, y) { return x / y; },
+        add: fn(x, y) { return x + y; }
+    };
+    assert(map["hello"]() == "hello");
+    assert(map["div"](10, 2) == 5);
+    assert(map["add"](3, 4) == 7);
+
+    var t = Test();
+    assert(t.func() == 666);
+    assert((t.func)() == 233);
+
+    println("expr_call: all passed");
+    return 0;
+}
+
+var count = 0;

@@ -164,6 +164,7 @@ public:
         Binary,
         Unary,
         Call,
+        MethodCall,
         SuperCall,
         MemberAccess,
         IndexAccess,
@@ -214,11 +215,20 @@ public:
 class CallExp: public Exp {
 public:
     ACCEPT
-    std::unique_ptr<Exp> caller; // empty for normal function call
-    std::string funcName;
+    std::unique_ptr<Exp> callee;
     std::vector<std::unique_ptr<Exp>> args;
 
     CallExp() { type = ExpType::Call; }
+};
+
+class MethodCallExp: public Exp {
+public:
+    ACCEPT
+    std::unique_ptr<Exp> caller;
+    std::string funcName;
+    std::vector<std::unique_ptr<Exp>> args;
+
+    MethodCallExp() { type = ExpType::MethodCall; }
 };
 
 class SuperCallExp: public Exp {
@@ -226,6 +236,8 @@ public:
     ACCEPT
     std::string methodName;
     std::vector<std::unique_ptr<Exp>> args;
+
+    SuperCallExp() { type = ExpType::SuperCall; }
 };
 
 class MemberAccessExp: public Exp {
