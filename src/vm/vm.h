@@ -3,7 +3,6 @@
 #include "value.h"
 #include "gc.h"
 
-#include <algorithm>
 #include <cstdint>
 #include <iostream>
 #include <unordered_map>

@@ -131,7 +131,7 @@ void Translator::visit(AST::VarDec& varDec) {
                 REPORT_SEMANTIC_ERROR(varDec.line, varDec.column, "Initializer for global variable '{}' must be a constant expression", varDec.name);
             }
         }
-        varSym.initValue = std::move(*value);
+        varSym.initValue = value ? std::move(*value) : CompileValue();
     } else {
         int index = curFunc->scopeMgr.declare(varDec.name, varDec.isMutable);
         if(index == -1){

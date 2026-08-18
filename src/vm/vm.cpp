@@ -906,24 +906,40 @@ void VM::execute() {
                                 PUSH(Value(false));
                             } else {
                                 Value equalsMethodVal = equalsMethodOpt.value();
-                                // TODO: 支持原生函数
-                                assert(equalsMethodVal.type == Value::Type::Function);
-                                Routine* func = equalsMethodVal.funcValue;
-                                if(func->arity != 2) {
-                                    reportError(std::format("Eq: _equals method of class \"{}\" should have 2 arguments", aInst->cls->name->data), Error::Type::RuntimeError);
+                                if (equalsMethodVal.type == Value::Type::Function) {
+                                    Routine* func = equalsMethodVal.funcValue;
+                                    if(func->arity != 2) {
+                                        reportError(std::format("Eq: _equals method of class \"{}\" should have 2 arguments", aInst->cls->name->data), Error::Type::RuntimeError);
+                                        push(Value::Error);
+                                        return;
+                                    }
+                                    PUSH(a);
+                                    PUSH(b);
+                                    call(func, 2);
+                                    Value ret = POP();
+                                    if(ret.type != Value::Type::Bool) {
+                                        reportError(std::format("Eq: _equals method of class \"{}\" should return a boolean value", aInst->cls->name->data), Error::Type::RuntimeError);
+                                        push(Value::Error);
+                                        return;
+                                    }
+                                    PUSH(ret);
+                                } else if (equalsMethodVal.type == Value::Type::NativeFunc) {
+                                    PUSH(b);
+                                    PUSH(a);
+                                    equalsMethodVal.nativeFuncValue(this, 2);
+                                    Value ret = POP();
+                                    if(ret.type != Value::Type::Bool) {
+                                        reportError(std::format("Eq: _equals method of class \"{}\" should return a boolean value", aInst->cls->name->data), Error::Type::RuntimeError);
+                                        push(Value::Error);
+                                        return;
+                                    }
+                                    PUSH(ret);
+                                } else {
+                                    assert(false);
+                                    reportError(std::format("Eq: _equals method of class \"{}\" is not a function", aInst->cls->name->data), Error::Type::RuntimeError);
                                     push(Value::Error);
                                     return;
                                 }
-                                PUSH(a);
-                                PUSH(b);
-                                call(func, 2);
-                                Value ret = POP();
-                                if(ret.type != Value::Type::Bool) {
-                                    reportError(std::format("Eq: _equals method of class \"{}\" should return a boolean value", aInst->cls->name->data), Error::Type::RuntimeError);
-                                    push(Value::Error);
-                                    return;
-                                }
-                                PUSH(ret);
                             }
                         } else if (aObj->type == Object::Type::StrObj) {
                             if(b.type == Value::Type::String) {
@@ -1001,23 +1017,40 @@ void VM::execute() {
                                 PUSH(Value(true));
                             } else {
                                 Value equalsMethodVal = equalsMethodOpt.value();
-                                assert(equalsMethodVal.type == Value::Type::Function);
-                                Routine* func = equalsMethodVal.funcValue;
-                                if(func->arity != 2) {
-                                    reportError(std::format("Neq: _equals method of class \"{}\" should have 2 arguments", aInst->cls->name->data), Error::Type::RuntimeError);
+                                if (equalsMethodVal.type == Value::Type::Function) {
+                                    Routine* func = equalsMethodVal.funcValue;
+                                    if(func->arity != 2) {
+                                        reportError(std::format("Neq: _equals method of class \"{}\" should have 2 arguments", aInst->cls->name->data), Error::Type::RuntimeError);
+                                        push(Value::Error);
+                                        return;
+                                    }
+                                    PUSH(a);
+                                    PUSH(b);
+                                    call(func, 2);
+                                    Value ret = POP();
+                                    if(ret.type != Value::Type::Bool) {
+                                        reportError(std::format("Neq: _equals method of class \"{}\" should return a boolean value", aInst->cls->name->data), Error::Type::RuntimeError);
+                                        push(Value::Error);
+                                        return;
+                                    }
+                                    PUSH(Value(!ret.boolValue));
+                                } else if (equalsMethodVal.type == Value::Type::NativeFunc) {
+                                    PUSH(b);
+                                    PUSH(a);
+                                    equalsMethodVal.nativeFuncValue(this, 2);
+                                    Value ret = POP();
+                                    if(ret.type != Value::Type::Bool) {
+                                        reportError(std::format("Neq: _equals method of class \"{}\" should return a boolean value", aInst->cls->name->data), Error::Type::RuntimeError);
+                                        push(Value::Error);
+                                        return;
+                                    }
+                                    PUSH(Value(!ret.boolValue));
+                                } else {
+                                    assert(false);
+                                    reportError(std::format("Neq: _equals method of class \"{}\" is not a function", aInst->cls->name->data), Error::Type::RuntimeError);
                                     push(Value::Error);
                                     return;
                                 }
-                                PUSH(a);
-                                PUSH(b);
-                                call(func, 2);
-                                Value ret = POP();
-                                if(ret.type != Value::Type::Bool) {
-                                    reportError(std::format("Neq: _equals method of class \"{}\" should return a boolean value", aInst->cls->name->data), Error::Type::RuntimeError);
-                                    push(Value::Error);
-                                    return;
-                                }
-                                PUSH(Value(!ret.boolValue));
                             }
                         } else if (aObj->type == Object::Type::StrObj) {
                             if(b.type == Value::Type::String) {
@@ -1177,29 +1210,41 @@ void VM::execute() {
                     NativeFunction nativeFunc = callee.nativeFuncValue;
                     nativeFunc(this, argCount);
                 } else if(callee.type == Value::Type::Object && callee.ptrValue->type == Object::Type::Class) {
-                    GCLockGuard lock(gc.get());
+                    gc->lock();
                     Class* cls = static_cast<Class*>(callee.ptrValue);
                     Instance* instance = gc->allocate<Instance>(gc.get(), cls);
                     auto constructor = cls->methods->get(STRINGS._init);
                     if(constructor.has_value()) {
                         Value constructorVal = constructor.value();
-                        assert(constructorVal.type == Value::Type::Function);
-                        Routine* routine = constructorVal.funcValue;
-                        StackFrame newFrame;
-                        newFrame.routine = routine;
-                        newFrame.base = stack.top;
-                        newFrame.top = newFrame.base + routine->localCount;
-                        newFrame.ip = 0;
-                        if(argCount != routine->arity - 1) {
-                            reportError(std::format("Constructor expects {} arguments, but {} were provided", routine->arity - 1, argCount), Error::Type::RuntimeError);
+                        if (constructorVal.type == Value::Type::Function) {
+                            Routine* routine = constructorVal.funcValue;
+                            StackFrame newFrame;
+                            newFrame.routine = routine;
+                            newFrame.base = stack.top;
+                            newFrame.top = newFrame.base + routine->localCount;
+                            newFrame.ip = 0;
+                            if(argCount != routine->arity - 1) {
+                                reportError(std::format("Constructor expects {} arguments, but {} were provided", routine->arity - 1, argCount), Error::Type::RuntimeError);
+                                push(Value::Error);
+                                return;
+                            }
+                            pushFrame(newFrame);
+                            StackFrame* prevFrame = curFrame - 1;
+                            newFrame.base[0] = Value(instance); // push 'this' as the first argument
+                            for(int i = routine->arity - 1; i >= 1; i--) {
+                                newFrame.base[i] = *(--prevFrame->top);
+                            }
+                            gc->unlock();
+                        } else if (constructorVal.type == Value::Type::NativeFunc) {
+                            PUSH(Value(instance));
+                            gc->unlock();
+                            constructorVal.nativeFuncValue(this, argCount + 1); // +1 for 'this'
+                        } else {
+                            assert(false);
+                            gc->unlock();
+                            reportError(std::format("Constructor of class \"{}\" is not a function", cls->name->data), Error::Type::RuntimeError);
                             push(Value::Error);
                             return;
-                        }
-                        pushFrame(newFrame);
-                        StackFrame* prevFrame = curFrame - 1;
-                        newFrame.base[0] = Value(instance); // push 'this' as the first argument
-                        for(int i = routine->arity - 1; i >= 1; i--) {
-                            newFrame.base[i] = *(--prevFrame->top);
                         }
                     } else {
                         PUSH(Value(instance));
@@ -1628,20 +1673,29 @@ void VM::execute() {
                                 return;
                             }
                             Value iterMethodVal = iterMethodOpt.value();
-                            assert(iterMethodVal.type == Value::Type::Function);
-                            Routine* routine = iterMethodVal.funcValue;
-                            StackFrame newFrame;
-                            newFrame.routine = routine;
-                            newFrame.base = stack.top;
-                            newFrame.top = newFrame.base + routine->localCount;
-                            newFrame.ip = 0;
-                            if(routine->arity != 1) {
-                                reportError(std::format("GetIter: class \"{}\" does not have an _iter method with 0 arguments", instance->cls->name->data), Error::Type::RuntimeError);
+                            if (iterMethodVal.type == Value::Type::Function) {
+                                Routine* routine = iterMethodVal.funcValue;
+                                StackFrame newFrame;
+                                newFrame.routine = routine;
+                                newFrame.base = stack.top;
+                                newFrame.top = newFrame.base + routine->localCount;
+                                newFrame.ip = 0;
+                                if(routine->arity != 1) {
+                                    reportError(std::format("GetIter: class \"{}\" does not have an _iter method with 0 arguments", instance->cls->name->data), Error::Type::RuntimeError);
+                                    push(Value::Error);
+                                    return;
+                                }
+                                pushFrame(newFrame);
+                                newFrame.base[0] = objVal; // push 'this' as the first argument
+                            } else if (iterMethodVal.type == Value::Type::NativeFunc) {
+                                PUSH(objVal);
+                                iterMethodVal.nativeFuncValue(this, 1); // +1 for 'this'
+                            } else {
+                                assert(false);
+                                reportError(std::format("GetIter: _iter method of class \"{}\" is not a function", instance->cls->name->data), Error::Type::RuntimeError);
                                 push(Value::Error);
                                 return;
                             }
-                            pushFrame(newFrame);
-                            newFrame.base[0] = objVal; // push 'this' as the first argument
                         } else {
                             reportError("GetIter: object must be an array, map or class instance", Error::Type::RuntimeError);
                             push(Value::Error);
@@ -1669,20 +1723,29 @@ void VM::execute() {
                                 return;
                             }
                             Value nextMethodVal = nextMethodOpt.value();
-                            assert(nextMethodVal.type == Value::Type::Function);
-                            Routine* routine = nextMethodVal.funcValue;
-                            StackFrame newFrame;
-                            newFrame.routine = routine;
-                            newFrame.base = stack.top;
-                            newFrame.top = newFrame.base + routine->localCount;
-                            newFrame.ip = 0;
-                            if(routine->arity != 1) {
-                                reportError(std::format("IterNext: class \"{}\" does not have a _next method with 0 arguments", instance->cls->name->data), Error::Type::RuntimeError);
+                            if (nextMethodVal.type == Value::Type::Function) {
+                                Routine* routine = nextMethodVal.funcValue;
+                                StackFrame newFrame;
+                                newFrame.routine = routine;
+                                newFrame.base = stack.top;
+                                newFrame.top = newFrame.base + routine->localCount;
+                                newFrame.ip = 0;
+                                if(routine->arity != 1) {
+                                    reportError(std::format("IterNext: class \"{}\" does not have a _next method with 0 arguments", instance->cls->name->data), Error::Type::RuntimeError);
+                                    push(Value::Error);
+                                    return;
+                                }
+                                pushFrame(newFrame);
+                                newFrame.base[0] = iterVal; // push 'this' as the first argument
+                            } else if (nextMethodVal.type == Value::Type::NativeFunc) {
+                                PUSH(iterVal);
+                                nextMethodVal.nativeFuncValue(this, 1); // +1 for 'this'
+                            } else {
+                                assert(false);
+                                reportError(std::format("IterNext: _next method of class \"{}\" is not a function", instance->cls->name->data), Error::Type::RuntimeError);
                                 push(Value::Error);
                                 return;
                             }
-                            pushFrame(newFrame);
-                            newFrame.base[0] = iterVal; // push 'this' as the first argument
                         } else {
                             reportError("IterNext: object must be an iterator or class instance", Error::Type::RuntimeError);
                             push(Value::Error);
