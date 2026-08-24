@@ -69,10 +69,12 @@
 %left OR
 %left AND
 %left RELOP
+%left BITOR
+%left BITXOR
+%left BITAND
 %left LSHIFT RSHIFT
 %left PLUS MINUS
 %left STAR DIV MOD
-%left BITAND BITOR BITXOR
 %right NOT BITNOT MINUS_S
 %left LP RP LB RB DOT
 %right ELSE

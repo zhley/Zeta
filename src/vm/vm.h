@@ -81,7 +81,12 @@ public:
      * @brief 模块的运行时元信息（编译期数据到运行时数据的映射）。
      */
     struct ModuleInfo{
-        std::unordered_map<std::string, uint32_t> symbolMap; ///< 全局符号名 → 全局索引
+        struct Sym {
+            bool isMutable : 1; ///< 是否可变
+            uint32_t index : 31; ///< 全局索引
+        };
+
+        std::unordered_map<std::string, Sym> symbolMap; ///< 全局符号名 → 符号信息
         uint32_t protoBaseIndex; ///< 该模块各 proto 在 VM 的 routines 列表中的基索引
 
         /**
@@ -335,7 +340,7 @@ private:
 
     std::vector<StackFrame> stackFrames;
     std::unordered_map<std::string, ModuleInfo> loadedModules; // module name -> module info
-    std::unordered_map<std::string, uint32_t> registeredSyms;
+    std::unordered_map<std::string, ModuleInfo::Sym> registeredSyms;
     std::vector<std::unique_ptr<Routine>> routines; // [module1.protos[0], module1.protos[1], ..., module2.protos[0], ...]
     std::vector<std::unique_ptr<Value>> tempRoots;
 

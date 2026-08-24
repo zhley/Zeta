@@ -71,7 +71,7 @@ int VM::registerFunction(const std::string& name, NativeFunction func) {
     String* nameStr = internString(name);
     uint32_t index = global.size();
     global.push_back(Value(func));
-    registeredSyms[name] = index;
+    registeredSyms[name] = {false, index};
     return index;
 }
 
@@ -90,7 +90,7 @@ int VM::registerClass(const std::string& name, const std::vector<std::pair<std::
     uint32_t index = global.size();
     global.push_back(Value(cls));
     gc->unlock();
-    registeredSyms[name] = index;
+    registeredSyms[name] = {false, index};
     return index;
 }
 
@@ -131,7 +131,7 @@ int VM::findGlobal(const std::string& moduleName, const std::string& globalName)
     if(moduleName.empty()) {
         auto it = registeredSyms.find(globalName);
         if(it != registeredSyms.end()) {
-            return it->second;
+            return it->second.index;
         }
     } else {
         auto it = loadedModules.find(moduleName);
@@ -139,7 +139,7 @@ int VM::findGlobal(const std::string& moduleName, const std::string& globalName)
             const ModuleInfo& moduleInfo = it->second;
             auto symIt = moduleInfo.symbolMap.find(globalName);
             if(symIt != moduleInfo.symbolMap.end()) {
-                return symIt->second;
+                return symIt->second.index;
             }
         }
     }
@@ -231,6 +231,7 @@ void VM::newInstance(int argc) {
         gc->unlock();
         callMethod(STRINGS._init, argc);
     } else {
+        // TODO: 无构造时, 应该检查 argc 是否为 0. 
         push(Value(instance));
         gc->unlock();
     }
@@ -310,6 +311,7 @@ void VM::popTempRoot(Value* root) {
     }
 }
 
+// TODO: 应该返回是否导入成功
 void VM::importModule(const Module* module) {
     const std::string& moduleName = module->name; 
     if(loadedModules.find(moduleName) != loadedModules.end()) {
@@ -398,12 +400,17 @@ void VM::importModule(const Module* module) {
         uint32_t index = global.size();
         GCLockGuard lock(gc.get());
         global.push_back(makeValue(makeValue, sym.initValue));
-        moduleInfo.symbolMap[symName] = index;
+        moduleInfo.symbolMap[symName] = {sym.isMutable, index};
         for(const auto& pos : sym.relocations) {
             uint32_t routineIndex = moduleInfo.getRoutineIndex(pos.protoIndex);
             uint32_t offset = pos.bytecodeOffset;
-            assert(routineIndex < routines.size() && offset + 4 <= routines[routineIndex]->bytecode.size());
+            assert(routineIndex < routines.size() && offset + 4 <= routines[routineIndex]->bytecode.size() && offset > 0);
             std::memcpy(routines[routineIndex]->bytecode.data() + offset, &index, 4);
+            if (routines[routineIndex]->bytecode[offset - 1] == static_cast<uint8_t>(Opcode::StoreGlobal)) {
+                if (!sym.isMutable) {
+                    reportError(std::format("Global symbol \"{}\" in module \"{}\" is not mutable, but a StoreGlobal instruction was generated for it", symName, moduleName), Error::Type::VMError);
+                }
+            }
         }
     }
     std::vector<std::pair<std::string, std::string>> nameToFullname;
@@ -417,21 +424,21 @@ void VM::importModule(const Module* module) {
         importModule(importPath.first, importPath.second);
     }
     for(const auto& extSym : module->externalSyms) {
-        uint32_t index;
+        ModuleInfo::Sym sym;
         if(extSym.moduleName.empty()) {
             bool found = false;
             for(const auto& [import, importPath] : nameToFullname) {
                 const auto& symMap = loadedModules[importPath].symbolMap;
                 auto symIt = symMap.find(extSym.name);
                 if(symIt != symMap.end()) {
-                    index = symIt->second;
+                    sym = symIt->second;
                     found = true;
                     break;
                 }
             }
             auto symIt = registeredSyms.find(extSym.name);
             if(symIt != registeredSyms.end()) {
-                index = symIt->second;
+                sym = symIt->second;
                 found = true;
             }
             if(!found) {
@@ -449,40 +456,46 @@ void VM::importModule(const Module* module) {
                 reportError(std::format("Failed to resolve external symbol: \"{}\" in module \"{}\", module \"{}\" does not define the symbol", extSym.name, moduleName, extSym.moduleName), Error::Type::VMError);
                 return;
             }
-            index = symIt->second;
+            sym = symIt->second;
         }
         for(const auto& pos : extSym.relocations) {
             uint32_t routineIndex = moduleInfo.getRoutineIndex(pos.protoIndex);
             uint32_t offset = pos.bytecodeOffset;
             assert(routineIndex < routines.size() && offset + 4 <= routines[routineIndex]->bytecode.size());
+            uint32_t index = sym.index;
             std::memcpy(routines[routineIndex]->bytecode.data() + offset, &index, 4);
+            if (routines[routineIndex]->bytecode[offset - 1] == static_cast<uint8_t>(Opcode::StoreGlobal)) {
+                if (!sym.isMutable) {
+                    reportError(std::format("External symbol \"{}\" in module \"{}\" is not mutable, but a StoreGlobal instruction was generated for it", extSym.name, moduleName), Error::Type::VMError);
+                }
+            }
         }
     }  
     // base class patch
     for(const auto& patch : baseClassPatches) {
-        uint32_t idx = moduleInfo.symbolMap[patch.className];
-        Value& classVal = global[idx];
+        ModuleInfo::Sym sym = moduleInfo.symbolMap[patch.className];
+        Value& classVal = global[sym.index];
         assert(classVal.type == Value::Type::Object && classVal.ptrValue->type == Object::Type::Class);
         Class* cls = static_cast<Class*>(classVal.ptrValue);
         uint32_t baseIdx;
         if(patch.baseClassNames.first.empty()) {
             auto it = moduleInfo.symbolMap.find(patch.baseClassNames.second);
             if(it != moduleInfo.symbolMap.end()) {
-                baseIdx = it->second;
+                baseIdx = it->second.index;
             } else {
                 bool found = false;
                 for(const auto& [import, importPath] : nameToFullname) {
                     const auto& symMap = loadedModules[importPath].symbolMap;
                     auto symIt = symMap.find(patch.baseClassNames.second);
                     if(symIt != symMap.end()) {
-                        baseIdx = symIt->second;
+                        baseIdx = symIt->second.index;
                         found = true;
                         break;
                     }
                 }
                 auto symIt = registeredSyms.find(patch.baseClassNames.second);
                 if(symIt != registeredSyms.end()) {
-                    baseIdx = symIt->second;
+                    baseIdx = symIt->second.index;
                     found = true;
                 }
                 if(!found) {
@@ -501,7 +514,7 @@ void VM::importModule(const Module* module) {
                 reportError(std::format("Failed to resolve base class: \"{}\" for class \"{}\" in module \"{}\", module \"{}\" does not define the class", patch.baseClassNames.second, patch.className, moduleName, patch.baseClassNames.first), Error::Type::VMError);
                 return;
             }
-            baseIdx = symIt->second;
+            baseIdx = symIt->second.index;
         }
         Value& baseVal = global[baseIdx];
         assert(baseVal.type == Value::Type::Object && baseVal.ptrValue->type == Object::Type::Class);
@@ -512,7 +525,7 @@ void VM::importModule(const Module* module) {
     for(const auto& [symName, sym] : module->globalSyms) {
         auto it = moduleInfo.symbolMap.find(symName);
         if(it == moduleInfo.symbolMap.end()) continue;
-        Value& classVal = global[it->second];
+        Value& classVal = global[it->second.index];
         if(classVal.type != Value::Type::Object || classVal.ptrValue->type != Object::Type::Class) continue;
         Class* cls = static_cast<Class*>(classVal.ptrValue);
         cls->methods->forEach([cls](const String*, Value value) {
