@@ -6,6 +6,7 @@
 
 add_executable(cpp_interop_test cpp_interop_test.cpp)
 target_link_libraries(cpp_interop_test zeta_core)
+add_dependencies(cpp_interop_test zeta_public_headers)
 
 # 将本目录的绝对路径传入测试程序，用于定位配套的 .zt 文件，
 # 使测试与运行时的工作目录无关。

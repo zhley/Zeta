@@ -78,29 +78,44 @@ set(PUBLIC_HEADERS
     ${CMAKE_CURRENT_SOURCE_DIR}/src/vm/gc.h
 )
 set(PUBLIC_HEADER_BASE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+set(COPIED_HEADERS_LIST "")
 foreach(HEADER ${PUBLIC_HEADERS})
     file(RELATIVE_PATH REL_PATH ${PUBLIC_HEADER_BASE} ${HEADER})
     set(DEST_FILE ${PUBLIC_INCLUDE_DIR}/zeta/${REL_PATH})
     get_filename_component(DEST_DIR ${DEST_FILE} DIRECTORY)
+    
     add_custom_command(
-        TARGET zeta_core PRE_BUILD
+        OUTPUT ${DEST_FILE}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${DEST_DIR}
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            ${HEADER} ${DEST_FILE}
-        # DEPENDS ${HEADER}
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different ${HEADER} ${DEST_FILE}
+        DEPENDS ${HEADER}
         COMMENT "Copying public header: ${REL_PATH}"
+        VERBATIM
     )
+    list(APPEND COPIED_HEADERS_LIST ${DEST_FILE})
 endforeach()
+
+set(CONFIG_H_OUT ${PUBLIC_INCLUDE_DIR}/zeta/config.h)
 add_custom_command(
-    TARGET zeta_core PRE_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${GEN_DIR}/config.h ${PUBLIC_INCLUDE_DIR}/zeta/config.h
-    # DEPENDS ${GEN_DIR}/config.h
+    OUTPUT ${CONFIG_H_OUT}
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${GEN_DIR}/config.h ${CONFIG_H_OUT}
+    DEPENDS ${GEN_DIR}/config.h
+    COMMENT "Copying generated config.h"
+    VERBATIM
+)
+list(APPEND COPIED_HEADERS_LIST ${CONFIG_H_OUT})
+
+add_custom_target(zeta_public_headers
+    DEPENDS ${COPIED_HEADERS_LIST}
 )
 
 target_include_directories(zeta_core PUBLIC ${PUBLIC_INCLUDE_DIR})
 
 add_executable(zeta ${APP_SRC})
 target_link_libraries(zeta zeta_core)
+
+add_dependencies(zeta zeta_public_headers)
 
 # C++ 互操作测试（tests/cpp/）
 add_subdirectory(tests/cpp)
