@@ -198,7 +198,7 @@ public:
      * @brief 按模块名和符号名查找全局符号索引。
      * @param moduleName 模块名；为空时在已注册的原生符号中查找
      * @param globalName 全局符号名
-     * @return 全局索引；未找到时报告错误并返回 -1
+     * @return 全局索引；未找到时返回 -1
      */
     int findGlobal(const std::string& moduleName, const std::string& globalName);
 

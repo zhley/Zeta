@@ -143,7 +143,6 @@ int VM::findGlobal(const std::string& moduleName, const std::string& globalName)
             }
         }
     }
-    reportError(std::format("Global symbol \"{}\" not found in module \"{}\"", globalName, moduleName.empty() ? "<registered>" : moduleName), Error::Type::RuntimeError);
     return -1;
 }
 

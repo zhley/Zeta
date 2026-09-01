@@ -101,6 +101,10 @@ int runModule(const std::unique_ptr<Zeta::Module>& module, const RuntimeConfig& 
     vm.loadModule(module.get());
     try {
         int mainIndex = vm.findGlobal(module->name, "main");
+        if (mainIndex == -1) {
+            std::cerr << std::format("Function main not found in module {}", module->name) << std::endl;
+            return 1;
+        }
         vm.push(vm.getGlobal(mainIndex));
         vm.call(0);
         vm.pop();
