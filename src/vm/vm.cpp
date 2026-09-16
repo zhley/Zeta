@@ -35,13 +35,7 @@ VM::VM(Config config, ErrorHandler handler) : config(config), errorHandler(handl
         }
     }
     gc = std::make_unique<GC>(this);
-    StackFrame mainFrame;
-    mainFrame.routine = nullptr;
-    mainFrame.base = stack.base;
-    mainFrame.top = stack.top;
-    mainFrame.ip = -1;
-    stackFrames.push_back(mainFrame);
-    curFrame = &stackFrames.back();
+    pushNativeFrame(0);
 }
 
 VM::~VM() {
@@ -127,6 +121,14 @@ Value* VM::peek(int offset) {
     return curFrame->top + offset;
 }
 
+Value VM::getLocal(uint32_t index) {
+    return curFrame->base[index];
+}
+
+void VM::setLocal(uint32_t index, Value val) {
+    curFrame->base[index] = val;
+}
+
 int VM::findGlobal(const std::string& moduleName, const std::string& globalName) {
     if(moduleName.empty()) {
         auto it = registeredSyms.find(globalName);
@@ -146,16 +148,16 @@ int VM::findGlobal(const std::string& moduleName, const std::string& globalName)
     return -1;
 }
 
-Value VM::getGlobal(int index) {
-    if(index < 0 || index >= global.size()) {
+Value VM::getGlobal(uint32_t index) {
+    if(index >= global.size()) {
         reportError(std::format("Global index {} out of bounds", index), Error::Type::RuntimeError);
         return Value::Error;
     }
     return global[index];
 }
 
-void VM::setGlobal(int index, Value val) {
-    if(index < 0 || index >= global.size()) {
+void VM::setGlobal(uint32_t index, Value val) {
+    if(index >= global.size()) {
         reportError(std::format("Global index {} out of bounds", index), Error::Type::RuntimeError);
         return;
     }
@@ -164,10 +166,24 @@ void VM::setGlobal(int index, Value val) {
 
 void VM::call(int argc) {
     Value funcVal = pop();
-    if(funcVal.type == Value::Type::NativeFunc) {
+    if(funcVal.type == Value::Type::Function) {
+        if (argc != funcVal.funcValue->arity) {
+            reportError(std::format("Function expects {} arguments, but {} were provided", funcVal.funcValue->arity, argc), Error::Type::RuntimeError);
+            curFrame->top -= argc;
+            push(Value::Error);
+            return;
+        }
+        pushFrame(funcVal.funcValue);
+        StackFrame* prevFrame = curFrame - 1;
+        std::memcpy(curFrame->base, prevFrame->top - argc, argc * sizeof(Value));
+        prevFrame->top -= argc;
+        execute();
+    } else if(funcVal.type == Value::Type::NativeFunc) {
+        pushNativeFrame(argc);
+        StackFrame* prevFrame = curFrame - 1;
+        std::memcpy(curFrame->base, prevFrame->top - argc, argc * sizeof(Value));
+        prevFrame->top -= argc;
         funcVal.nativeFuncValue(this, argc);
-    } else if(funcVal.type == Value::Type::Function) {
-        call(funcVal.funcValue, argc);
     } else {
         reportError("call() expects a function", Error::Type::RuntimeError);
         push(Value::Error);
@@ -191,15 +207,30 @@ void VM::callMethod(String* methodName, int argc) {
     while(cls) {
         auto methodValOpt = cls->methods->get(methodName);
         if(methodValOpt.has_value()) {
-            Value methodVal = methodValOpt.value();
+            Value methodVal = *methodValOpt;
             if(methodVal.type == Value::Type::NativeFunc) {
-                push(objVal);
-                methodVal.nativeFuncValue(this, argc + 1); 
+                pushNativeFrame(argc + 1);
+                curFrame->base[0] = objVal;
+                StackFrame* prevFrame = curFrame - 1;
+                std::memcpy(curFrame->base + 1, prevFrame->top - argc, argc * sizeof(Value));
+                prevFrame->top -= argc;
+                methodVal.nativeFuncValue(this, argc + 1);
+                Value retVal = pop();
+                popFrame();
+                push(retVal);
             } else if(methodVal.type == Value::Type::Function) {
-                push(objVal);
-                std::memmove(curFrame->top - argc, curFrame->top - argc - 1, argc * sizeof(Value));
-                *(curFrame->top - argc - 1) = objVal;
-                call(methodVal.funcValue, argc + 1); 
+                if (argc != methodVal.funcValue->arity) {
+                    reportError(std::format("Method expects {} arguments, but {} were provided", methodVal.funcValue->arity, argc), Error::Type::RuntimeError);
+                    curFrame->top -= argc;
+                    push(Value::Error);
+                    return;
+                }
+                pushFrame(methodVal.funcValue);
+                curFrame->base[0] = objVal;
+                StackFrame* prevFrame = curFrame - 1;
+                std::memcpy(curFrame->base + 1, prevFrame->top - argc, argc * sizeof(Value));
+                prevFrame->top -= argc;
+                execute();
             } else {
                 reportError(std::format("CallMethod: method \"{}\" is not a function", methodName->data), Error::Type::RuntimeError);
                 push(Value::Error);
@@ -602,32 +633,76 @@ std::pair<std::filesystem::path, bool> VM::searchModuleFile(const std::string& m
     return {};
 }
 
-void VM::call(Routine* func, int argc) {
-    if(argc != func->arity) {
-        reportError(std::format("Function expects {} arguments, but {} were provided", func->arity, argc), Error::Type::RuntimeError);
-        push(Value::Error);
-        return;
-    }
-    StackFrame frame;
-    frame.routine = func;
-    frame.base = stack.top;
-    frame.top = stack.top + func->localCount;
-    frame.ip = 0;
-    pushFrame(frame);
-    StackFrame* prevFrame = curFrame - 1;
-    std::memcpy(curFrame->base, prevFrame->top - argc, argc * sizeof(Value));
-    prevFrame->top -= argc;
-    execute();
-}
+// TODO: 目前原生调用是借用的的调用者栈帧, 不够统一, 应该改为在原生调用时创建一个新的栈帧, 这个栈帧的特殊之处在于局部变量都是传进来的参数, 操作数栈无上限.
 
 // TODO: 需要重构
+// TODO: 部分 if 分支可能需要调整顺序以优化性能.
 void VM::execute() {
     int initDepth = stackFrames.size();
 
-    #define READ_BYTE(val) (val = curFrame->routine->bytecode[curFrame->ip++])
-    #define READ_UINT32(val) { std::memcpy(&val, &(curFrame->routine->bytecode[curFrame->ip]), 4); curFrame->ip += 4; } 
-    #define PUSH(val) (*curFrame->top++ = val)
-    #define POP() (*--curFrame->top)
+#define READ_BYTE(val) (val = curFrame->routine->bytecode[curFrame->ip++])
+#define READ_UINT32(val) { std::memcpy(&val, &(curFrame->routine->bytecode[curFrame->ip]), 4); curFrame->ip += 4; } 
+#define PUSH(val) (*curFrame->top++ = val)
+#define POP() (*--curFrame->top)
+#define CALL_(funcVal, argc) \
+    if (funcVal.type == Value::Type::Function) { \
+        if (argc != funcVal.funcValue->arity) { \
+            reportError(std::format("Function expects {} arguments, but {} were provided", funcVal.funcValue->arity, argc), Error::Type::RuntimeError); \
+            curFrame->top -= argc; \
+            push(Value::Error); \
+            return; \
+        } \
+        pushFrame(funcVal.funcValue); \
+        StackFrame* prevFrame = curFrame - 1; \
+        std::memcpy(curFrame->base, prevFrame->top - argc, argc * sizeof(Value)); \
+        prevFrame->top -= argc; \
+    } else if (funcVal.type == Value::Type::NativeFunc) { \
+        pushNativeFrame(argc); \
+        StackFrame* prevFrame = curFrame - 1; \
+        std::memcpy(curFrame->base, prevFrame->top - argc, argc * sizeof(Value)); \
+        prevFrame->top -= argc; \
+        funcVal.nativeFuncValue(this, argc); \
+    } 
+#define CALL_FUNC(funcVal, argc) \
+    do { \
+        CALL_(funcVal, argc) else {\
+            reportError("call() expects a function", Error::Type::RuntimeError); \
+            push(Value::Error); \
+            return; \
+        } \
+    } while(0)
+#define CALL_METHOD_IMPL_(funcVal, objVal, argc, TAIL) \
+    do { \
+        if (funcVal.type == Value::Type::Function) { \
+            if (argc != funcVal.funcValue->arity - 1) { \
+                reportError(std::format("Method expects {} arguments, but {} were provided", funcVal.funcValue->arity - 1, argc), Error::Type::RuntimeError); \
+                push(Value::Error); \
+                return; \
+            } \
+            pushFrame(funcVal.funcValue); \
+            curFrame->base[0] = objVal; \
+            StackFrame* prevFrame = curFrame - 1; \
+            std::memcpy(curFrame->base + 1, prevFrame->top - argc, argc * sizeof(Value)); \
+            prevFrame->top -= argc; \
+            TAIL; \
+        } else if (funcVal.type == Value::Type::NativeFunc) { \
+            pushNativeFrame(argc + 1); \
+            curFrame->base[0] = objVal; \
+            StackFrame* prevFrame = curFrame - 1; \
+            std::memcpy(curFrame->base + 1, prevFrame->top - argc, argc * sizeof(Value)); \
+            prevFrame->top -= argc; \
+            funcVal.nativeFuncValue(this, argc + 1); \
+            Value retVal = POP(); \
+            popFrame(); \
+            PUSH(retVal); \
+        } else { \
+            reportError(std::format("CallMethod: method is not a function"), Error::Type::RuntimeError); \
+            push(Value::Error); \
+            return; \
+        } \
+    } while(0)
+#define CALL_METHOD(funcVal, objVal, argc) CALL_METHOD_IMPL_(funcVal, objVal, argc, /* no tail */)
+#define CALL_METHOD_EXE(funcVal, objVal, argc) CALL_METHOD_IMPL_(funcVal, objVal, argc, execute())
 
     while(true){
         uint8_t opcode;
@@ -917,41 +992,16 @@ void VM::execute() {
                             if(!equalsMethodOpt.has_value()) {
                                 PUSH(Value(false));
                             } else {
-                                Value equalsMethodVal = equalsMethodOpt.value();
-                                if (equalsMethodVal.type == Value::Type::Function) {
-                                    Routine* func = equalsMethodVal.funcValue;
-                                    if(func->arity != 2) {
-                                        reportError(std::format("Eq: _equals method of class \"{}\" should have 2 arguments", aInst->cls->name->data), Error::Type::RuntimeError);
-                                        push(Value::Error);
-                                        return;
-                                    }
-                                    PUSH(a);
-                                    PUSH(b);
-                                    call(func, 2);
-                                    Value ret = POP();
-                                    if(ret.type != Value::Type::Bool) {
-                                        reportError(std::format("Eq: _equals method of class \"{}\" should return a boolean value", aInst->cls->name->data), Error::Type::RuntimeError);
-                                        push(Value::Error);
-                                        return;
-                                    }
-                                    PUSH(ret);
-                                } else if (equalsMethodVal.type == Value::Type::NativeFunc) {
-                                    PUSH(b);
-                                    PUSH(a);
-                                    equalsMethodVal.nativeFuncValue(this, 2);
-                                    Value ret = POP();
-                                    if(ret.type != Value::Type::Bool) {
-                                        reportError(std::format("Eq: _equals method of class \"{}\" should return a boolean value", aInst->cls->name->data), Error::Type::RuntimeError);
-                                        push(Value::Error);
-                                        return;
-                                    }
-                                    PUSH(ret);
-                                } else {
-                                    assert(false);
-                                    reportError(std::format("Eq: _equals method of class \"{}\" is not a function", aInst->cls->name->data), Error::Type::RuntimeError);
+                                Value equalsMethodVal = *equalsMethodOpt;
+                                PUSH(b);
+                                CALL_METHOD_EXE(equalsMethodVal, a, 1);
+                                Value ret = POP();
+                                if (ret.type != Value::Type::Bool) {
+                                    reportError(std::format("Eq: _equals method of class \"{}\" should return a boolean value", aInst->cls->name->data), Error::Type::RuntimeError);
                                     push(Value::Error);
                                     return;
                                 }
+                                PUSH(ret);
                             }
                         } else if (aObj->type == Object::Type::StrObj) {
                             if(b.type == Value::Type::String) {
@@ -1028,41 +1078,16 @@ void VM::execute() {
                             if(!equalsMethodOpt.has_value()) {
                                 PUSH(Value(true));
                             } else {
-                                Value equalsMethodVal = equalsMethodOpt.value();
-                                if (equalsMethodVal.type == Value::Type::Function) {
-                                    Routine* func = equalsMethodVal.funcValue;
-                                    if(func->arity != 2) {
-                                        reportError(std::format("Neq: _equals method of class \"{}\" should have 2 arguments", aInst->cls->name->data), Error::Type::RuntimeError);
-                                        push(Value::Error);
-                                        return;
-                                    }
-                                    PUSH(a);
-                                    PUSH(b);
-                                    call(func, 2);
-                                    Value ret = POP();
-                                    if(ret.type != Value::Type::Bool) {
-                                        reportError(std::format("Neq: _equals method of class \"{}\" should return a boolean value", aInst->cls->name->data), Error::Type::RuntimeError);
-                                        push(Value::Error);
-                                        return;
-                                    }
-                                    PUSH(Value(!ret.boolValue));
-                                } else if (equalsMethodVal.type == Value::Type::NativeFunc) {
-                                    PUSH(b);
-                                    PUSH(a);
-                                    equalsMethodVal.nativeFuncValue(this, 2);
-                                    Value ret = POP();
-                                    if(ret.type != Value::Type::Bool) {
-                                        reportError(std::format("Neq: _equals method of class \"{}\" should return a boolean value", aInst->cls->name->data), Error::Type::RuntimeError);
-                                        push(Value::Error);
-                                        return;
-                                    }
-                                    PUSH(Value(!ret.boolValue));
-                                } else {
-                                    assert(false);
-                                    reportError(std::format("Neq: _equals method of class \"{}\" is not a function", aInst->cls->name->data), Error::Type::RuntimeError);
+                                Value equalsMethodVal = *equalsMethodOpt;
+                                PUSH(b);
+                                CALL_METHOD_EXE(equalsMethodVal, a, 1);
+                                Value ret = POP();
+                                if (ret.type != Value::Type::Bool) {
+                                    reportError(std::format("Eq: _equals method of class \"{}\" should return a boolean value", aInst->cls->name->data), Error::Type::RuntimeError);
                                     push(Value::Error);
                                     return;
                                 }
+                                PUSH(Value(!ret.boolValue));
                             }
                         } else if (aObj->type == Object::Type::StrObj) {
                             if(b.type == Value::Type::String) {
@@ -1201,56 +1226,38 @@ void VM::execute() {
                 uint8_t argCount;
                 READ_BYTE(argCount);
                 Value callee = POP();
-                if(callee.type == Value::Type::Function) {
-                    Routine* routine = callee.funcValue;
-                    StackFrame newFrame;
-                    newFrame.routine = routine;
-                    newFrame.base = stack.top;
-                    newFrame.top = newFrame.base + routine->localCount;
-                    newFrame.ip = 0;
-                    if(argCount != routine->arity) {
-                        reportError(std::format("Function expects {} arguments, but {} were provided", routine->arity, argCount), Error::Type::RuntimeError);
-                        push(Value::Error);
-                        return;
-                    }
-                    pushFrame(newFrame);
-                    StackFrame* prevFrame = curFrame - 1;
-                    for(int i = routine->arity - 1; i >= 0; i--) {
-                        newFrame.base[i] = *(--prevFrame->top);
-                    }
-                } else if(callee.type == Value::Type::NativeFunc) {
-                    NativeFunction nativeFunc = callee.nativeFuncValue;
-                    nativeFunc(this, argCount);
-                } else if(callee.type == Value::Type::Object && callee.ptrValue->type == Object::Type::Class) {
+                CALL_(callee, argCount) 
+                else if(callee.type == Value::Type::Object && callee.ptrValue->type == Object::Type::Class) {
                     gc->lock();
                     Class* cls = static_cast<Class*>(callee.ptrValue);
                     Instance* instance = gc->allocate<Instance>(gc.get(), cls);
                     auto constructor = cls->methods->get(STRINGS._init);
                     if(constructor.has_value()) {
-                        Value constructorVal = constructor.value();
+                        Value constructorVal = *constructor;
                         if (constructorVal.type == Value::Type::Function) {
                             Routine* routine = constructorVal.funcValue;
-                            StackFrame newFrame;
-                            newFrame.routine = routine;
-                            newFrame.base = stack.top;
-                            newFrame.top = newFrame.base + routine->localCount;
-                            newFrame.ip = 0;
                             if(argCount != routine->arity - 1) {
                                 reportError(std::format("Constructor expects {} arguments, but {} were provided", routine->arity - 1, argCount), Error::Type::RuntimeError);
                                 push(Value::Error);
                                 return;
                             }
-                            pushFrame(newFrame);
+                            pushFrame(routine);
                             StackFrame* prevFrame = curFrame - 1;
-                            newFrame.base[0] = Value(instance); // push 'this' as the first argument
-                            for(int i = routine->arity - 1; i >= 1; i--) {
-                                newFrame.base[i] = *(--prevFrame->top);
-                            }
+                            curFrame->base[0] = Value(instance);
+                            std::memcpy(curFrame->base + 1, prevFrame->top - argCount, argCount * sizeof(Value));
+                            prevFrame->top -= argCount;
                             gc->unlock();
                         } else if (constructorVal.type == Value::Type::NativeFunc) {
-                            PUSH(Value(instance));
+                            pushNativeFrame(argCount + 1);
+                            curFrame->base[0] = Value(instance);
+                            StackFrame* prevFrame = curFrame - 1;
+                            std::memcpy(curFrame->base + 1, prevFrame->top - argCount, argCount * sizeof(Value));
+                            prevFrame->top -= argCount;
                             gc->unlock();
-                            constructorVal.nativeFuncValue(this, argCount + 1); // +1 for 'this'
+                            constructorVal.nativeFuncValue(this, argCount + 1);
+                            Value retVal = POP();
+                            popFrame();
+                            PUSH(retVal);
                         } else {
                             assert(false);
                             gc->unlock();
@@ -1260,6 +1267,7 @@ void VM::execute() {
                         }
                     } else {
                         PUSH(Value(instance));
+                        gc->unlock();
                     }
                 } else {
                     reportError("Call: callee must be a function", Error::Type::RuntimeError);
@@ -1413,35 +1421,8 @@ void VM::execute() {
                                 push(Value::Error);
                                 return;
                             }
-                            Value methodVal = methodValOpt.value();
-                            if (methodVal.type == Value::Type::Function) {
-                                Routine* routine = methodVal.funcValue;
-                                StackFrame newFrame;
-                                newFrame.routine = routine;
-                                newFrame.base = stack.top;
-                                newFrame.top = newFrame.base + routine->localCount;
-                                newFrame.ip = 0;
-                                if(argCount != routine->arity - 1) {
-                                    reportError(std::format("Method expects {} arguments, but {} were provided", routine->arity - 1, argCount), Error::Type::RuntimeError);
-                                    push(Value::Error);
-                                    return;
-                                }
-                                pushFrame(newFrame);
-                                StackFrame* prevFrame = curFrame - 1;
-                                newFrame.base[0] = objVal; // push 'this' as the first argument
-                                for(int i = routine->arity - 1; i >= 1; i--) {
-                                    newFrame.base[i] = *(--prevFrame->top);
-                                }
-                            } else if (methodVal.type == Value::Type::NativeFunc) {
-                                NativeFunction nativeFunc = methodVal.nativeFuncValue;
-                                PUSH(objVal);
-                                nativeFunc(this, argCount + 1); 
-                            } else {
-                                assert(false);
-                                reportError(std::format("CallMethod: method \"{}\" is not a function", methodName->data), Error::Type::RuntimeError);
-                                push(Value::Error);
-                                return;
-                            }
+                            Value methodVal = *methodValOpt;
+                            CALL_METHOD(methodVal, objVal, argCount);
                             break;
                         }
                         case Object::Type::Class: {
@@ -1452,36 +1433,8 @@ void VM::execute() {
                                 push(Value::Error);
                                 return;
                             }
-                            Value methodVal = methodValOpt.value();
-                            if (methodVal.type == Value::Type::Function) {
-                                Routine* routine = methodVal.funcValue;
-                                StackFrame newFrame;
-                                newFrame.routine = routine;
-                                newFrame.base = stack.top;
-                                newFrame.top = newFrame.base + routine->localCount;
-                                newFrame.ip = 0;
-                                if(argCount != routine->arity) {
-                                    reportError(std::format("Method expects {} arguments (the first is 'this'), but {} were provided", routine->arity, argCount), Error::Type::RuntimeError);
-                                    push(Value::Error);
-                                    return;
-                                }
-                                pushFrame(newFrame);
-                                StackFrame* prevFrame = curFrame - 1;
-                                for(int i = routine->arity - 1; i >= 0; i--) {
-                                    newFrame.base[i] = *(--prevFrame->top);
-                                }
-                            } else if (methodVal.type == Value::Type::NativeFunc) {
-                                NativeFunction nativeFunc = methodVal.nativeFuncValue;
-                                Value instanceVal = *(curFrame->top - argCount);
-                                std::memmove(curFrame->top - argCount, curFrame->top - argCount + 1, (argCount - 1) * sizeof(Value));
-                                *(curFrame->top - 1) = instanceVal;
-                                nativeFunc(this, argCount); 
-                            } else {
-                                assert(false);
-                                reportError(std::format("CallMethod: method \"{}\" is not a function", methodName->data), Error::Type::RuntimeError);
-                                push(Value::Error);
-                                return;
-                            }
+                            Value methodVal = *methodValOpt;
+                            CALL_FUNC(methodVal, argCount);
                             break;
                         }
                         default: {
@@ -1524,35 +1477,8 @@ void VM::execute() {
                     push(Value::Error);
                     return;
                 }
-                Value methodVal = methodValOpt.value();
-                if (methodVal.type == Value::Type::Function) {
-                    Routine* routine = methodVal.funcValue;
-                    StackFrame newFrame;
-                    newFrame.routine = routine;
-                    newFrame.base = stack.top;
-                    newFrame.top = newFrame.base + routine->localCount;
-                    newFrame.ip = 0;
-                    if(argCount != routine->arity - 1) {
-                        reportError(std::format("Super method expects {} arguments, but {} were provided", routine->arity - 1, argCount), Error::Type::RuntimeError);
-                        push(Value::Error);
-                        return;
-                    }
-                    pushFrame(newFrame);
-                    StackFrame* prevFrame = curFrame - 1;
-                    newFrame.base[0] = objVal; // push 'this' as the first argument
-                    for(int i = routine->arity - 1; i >= 1; i--) {
-                        newFrame.base[i] = *(--prevFrame->top);
-                    }
-                } else if (methodVal.type == Value::Type::NativeFunc) {
-                    NativeFunction nativeFunc = methodVal.nativeFuncValue;
-                    PUSH(objVal);
-                    nativeFunc(this, argCount + 1); 
-                } else {
-                    assert(false);
-                    reportError(std::format("SuperCall: method \"{}\" is not a function", methodName->data), Error::Type::RuntimeError);
-                    push(Value::Error);
-                    return;
-                }
+                Value methodVal = *methodValOpt;
+                CALL_METHOD(methodVal, objVal, argCount);
                 break;
             }
             case Opcode::IndexGet: {
@@ -1655,9 +1581,8 @@ void VM::execute() {
                 PUSH(*(curFrame->top - 1));
                 break;
             }
-            // TODO: 内置函数内部错误有些是可恢复的, 应该返回错误码而不是报运行时错误.
+            // TODO: 内置函数内部错误有些是可恢复的, 应该返回错误码而不是报运行时错误. 有些使用断言的地方应改成运行时错误.
             case Opcode::CallBuiltin: {
-                GCLockGuard lock(gc.get());
                 uint8_t builtinId;
                 READ_BYTE(builtinId);
                 switch(static_cast<Builtin>(builtinId)) {
@@ -1669,12 +1594,10 @@ void VM::execute() {
                             return;
                         }
                         if(objVal.ptrValue->type == Object::Type::Array) {
-                            Array* arr = static_cast<Array*>(objVal.ptrValue);
-                            Iterator* iter = gc->allocate<Iterator>(gc.get(), arr);
+                            Iterator* iter = gc->allocate<Iterator>(gc.get(), static_cast<Array*>(objVal.ptrValue));
                             PUSH(Value(iter));
                         } else if(objVal.ptrValue->type == Object::Type::Map) {
-                            Map* map = static_cast<Map*>(objVal.ptrValue);
-                            Iterator* iter = gc->allocate<Iterator>(gc.get(), map);
+                            Iterator* iter = gc->allocate<Iterator>(gc.get(), static_cast<Map*>(objVal.ptrValue));
                             PUSH(Value(iter));
                         } else if (objVal.ptrValue->type == Object::Type::Instance) {
                             Instance* instance = static_cast<Instance*>(objVal.ptrValue);
@@ -1684,30 +1607,8 @@ void VM::execute() {
                                 push(Value::Error);
                                 return;
                             }
-                            Value iterMethodVal = iterMethodOpt.value();
-                            if (iterMethodVal.type == Value::Type::Function) {
-                                Routine* routine = iterMethodVal.funcValue;
-                                StackFrame newFrame;
-                                newFrame.routine = routine;
-                                newFrame.base = stack.top;
-                                newFrame.top = newFrame.base + routine->localCount;
-                                newFrame.ip = 0;
-                                if(routine->arity != 1) {
-                                    reportError(std::format("GetIter: class \"{}\" does not have an _iter method with 0 arguments", instance->cls->name->data), Error::Type::RuntimeError);
-                                    push(Value::Error);
-                                    return;
-                                }
-                                pushFrame(newFrame);
-                                newFrame.base[0] = objVal; // push 'this' as the first argument
-                            } else if (iterMethodVal.type == Value::Type::NativeFunc) {
-                                PUSH(objVal);
-                                iterMethodVal.nativeFuncValue(this, 1); // +1 for 'this'
-                            } else {
-                                assert(false);
-                                reportError(std::format("GetIter: _iter method of class \"{}\" is not a function", instance->cls->name->data), Error::Type::RuntimeError);
-                                push(Value::Error);
-                                return;
-                            }
+                            Value iterMethodVal = *iterMethodOpt;
+                            CALL_METHOD(iterMethodVal, objVal, 0);
                         } else {
                             reportError("GetIter: object must be an array, map or class instance", Error::Type::RuntimeError);
                             push(Value::Error);
@@ -1734,30 +1635,8 @@ void VM::execute() {
                                 push(Value::Error);
                                 return;
                             }
-                            Value nextMethodVal = nextMethodOpt.value();
-                            if (nextMethodVal.type == Value::Type::Function) {
-                                Routine* routine = nextMethodVal.funcValue;
-                                StackFrame newFrame;
-                                newFrame.routine = routine;
-                                newFrame.base = stack.top;
-                                newFrame.top = newFrame.base + routine->localCount;
-                                newFrame.ip = 0;
-                                if(routine->arity != 1) {
-                                    reportError(std::format("IterNext: class \"{}\" does not have a _next method with 0 arguments", instance->cls->name->data), Error::Type::RuntimeError);
-                                    push(Value::Error);
-                                    return;
-                                }
-                                pushFrame(newFrame);
-                                newFrame.base[0] = iterVal; // push 'this' as the first argument
-                            } else if (nextMethodVal.type == Value::Type::NativeFunc) {
-                                PUSH(iterVal);
-                                nextMethodVal.nativeFuncValue(this, 1); // +1 for 'this'
-                            } else {
-                                assert(false);
-                                reportError(std::format("IterNext: _next method of class \"{}\" is not a function", instance->cls->name->data), Error::Type::RuntimeError);
-                                push(Value::Error);
-                                return;
-                            }
+                            Value nextMethodVal = *nextMethodOpt;
+                            CALL_METHOD(nextMethodVal, iterVal, 0);
                         } else {
                             reportError("IterNext: object must be an iterator or class instance", Error::Type::RuntimeError);
                             push(Value::Error);
@@ -2025,15 +1904,37 @@ String* VM::internString(StrObj* strObj) {
     return internString(str);
 }
 
-void VM::pushFrame(const StackFrame& frame) {
+void VM::pushFrame(Routine* routine) {
+    StackFrame frame;
+    frame.routine = routine;
+    frame.base = stack.top;
+    frame.top = frame.base + routine->localCount;
+    frame.ip = 0;
     stackFrames.push_back(frame);
-    stack.top += frame.routine->localCount + frame.routine->maxStackSize;
+    stack.top += routine->localCount + routine->maxStackSize;
     if(stack.top > stack.base + stack.capacity) {
         reportError("Stack overflow", Error::Type::RuntimeError);
         throw VMException(VMException::Type::StackOverflow);
     }
     // Initialize local variables to null, avoid garbage values
     std::memset(frame.base, 0, sizeof(Value) * frame.routine->localCount);
+    curFrame = &stackFrames.back();
+}
+
+void VM::pushNativeFrame(uint32_t localCount) {
+    StackFrame frame;
+    frame.routine = nullptr;
+    frame.base = stack.top;
+    frame.top = frame.base + localCount;
+    frame.ip = -1;
+    stackFrames.push_back(frame);
+    stack.top += localCount;
+    if(stack.top > stack.base + stack.capacity) {
+        reportError("Stack overflow", Error::Type::RuntimeError);
+        throw VMException(VMException::Type::StackOverflow);
+    }
+    // Initialize local variables to null, avoid garbage values
+    std::memset(frame.base, 0, sizeof(Value) * localCount);
     curFrame = &stackFrames.back();
 }
 

@@ -123,6 +123,7 @@ public:
     /**
      * @brief 加载一个已编译的模块，并递归加载其 imports 依赖。
      * @param module 编译期模块对象
+     * @note VM 不会保存 module，调用者确保 module 在该函数返回前有效即可。
      */
     void loadModule(const Module* module);
 
@@ -194,6 +195,10 @@ public:
      */
     Value* peek(int offset);
 
+    Value getLocal(uint32_t index);
+
+    void setLocal(uint32_t index, Value val);
+
     /**
      * @brief 按模块名和符号名查找全局符号索引。
      * @param moduleName 模块名；为空时在已注册的原生符号中查找
@@ -207,14 +212,14 @@ public:
      * @param index 全局索引
      * @return 全局变量值；索引越界时报告错误并返回 Value::Error
      */
-    Value getGlobal(int index);
+    Value getGlobal(uint32_t index);
 
     /**
      * @brief 按索引写入全局变量值。
      * @param index 全局索引
      * @param val 要写入的值
      */
-    void setGlobal(int index, Value val);
+    void setGlobal(uint32_t index, Value val);
 
     /**
      * @brief 调用当前帧栈顶的函数值。
@@ -319,13 +324,15 @@ public:
      * @note 外部调用只有能力报告运行时错误，第二个参数一般不需要传入。
      */
     void reportError(const std::string& message, Error::Type type = Error::Type::RuntimeError) {
-        Routine* currentRoutine = stackFrames.empty() ? nullptr : stackFrames.back().routine;
-        if (currentRoutine) {
+        StackFrame* frame = curFrame;
+        assert(stackFrames.size() > 0);
+        while (frame >= stackFrames.data() && !frame->routine) --frame;
+        if (frame->routine) {
             uint32_t currentIP = stackFrames.back().ip - 1;
-            uint32_t line = getLine(currentRoutine, currentIP);
-            errorHandler({type, currentRoutine->moduleName, line, message});
+            uint32_t line = getLine(frame->routine, currentIP);
+            errorHandler({type, frame->routine->moduleName, line, message});
         } else {
-            errorHandler({type, "<unknown>", 0, message});
+            errorHandler({type, "<MainFrame>", 0, message});
         }
     }
 
@@ -349,10 +356,10 @@ private:
     void importModule(const Module* module);
     void importModule(const std::filesystem::path& path, bool isSrcFile);
     
-    void call(Routine* func, int argc);
     void execute();
 
-    void pushFrame(const StackFrame& frame);
+    void pushFrame(Routine* routine);
+    void pushNativeFrame(uint32_t localCount);
     void popFrame();
 
     static void defaultErrorHandler(const Error& error) {

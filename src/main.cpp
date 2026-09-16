@@ -149,6 +149,8 @@ int dumpModule(const std::string& bcPath, const std::string& outPath) {
 
 } // namespace
 
+// TODO: 支持通过动态链接引入原生模块 (原生类, 原生函数等)
+
 // exit code:
 // 0: success
 // 1: local error

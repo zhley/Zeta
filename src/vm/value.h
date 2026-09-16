@@ -24,6 +24,8 @@ class VM;
 
 using NativeFunction = void(*)(VM* vm, int argc);
 
+// TODO: 标出哪些操作会触发 GC.
+
 // 16 Bytes
 struct Value {
     static const Value Null;
@@ -164,7 +166,8 @@ public:
         Class,
         Instance, 
         Iterator,
-        StrObj
+        StrObj,
+        UserData
     };
 
     Type getType() const { return type; }
@@ -422,6 +425,20 @@ private:
 
     StrObj(GC* gc, const char* str, uint32_t len);
     StrObj(GC* gc, std::string_view str1, std::string_view str2);
+};
+
+class NativeType {
+public:
+    virtual ~NativeType() = default;
+    virtual Value getField(void* instance, String* fieldName) = 0;
+    virtual void setField(void* instance, String* fieldName, const Value& value) = 0;
+    virtual Value callMethod(void* instance, String* methodName, const std::vector<Value>& args) = 0;
+};
+
+class UserData : public Object {
+private:
+    void* data;
+    NativeType* type;
 };
 
 inline int Object::getSize() const {
