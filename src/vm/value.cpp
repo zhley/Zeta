@@ -10,6 +10,8 @@ namespace Zeta {
 const Value Value::Null = Value(Value::Type::Null, 0);
 const Value Value::Error = Value(Value::Type::Error, 0);
 
+// NOTE: Object 的这些子类的成员函数(包括构造函数), 凡是内部可能触发 GC 的, 都必须在第一行加上 GCLockGuard lock(gc); 避免 this 失效.
+
 // Array
 Array::Array(GC* gc) : Object(Object::Type::Array), size(0), capacity(8), gc(gc){
     GCLockGuard lock(gc);
@@ -73,6 +75,7 @@ Map::Map(GC* gc, uint32_t minCapacity) : Object(Object::Type::Map), size(0), del
 }
 
 void Map::set(String* key, const Value& value){
+    GCLockGuard lock(gc);
     if((size + deletedCnt) * 2 > capacity){
         rehash(capacity * 2);
     }

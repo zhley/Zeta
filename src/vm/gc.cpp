@@ -516,6 +516,9 @@ void GC::forEachRoot(F&& f) {
     for(auto& tmpRoot : vm->tempRoots) {
         f(*tmpRoot);
     }
+    if(newborn) {
+        f(*newborn);
+    }
 }
 
 }

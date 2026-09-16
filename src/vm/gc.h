@@ -191,7 +191,15 @@ public:
         obj->age = 0;
         obj->gcWord.marked = false;
         obj->gcWord.forward = 0;
-        return new (obj) T(std::forward<Args>(args)...);
+        if (!locked) {
+            Value v(obj);
+            newborn = &v;
+            new (obj) T(std::forward<Args>(args)...); // GC may be triggered when returning here
+            newborn = nullptr;
+            return static_cast<T*>(v.ptrValue);
+        } else {
+            return new (obj) T(std::forward<Args>(args)...); 
+        }
     }
 
     Block* allocateBlock(int size, Block::ElemType elemType);
@@ -249,6 +257,8 @@ private:
     int locked = false;
     bool waitingMinorGC = false;
     bool waitingFullGC = false;
+
+    Value* newborn = nullptr; // point to the object that has just been allocated, but not yet returned to the caller
 
     bool isYoung(void* obj);
     bool isOld(void* obj);
