@@ -184,6 +184,9 @@ void VM::call(int argc) {
         std::memcpy(curFrame->base, prevFrame->top - argc, argc * sizeof(Value));
         prevFrame->top -= argc;
         funcVal.nativeFuncValue(this, argc);
+        Value retVal = pop();
+        popFrame();
+        push(retVal);
     } else {
         reportError("call() expects a function", Error::Type::RuntimeError);
         push(Value::Error);
@@ -219,8 +222,8 @@ void VM::callMethod(String* methodName, int argc) {
                 popFrame();
                 push(retVal);
             } else if(methodVal.type == Value::Type::Function) {
-                if (argc != methodVal.funcValue->arity) {
-                    reportError(std::format("Method expects {} arguments, but {} were provided", methodVal.funcValue->arity, argc), Error::Type::RuntimeError);
+                if (argc != methodVal.funcValue->arity - 1) {
+                    reportError(std::format("Method expects {} arguments, but {} were provided", methodVal.funcValue->arity - 1, argc), Error::Type::RuntimeError);
                     curFrame->top -= argc;
                     push(Value::Error);
                     return;
@@ -633,8 +636,6 @@ std::pair<std::filesystem::path, bool> VM::searchModuleFile(const std::string& m
     return {};
 }
 
-// TODO: 目前原生调用是借用的的调用者栈帧, 不够统一, 应该改为在原生调用时创建一个新的栈帧, 这个栈帧的特殊之处在于局部变量都是传进来的参数, 操作数栈无上限.
-
 // TODO: 需要重构
 // TODO: 部分 if 分支可能需要调整顺序以优化性能.
 void VM::execute() {
@@ -662,6 +663,9 @@ void VM::execute() {
         std::memcpy(curFrame->base, prevFrame->top - argc, argc * sizeof(Value)); \
         prevFrame->top -= argc; \
         funcVal.nativeFuncValue(this, argc); \
+        Value retVal = POP(); \
+        popFrame(); \
+        PUSH(retVal); \
     } 
 #define CALL_FUNC(funcVal, argc) \
     do { \

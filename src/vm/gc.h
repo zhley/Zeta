@@ -156,17 +156,16 @@ private:
 +------------------------+----------------+----------------+--------------------+
 
 备注:
- - 从分配一个对象, 到将其存储到根集或者其他已存储对象对象的字段中, 如果该过程中可能产生其他对象的分配, 
-   则必须将该过程包裹在 lock() 和 unlock() 之间, 否则刚分配出的对象可能会被立即回收. 
-   准确来说, 任何分配对象的行为都可能触发 GC, 而触发 GC 会产生对象移动, GC 只会更新根集中的指针,
-   对于缓存在 C++ 端的指针, 可能会失效, 例如:
+ - C++ 侧缓存的 Object* / T*:
+   任何可能触发 GC 的操作 (分配、Array::add、Map::rehash 等) 都可能使缓存指针失效.
+   跨越这类操作时, 必须 lock()/unlock() 包住, 或不缓存裸指针、改为缓存根上的 Value* 并在 GC 后重读.
+   例如:
        Array* arr = POP();
        ......
-       arr->add(POP());
-       ......
-       PUSH(arr->size);
-   这里 add 函数内部有对象分配, 可能触发 GC, 数组对象可能移动, 导致 arr 失效, 这个时候访问 arr->size
-   是未定义行为, 可能会崩溃. 所以在 C++ 端, 对象的引用必须在 lock() 和 unlock() 之间, 或者在 GC 之后重新获取.
+       arr->add(POP());   // 内部可能 GC, arr 可能已移动
+       PUSH(arr->size);   // 未定义行为
+ - Object 子类的成员函数(包括构造函数): 凡是体内可能触发 GC 且之后仍会使用 this 的,
+   必须在第一次可能 GC 之前加锁, 并持有到对 this 的最后一次使用.
  - offset 为 0 的地方是 eden 区, 所以 forward 字段可以用 0 来表示无效.
  - 针对 64 位架构设计, 32 位能否正常运行存疑.
 */
@@ -193,6 +192,7 @@ public:
         obj->gcWord.forward = 0;
         if (!locked) {
             Value v(obj);
+            assert(newborn == nullptr);
             newborn = &v;
             new (obj) T(std::forward<Args>(args)...); // GC may be triggered when returning here
             newborn = nullptr;

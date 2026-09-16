@@ -56,8 +56,11 @@ public:
     /**
      * @brief 函数调用栈帧。
      *
-     * 局部变量存放在 [0..localCount-1] 槽位，操作数栈存放在
-     * [localCount..localCount+maxStackSize-1] 槽位。
+     * 字节码帧：局部变量在 [0..localCount-1]，操作数栈在 [localCount..localCount+maxStackSize-1]；
+     * 调用时一次性分配好整个栈帧。
+     *
+     * 原生帧：routine 为 nullptr；localCount 个实参在 base[0..argc-1]
+     * （方法调用时 base[0] 为 this）。不预留操作数栈，通过 push() 可按需扩展栈顶。
      */
     struct StackFrame{
         Routine* routine; ///< 当前帧对应的函数
@@ -142,12 +145,16 @@ public:
     //      对于 Zeta 全局变量, 可以安全地缓存其索引(index), 然后通过 getGlobal 和 setGlobal 来访问.
     //      对于 Zeta 栈上的变量, 可以缓存指向它的 Value 指针(Value*), 需要注意变量的生命周期, 避免变成悬空指针.
     //      对于 Zeta 临时根, 指向它的 Value* 也可以在其生命周期内安全地缓存.
-    // - 原生函数接受两个参数, VM 指针和参数个数, 实际参数从当前帧上获取, 返回值通过 push() 压入当前帧.
-    //      原生函数没有自己独立的栈帧, 而是寄生在调用者栈帧上, 必须将全部 argc 个参数弹出, 并压入一个返回值.
-    //      函数体内需要进行参数个数校验, 值得注意的是, 虽然目前 Zeta 语法设计上不支持函数重载, 但是原生函数可以通过参数个数分发不同实现, 以达到重载效果.
-    // - 如果方法是原生函数, argc = 方法形参个数 + 1, 换句话说, 不管是普通函数还是方法, 原生函数接受的 argc 都是实际传参个数.
-    //      原生函数方法调用时, 实例对象是作为最后一个参数传入的, 也就是说栈顶是实例对象, 这与普通方法传参约定不同, 需要格外注意.
-    //      比如: inst.say(x, y, z) 调用时, 如果 say 是原生函数, 那么 argc = 4, 从栈顶到底依次是 inst, z, y, x;
+    // - 原生函数与字节码函数共用调用栈帧模型: 
+    //      原生函数拥有独立的栈帧空间. 调用时, VM 会分配原生帧, 并将实参存入局部变量区, 然后调用原生函数. 原生函数返回后, VM 会将栈顶返回值取出后销毁该帧.
+    //      原生帧也分为局部变量区和操作数栈区: 
+    //          局部变量区存放的是实参, 大小固定为参数个数, 通过 getLocal/setLocal 访问.
+    //          操作数栈区初始大小为 0, 动态扩展, 通过 push/pop/peek 访问.
+    //      函数返回前必须恰好压入一个返回值.
+    //      函数体内需要进行参数个数校验; 虽然 Zeta 语法不支持重载, 原生函数仍可通过参数个数分发不同实现.
+    // - 方法是原生函数时, argc = 实际传参个数 (含 this), 即 形参个数 + 1.
+    //      比如: inst.say(x, y, z) → argc = 4; getLocal(0) 为 inst, getLocal(1..3) 依次为 x, y, z;
+    //      若用 pop(), 则依次得到 inst, z, y, x.
     // - C++ 调用 Zeta 方法, 参数准备时, 先依次压入参数, 最后压入实例对象, 然后调用 callMethod.
 
     /**
@@ -195,8 +202,19 @@ public:
      */
     Value* peek(int offset);
 
+    /**
+     * @brief 读取当前帧局部变量槽 index 的值。
+     * @param index 局部变量下标（原生帧中即第 index 个实参）
+     * @note 不做越界检查，越界为未定义行为。
+     */
     Value getLocal(uint32_t index);
 
+    /**
+     * @brief 写入当前帧局部变量槽 index。
+     * @param index 局部变量下标
+     * @param val 要写入的值
+     * @note 不做越界检查，越界为未定义行为。
+     */
     void setLocal(uint32_t index, Value val);
 
     /**

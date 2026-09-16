@@ -12,6 +12,8 @@ const Value Value::Error = Value(Value::Type::Error, 0);
 
 // NOTE: Object 的这些子类的成员函数(包括构造函数), 凡是内部可能触发 GC 的, 都必须在第一行加上 GCLockGuard lock(gc); 避免 this 失效.
 
+// TODO: 公开 API 需注明是否可能触发 GC.
+
 // Array
 Array::Array(GC* gc) : Object(Object::Type::Array), size(0), capacity(8), gc(gc){
     GCLockGuard lock(gc);

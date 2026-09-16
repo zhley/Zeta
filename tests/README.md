@@ -172,4 +172,3 @@ bash tests/cpp/run_cpp.sh      # 运行全部 C++ 互操作测试
 - `cpp_interop_test.cpp`: 测试宿主程序, 内含极简断言计数与各用例。
 - `native_function.zt` / `native_class.zt`: Zeta 调用 C++ 注册的原生函数/类。
 - `zeta_function.zt` / `zeta_class.zt` / `zeta_global.zt`: 定义 Zeta 函数/类/全局, 供 C++ 宿主直接调用/读写。
-- 这些 `*.zt` 由宿主程序驱动, 不单独运行 (未被 `test.sh` 的 glob 枚举)。

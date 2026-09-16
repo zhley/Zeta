@@ -2,7 +2,8 @@
 //
 // Links against zeta_core and exercises the public C++-host interop surface
 // declared in src/vm/vm.h: registerFunction / registerClass / call / callMethod /
-// wrapPointer / unwrapPointer / internString / temp roots / stack ops / globals.
+// getLocal / setLocal / wrapPointer / unwrapPointer / internString / temp roots /
+// stack ops / globals.
 //
 // Zeta-side scripts live next to this file as *.zt and are compiled via
 // compileModule; their path is resolved through the CPP_TEST_DIR macro set by
@@ -63,33 +64,45 @@ void callMain(Zeta::VM& vm, const Zeta::Module& module) {
 }
 
 // ---- native functions registered into the VM by the tests ----
+//
+// Args may be read with pop() (last-pushed first) or getLocal(i)
+// (base[0] is the first pushed arg; for methods base[0] is `this`).
 
 // add(a, b) -> a + b
 void nativeAdd(Zeta::VM* vm, int argc) {
-    Zeta::Value b = vm->pop();
-    Zeta::Value a = vm->pop();
+    Zeta::Value a = vm->getLocal(0);
+    Zeta::Value b = vm->getLocal(1);
     vm->push(Zeta::Value(a.intValue + b.intValue));
 }
 
 // expect_eq(a, b): asserts strict value equality (test data is Int only).
 void nativeExpectEq(Zeta::VM* vm, int argc) {
-    Zeta::Value b = vm->pop();
-    Zeta::Value a = vm->pop();
+    Zeta::Value a = vm->getLocal(0);
+    Zeta::Value b = vm->getLocal(1);
     check(a == b, "expect_eq()");
     vm->push(Zeta::Value());
 }
 
-// get_x(): returns the instance's "x" field.
+// get_x(): returns the instance's "x" field. this is local 0.
 void nativeGetX(Zeta::VM* vm, int argc) {
-    check(argc == 1, "native method argc == 形参个数 + 1");
-    Zeta::Value inst = vm->pop(); // instance is the topmost argument
+    check(argc == 1, "native method argc == 实际传参个数 (含 this)");
+    Zeta::Value inst = vm->getLocal(0);
     vm->push(inst[vm->internString("x")]);
 }
 
 // get_y(): returns the instance's "y" field.
 void nativeGetY(Zeta::VM* vm, int argc) {
-    Zeta::Value inst = vm->pop();
+    Zeta::Value inst = vm->getLocal(0);
     vm->push(inst[vm->internString("y")]);
+}
+
+// set_x(v): writes the instance's "x" field via setLocal-style access to this.
+void nativeSetX(Zeta::VM* vm, int argc) {
+    check(argc == 2, "set_x argc == 2 (this + v)");
+    Zeta::Value inst = vm->getLocal(0);
+    Zeta::Value v = vm->getLocal(1);
+    inst[vm->internString("x")] = v;
+    vm->push(Zeta::Value());
 }
 
 // ---- test cases ----
@@ -202,7 +215,7 @@ void testRegisterClassCppCall() {
 
     int idx = vm.registerClass("NativePoint",
         {{"x", Zeta::Value(int64_t(1))}, {"y", Zeta::Value(int64_t(2))}},
-        {{"get_x", nativeGetX}, {"get_y", nativeGetY}});
+        {{"get_x", nativeGetX}, {"get_y", nativeGetY}, {"set_x", nativeSetX}});
     check(idx >= 0, "registerClass 返回有效索引");
 
     vm.push(vm.getGlobal(idx));
@@ -213,9 +226,53 @@ void testRegisterClassCppCall() {
 
     vm.push(vm.getGlobal(idx));
     vm.newInstance(0);
+    Zeta::Value inst = vm.pop();
+    vm.push(Zeta::Value(int64_t(99)));
+    vm.push(inst);
+    vm.callMethod("set_x", 1);
+    vm.pop(); // discard null return
+    vm.push(inst);
+    vm.callMethod("get_x", 0);
+    Zeta::Value x2 = vm.pop();
+    check(x2.type == Zeta::Value::Type::Int && x2.intValue == 99, "set_x 后 get_x == 99");
+
+    vm.push(vm.getGlobal(idx));
+    vm.newInstance(0);
     vm.callMethod("get_y", 0);
     Zeta::Value y = vm.pop();
     check(y.type == Zeta::Value::Type::Int && y.intValue == 2, "callMethod get_y == 2");
+}
+
+// swap_locals(a, b): reads both args via getLocal, writes them back with setLocal, returns a-b.
+void nativeSwapLocals(Zeta::VM* vm, int argc) {
+    check(argc == 2, "swap_locals argc == 2");
+    Zeta::Value a = vm->getLocal(0);
+    Zeta::Value b = vm->getLocal(1);
+    vm->setLocal(0, b);
+    vm->setLocal(1, a);
+    vm->push(Zeta::Value(a.intValue - b.intValue));
+}
+
+void testGetSetLocal() {
+    beginTest("getLocal / setLocal");
+    Zeta::VM vm;
+    vm.setErrorHandler(silentErrorHandler);
+
+    int idx = vm.registerFunction("swap_locals", nativeSwapLocals);
+    check(idx >= 0, "registerFunction swap_locals");
+
+    vm.push(Zeta::Value(int64_t(3)));
+    vm.push(Zeta::Value(int64_t(10)));
+    vm.push(vm.getGlobal(idx));
+    vm.call(2);
+    Zeta::Value result = vm.pop();
+    check(result.type == Zeta::Value::Type::Int && result.intValue == -7,
+          "swap_locals(3,10) 返回 a-b == -7");
+
+    // After the call the native frame is gone; caller frame is intact.
+    vm.push(Zeta::Value(int64_t(1)));
+    check(vm.peek(-1)->intValue == 1, "原生帧弹出后调用方栈帧仍可用");
+    vm.pop();
 }
 
 void testWrapUnwrapPointer() {
@@ -282,7 +339,7 @@ void testRegisterClassZetaCall() {
     vm.registerFunction("expect_eq", nativeExpectEq);
     vm.registerClass("NativePoint",
         {{"x", Zeta::Value(int64_t(1))}, {"y", Zeta::Value(int64_t(2))}},
-        {{"get_x", nativeGetX}, {"get_y", nativeGetY}});
+        {{"get_x", nativeGetX}, {"get_y", nativeGetY}, {"set_x", nativeSetX}});
 
     auto module = loadScript(vm, "native_class.zt");
     if (!module) return;
@@ -363,6 +420,7 @@ int main() {
     testNewObjects();
     testRegisterFunctionCppCall();
     testRegisterClassCppCall();
+    testGetSetLocal();
     testWrapUnwrapPointer();
     testTempRoot();
     testRegisterFunctionZetaCall();
