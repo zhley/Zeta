@@ -200,51 +200,62 @@ void VM::callMethod(const std::string& methodName, int argc) {
 
 void VM::callMethod(String* methodName, int argc) {
     Value objVal = pop();
-    if(objVal.type != Value::Type::Object || objVal.ptrValue->type != Object::Type::Instance) {
-        reportError("callMethod() expects an instance", Error::Type::RuntimeError);
-        push(Value::Error);
-        return;
-    }
-    Instance* inst = static_cast<Instance*>(objVal.ptrValue);
-    Class* cls = inst->cls;
-    while(cls) {
-        auto methodValOpt = cls->methods->get(methodName);
-        if(methodValOpt.has_value()) {
-            Value methodVal = *methodValOpt;
-            if(methodVal.type == Value::Type::NativeFunc) {
-                pushNativeFrame(argc + 1);
-                curFrame->base[0] = objVal;
-                StackFrame* prevFrame = curFrame - 1;
-                std::memcpy(curFrame->base + 1, prevFrame->top - argc, argc * sizeof(Value));
-                prevFrame->top -= argc;
-                methodVal.nativeFuncValue(this, argc + 1);
-                Value retVal = pop();
-                popFrame();
-                push(retVal);
-            } else if(methodVal.type == Value::Type::Function) {
-                if (argc != methodVal.funcValue->arity - 1) {
-                    reportError(std::format("Method expects {} arguments, but {} were provided", methodVal.funcValue->arity - 1, argc), Error::Type::RuntimeError);
-                    curFrame->top -= argc;
+    if(objVal.type == Value::Type::Object && objVal.ptrValue->type == Object::Type::Instance) {
+        Instance* inst = static_cast<Instance*>(objVal.ptrValue);
+        Class* cls = inst->cls;
+        while(cls) {
+            auto methodValOpt = cls->methods->get(methodName);
+            if(methodValOpt.has_value()) {
+                Value methodVal = *methodValOpt;
+                if(methodVal.type == Value::Type::NativeFunc) {
+                    pushNativeFrame(argc + 1);
+                    curFrame->base[0] = objVal;
+                    StackFrame* prevFrame = curFrame - 1;
+                    std::memcpy(curFrame->base + 1, prevFrame->top - argc, argc * sizeof(Value));
+                    prevFrame->top -= argc;
+                    methodVal.nativeFuncValue(this, argc + 1);
+                    Value retVal = pop();
+                    popFrame();
+                    push(retVal);
+                } else if(methodVal.type == Value::Type::Function) {
+                    if (argc != methodVal.funcValue->arity - 1) {
+                        reportError(std::format("Method expects {} arguments, but {} were provided", methodVal.funcValue->arity - 1, argc), Error::Type::RuntimeError);
+                        curFrame->top -= argc;
+                        push(Value::Error);
+                        return;
+                    }
+                    pushFrame(methodVal.funcValue);
+                    curFrame->base[0] = objVal;
+                    StackFrame* prevFrame = curFrame - 1;
+                    std::memcpy(curFrame->base + 1, prevFrame->top - argc, argc * sizeof(Value));
+                    prevFrame->top -= argc;
+                    execute();
+                } else {
+                    reportError(std::format("CallMethod: method \"{}\" is not a function", methodName->data), Error::Type::RuntimeError);
                     push(Value::Error);
                     return;
                 }
-                pushFrame(methodVal.funcValue);
-                curFrame->base[0] = objVal;
-                StackFrame* prevFrame = curFrame - 1;
-                std::memcpy(curFrame->base + 1, prevFrame->top - argc, argc * sizeof(Value));
-                prevFrame->top -= argc;
-                execute();
-            } else {
-                reportError(std::format("CallMethod: method \"{}\" is not a function", methodName->data), Error::Type::RuntimeError);
-                push(Value::Error);
                 return;
             }
-            return;
+            cls = cls->base;
         }
-        cls = cls->base;
+        reportError(std::format("CallMethod: method \"{}\" not found in class \"{}\" or its ancestors", methodName->data, inst->cls->name->data), Error::Type::RuntimeError);
+        push(Value::Error);
+    } else if(objVal.type == Value::Type::Object && objVal.ptrValue->type == Object::Type::UserData) {
+        UserData* ud = static_cast<UserData*>(objVal.ptrValue);
+        pushNativeFrame(argc + 1);
+        curFrame->base[0] = objVal;
+        StackFrame* prevFrame = curFrame - 1;
+        std::memcpy(curFrame->base + 1, prevFrame->top - argc, argc * sizeof(Value));
+        prevFrame->top -= argc;
+        ud->callMethod(methodName, argc + 1);
+        Value retVal = pop();
+        popFrame();
+        push(retVal);
+    } else {
+        reportError("callMethod() expects an instance or userdata", Error::Type::RuntimeError);
+        push(Value::Error);
     }
-    reportError(std::format("CallMethod: method \"{}\" not found in class \"{}\" or its ancestors", methodName->data, inst->cls->name->data), Error::Type::RuntimeError);
-    push(Value::Error);
 }
 
 void VM::newInstance(int argc) {
@@ -325,6 +336,21 @@ void* VM::unwrapPointer() {
         return nullptr;
     }
     return (void*)(ptrValOpt.value().intValue);
+}
+
+void VM::newUserData(void* data, NativeType* type) {
+    if(type == nullptr) {
+        reportError("newUserData() requires a non-null NativeType", Error::Type::VMError);
+        push(Value::Error);
+        return;
+    }
+    if(data == nullptr) {
+        reportError("newUserData() requires a non-null data pointer", Error::Type::VMError);
+        push(Value::Error);
+        return;
+    }
+    UserData* ud = gc->allocate<UserData>(data, type);
+    push(Value(ud));
 }
 
 Value* VM::pushTempRoot() {
@@ -1282,44 +1308,61 @@ void VM::execute() {
             }
             case Opcode::GetField: {
                 Value objVal = POP();
-                if(objVal.type != Value::Type::Object || objVal.ptrValue->type != Object::Type::Instance) {
-                    reportError("GetField: object must be a class instance", Error::Type::RuntimeError);
+                if(objVal.type != Value::Type::Object) {
+                    reportError("GetField: object must be a class instance or userdata", Error::Type::RuntimeError);
                     push(Value::Error);
                     return;
                 }
-                Instance* instance = static_cast<Instance*>(objVal.ptrValue);
                 uint32_t nameIndex;
                 READ_UINT32(nameIndex);
                 assert(nameIndex < curFrame->routine->constants.size());
                 Value nameVal = curFrame->routine->constants[nameIndex];
                 assert(nameVal.type == Value::Type::String);
                 String* fieldName = nameVal.strValue;
-                auto fieldValOpt = instance->fields->get(fieldName);
-                if(!fieldValOpt.has_value()) {
-                    reportError(std::format("GetField: field \"{}\" not found in instance of class \"{}\"", fieldName->data, instance->cls->name->data), Error::Type::RuntimeError);
+                if(objVal.ptrValue->type == Object::Type::Instance) {
+                    Instance* instance = static_cast<Instance*>(objVal.ptrValue);
+                    auto fieldValOpt = instance->fields->get(fieldName);
+                    if(!fieldValOpt.has_value()) {
+                        reportError(std::format("GetField: field \"{}\" not found in instance of class \"{}\"", fieldName->data, instance->cls->name->data), Error::Type::RuntimeError);
+                        push(Value::Error);
+                        return;
+                    }
+                    PUSH(fieldValOpt.value());
+                } else if(objVal.ptrValue->type == Object::Type::UserData) {
+                    UserData* ud = static_cast<UserData*>(objVal.ptrValue);
+                    ud->getField(fieldName);
+                } else {
+                    reportError("GetField: object must be a class instance or userdata", Error::Type::RuntimeError);
                     push(Value::Error);
                     return;
                 }
-                PUSH(fieldValOpt.value());
                 break;
             }
             case Opcode::SetField: {
                 Value fieldVal = POP();
                 Value objVal = POP();
-                if(objVal.type != Value::Type::Object || objVal.ptrValue->type != Object::Type::Instance) {
-                    reportError("SetField: object must be a class instance", Error::Type::RuntimeError);
+                if(objVal.type != Value::Type::Object) {
+                    reportError("SetField: object must be a class instance or userdata", Error::Type::RuntimeError);
                     push(Value::Error);
                     return;
                 }
-                Instance* instance = static_cast<Instance*>(objVal.ptrValue);
                 uint32_t nameIndex;
                 READ_UINT32(nameIndex);
                 assert(nameIndex < curFrame->routine->constants.size());
                 Value nameVal = curFrame->routine->constants[nameIndex];
                 assert(nameVal.type == Value::Type::String);
                 String* fieldName = nameVal.strValue;
-                GCLockGuard lock(gc.get());
-                instance->fields->set(fieldName, fieldVal);
+                if(objVal.ptrValue->type == Object::Type::Instance) {
+                    Instance* instance = static_cast<Instance*>(objVal.ptrValue);
+                    instance->fields->set(fieldName, fieldVal);
+                } else if(objVal.ptrValue->type == Object::Type::UserData) {
+                    UserData* ud = static_cast<UserData*>(objVal.ptrValue);
+                    ud->setField(fieldName, fieldVal);
+                } else {
+                    reportError("SetField: object must be a class instance or userdata", Error::Type::RuntimeError);
+                    push(Value::Error);
+                    return;
+                }
                 break;
             }
             case Opcode::CallMethod: {
@@ -1441,8 +1484,21 @@ void VM::execute() {
                             CALL_FUNC(methodVal, argCount);
                             break;
                         }
+                        case Object::Type::UserData: {
+                            UserData* ud = static_cast<UserData*>(obj);
+                            pushNativeFrame(argCount + 1);
+                            curFrame->base[0] = objVal;
+                            StackFrame* prevFrame = curFrame - 1;
+                            std::memcpy(curFrame->base + 1, prevFrame->top - argCount, argCount * sizeof(Value));
+                            prevFrame->top -= argCount;
+                            ud->callMethod(methodName, argCount + 1);
+                            Value retVal = pop();
+                            popFrame();
+                            push(retVal);
+                            break;
+                        }
                         default: {
-                            reportError("CallMethod: object must be an array, map, string or class instance", Error::Type::RuntimeError);
+                            reportError("CallMethod: object must be an array, map, string, class instance or userdata", Error::Type::RuntimeError);
                             push(Value::Error);
                             return;
                         }
@@ -1688,6 +1744,7 @@ void VM::execute() {
                                         std::cout << (const char*)strObj->data->getData();
                                         break;
                                     }
+                                    case Object::Type::UserData: std::cout << "<userdata>"; break;
                                     default: assert(false); break;
                                 }
                                 break;
@@ -1719,6 +1776,7 @@ void VM::execute() {
                                         std::cout << (const char*)strObj->data->getData();
                                         break;
                                     }
+                                    case Object::Type::UserData: std::cout << "<userdata>"; break;
                                     default: assert(false); break;
                                 }
                                 break;
@@ -1778,7 +1836,8 @@ void VM::execute() {
                                     case Object::Type::Class: PUSH(Value(STRINGS.Class)); break;
                                     case Object::Type::Instance: PUSH(Value(STRINGS.Instance)); break;
                                     case Object::Type::Iterator: PUSH(Value(STRINGS.Iterator)); break;
-                                    case Object::Type::StrObj: PUSH(Value(STRINGS.StrObj)); break; 
+                                    case Object::Type::StrObj: PUSH(Value(STRINGS.StrObj)); break;
+                                    case Object::Type::UserData: PUSH(Value(STRINGS.UserData_)); break;
                                     default: assert(false); break;
                                 }
                                 break;

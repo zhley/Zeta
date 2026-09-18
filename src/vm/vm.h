@@ -310,6 +310,14 @@ public:
     void* unwrapPointer();
 
     /**
+     * @brief 创建 UserData 包装对象并压入栈顶。
+     * @param data 宿主拥有的原生指针
+     * @param type 宿主定义的 NativeType，生命周期必须长于所有引用它的 UserData 对象
+     * @note data 和 type 都不能为空。
+     */
+    void newUserData(void* data, NativeType* type);
+
+    /**
      * @brief 弹出栈顶值并将其作为临时 GC 根保存，防止其被垃圾回收。
      * @return 指向该临时根所存值的指针
      */
@@ -429,6 +437,7 @@ public:
         String* Instance; ///< 内置类型名 "Instance"
         String* Iterator; ///< 内置类型名 "Iterator"
         String* StrObj;   ///< 内置类型名 "StrObj"
+        String* UserData_; ///< 内置类型名 "UserData"
         String* true_;    ///< 内置字面量 "true"
         String* false_;   ///< 内置字面量 "false"
         String* null;     ///< 内置字面量 "null"
@@ -458,6 +467,7 @@ public:
         internString("Instance"),
         internString("Iterator"),
         internString("StrObj"),
+        internString("UserData"),
         internString("true"),
         internString("false"),
         internString("null"),

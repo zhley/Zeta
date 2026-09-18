@@ -105,6 +105,7 @@ struct Value {
     bool isMap() const;
     bool isClass() const;
     bool isInstance() const;
+    bool isUserData() const;
 
     template<typename T>
     std::optional<T> as() const;
@@ -427,18 +428,49 @@ private:
     StrObj(GC* gc, std::string_view str1, std::string_view str2);
 };
 
+// a NativeType instance represents a type of host-owned data that can be wrapped in a UserData object.
 class NativeType {
 public:
+    explicit NativeType(VM* vm) : vm(vm) {
+        assert(vm != nullptr);
+    }
     virtual ~NativeType() = default;
-    virtual Value getField(void* instance, String* fieldName) = 0;
+
+    // Read field: push the result onto the current frame operand stack.
+    virtual void getField(void* instance, String* fieldName) = 0;
+
+    // Write field: value is passed by parameter.
     virtual void setField(void* instance, String* fieldName, const Value& value) = 0;
-    virtual Value callMethod(void* instance, String* methodName, const std::vector<Value>& args) = 0;
+
+    // Invoke method: VM has already set up an independent native frame whose
+    // locals are [this(UserData), arg0, ...]; argc includes `this`. 
+    // Implementation must push exactly one return value.
+    virtual void callMethod(void* instance, String* methodName, int argc) = 0;
+
+protected:
+    VM* vm;
 };
 
+// UserData is a wrapper for host-owned data. UserData instance itself is managed by GC, but the host is responsible for managing the memory of `data`.
 class UserData : public Object {
+public:
+    friend class GC;
+
+    void getField(String* fieldName) { type->getField(data, fieldName); }
+    void setField(String* fieldName, const Value& value) { type->setField(data, fieldName, value); }
+    void callMethod(String* methodName, int argc) { type->callMethod(data, methodName, argc); }
+    
+    void* getData() const { return data; }
+    NativeType* getNativeType() const { return type; }
+
 private:
     void* data;
     NativeType* type;
+
+    UserData(void* data, NativeType* type) : Object(Object::Type::UserData), data(data), type(type) {
+        assert(type != nullptr);
+        assert(data != nullptr);
+    }
 };
 
 inline int Object::getSize() const {
@@ -450,6 +482,7 @@ inline int Object::getSize() const {
         case Object::Type::Instance:    return sizeof(Instance);
         case Object::Type::Iterator:    return sizeof(Iterator);
         case Object::Type::StrObj:      return sizeof(StrObj);
+        case Object::Type::UserData:    return sizeof(UserData);
     }
     return 0;
 }
@@ -522,6 +555,7 @@ inline void Object::trace(F&& f) {
             f((Object**)(&(strObj->data)));
             break;
         }
+        case Object::Type::UserData: break;
     }
 }
 
@@ -543,6 +577,7 @@ inline Value::operator bool() const  {
                 case Object::Type::Instance: return true;
                 case Object::Type::Iterator: return true;
                 case Object::Type::StrObj: return static_cast<StrObj*>(ptrValue)->length > 0;
+                case Object::Type::UserData: return true;
             }
         }
         case Type::Error: return true;
@@ -635,6 +670,10 @@ inline bool Value::isInstance() const {
     return type == Type::Object && ptrValue->type == Object::Type::Instance;
 }
 
+inline bool Value::isUserData() const {
+    return type == Type::Object && ptrValue->type == Object::Type::UserData;
+}
+
 // NOTE: 指针类型和 string_view 需要注意生命周期和潜在的 GC 时机, 避免悬空. 不要长期保存.
 template<typename T>
 inline std::optional<T> Value::as() const {
@@ -678,6 +717,8 @@ inline std::optional<T> Value::as() const {
         return (type == Value::Type::Object && ptrValue->type == Object::Type::Iterator) ? std::make_optional(static_cast<Iterator*>(ptrValue)) : std::nullopt;
     } else if constexpr (std::is_same_v<T, StrObj*>) {
         return (type == Value::Type::Object && ptrValue->type == Object::Type::StrObj) ? std::make_optional(static_cast<StrObj*>(ptrValue)) : std::nullopt;
+    } else if constexpr (std::is_same_v<T, UserData*>) {
+        return (type == Value::Type::Object && ptrValue->type == Object::Type::UserData) ? std::make_optional(static_cast<UserData*>(ptrValue)) : std::nullopt;
     } else if constexpr (std::is_same_v<T, std::string_view>) {
         if (type == Value::Type::String) {
             return std::make_optional(std::string_view(strValue->data, strValue->length));
