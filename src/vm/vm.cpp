@@ -704,6 +704,21 @@ void VM::execute() {
     } while(0)
 #define CALL_METHOD(funcVal, objVal, argc) CALL_METHOD_IMPL_(funcVal, objVal, argc, /* no tail */)
 #define CALL_METHOD_EXE(funcVal, objVal, argc) CALL_METHOD_IMPL_(funcVal, objVal, argc, execute())
+#define CALL_USERDATA_METHOD(udVal, methodName, argc) \
+    do { \
+        UserData* ud = static_cast<UserData*>((udVal).ptrValue); \
+        pushNativeFrame((argc) + 1); \
+        curFrame->base[0] = (udVal); \
+        StackFrame* prevFrame = curFrame - 1; \
+        if ((argc) > 0) { \
+            std::memcpy(curFrame->base + 1, prevFrame->top - (argc), (argc) * sizeof(Value)); \
+            prevFrame->top -= (argc); \
+        } \
+        ud->callMethod((methodName), (argc) + 1); \
+        Value retVal = POP(); \
+        popFrame(); \
+        PUSH(retVal); \
+    } while(0)
 
     while(true){
         uint8_t opcode;
@@ -1004,6 +1019,17 @@ void VM::execute() {
                                 }
                                 PUSH(ret);
                             }
+                        } else if(aObj->type == Object::Type::UserData) {
+                            PUSH(b);
+                            CALL_USERDATA_METHOD(a, STRINGS._equals, 1);
+                            Value ret = POP();
+                            if(ret.type == Value::Type::Bool) {
+                                PUSH(ret);
+                            } else {
+                                reportError("Eq: UserData _equals must return a boolean value", Error::Type::RuntimeError);
+                                push(Value::Error);
+                                return;
+                            }
                         } else if (aObj->type == Object::Type::StrObj) {
                             if(b.type == Value::Type::String) {
                                 PUSH(Value(static_cast<StrObj*>(aObj)->length == b.strValue->length && std::memcmp(static_cast<StrObj*>(aObj)->data->getData(), b.strValue->data, b.strValue->length) == 0));
@@ -1089,6 +1115,17 @@ void VM::execute() {
                                     return;
                                 }
                                 PUSH(Value(!ret.boolValue));
+                            }
+                        } else if(aObj->type == Object::Type::UserData) {
+                            PUSH(b);
+                            CALL_USERDATA_METHOD(a, STRINGS._equals, 1);
+                            Value ret = POP();
+                            if(ret.type == Value::Type::Bool) {
+                                PUSH(Value(!ret.boolValue));
+                            } else {
+                                reportError("Neq: UserData _equals must return a boolean value", Error::Type::RuntimeError);
+                                push(Value::Error);
+                                return;
                             }
                         } else if (aObj->type == Object::Type::StrObj) {
                             if(b.type == Value::Type::String) {
@@ -1640,8 +1677,10 @@ void VM::execute() {
                             }
                             Value iterMethodVal = *iterMethodOpt;
                             CALL_METHOD(iterMethodVal, objVal, 0);
+                        } else if (objVal.ptrValue->type == Object::Type::UserData) {
+                            CALL_USERDATA_METHOD(objVal, STRINGS._iter, 0);
                         } else {
-                            reportError("GetIter: object must be an array, map or class instance", Error::Type::RuntimeError);
+                            reportError("GetIter: object must be an array, map, class instance or userdata", Error::Type::RuntimeError);
                             push(Value::Error);
                             return;
                         }
@@ -1668,8 +1707,10 @@ void VM::execute() {
                             }
                             Value nextMethodVal = *nextMethodOpt;
                             CALL_METHOD(nextMethodVal, iterVal, 0);
+                        } else if (iterVal.ptrValue->type == Object::Type::UserData) {
+                            CALL_USERDATA_METHOD(iterVal, STRINGS._next, 0);
                         } else {
-                            reportError("IterNext: object must be an iterator or class instance", Error::Type::RuntimeError);
+                            reportError("IterNext: object must be an iterator, class instance or userdata", Error::Type::RuntimeError);
                             push(Value::Error);
                             return;
                         }

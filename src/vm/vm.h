@@ -262,7 +262,7 @@ public:
     void callMethod(const std::string& methodName, int argc);
 
     /**
-     * @brief 调用当前帧栈顶实例对象的方法（驻留字符串版本）。
+     * @brief 调用当前帧栈顶对象的方法（驻留字符串版本）。
      * @param methodName 已驻留的方法名字符串
      * @param argc 实参个数
      */

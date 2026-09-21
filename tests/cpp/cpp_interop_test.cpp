@@ -110,11 +110,13 @@ void nativeSetX(Zeta::VM* vm, int argc) {
 struct HostPoint {
     int64_t x = 1;
     int64_t y = 2;
+    int64_t iterPos = 0; // protocol iterator cursor for _iter/_next
 };
 
 // NativeType bound to a VM; field get pushes to the operand stack, field set
 // receives the value as a parameter, methods run on a native frame
-// [this(UserData), args...] with argc including `this`.
+// [this(UserData), args...]. Protocol names _equals/_iter/_next are invoked
+// by the VM for == / for-in.
 class HostPointType : public Zeta::NativeType {
 public:
     explicit HostPointType(Zeta::VM* vm) : Zeta::NativeType(vm) {
@@ -124,6 +126,9 @@ public:
         nameGetY = vm->internString("get_y");
         nameSetX = vm->internString("set_x");
         nameSum = vm->internString("sum");
+        nameEquals = vm->internString("_equals");
+        nameIter = vm->internString("_iter");
+        nameNext = vm->internString("_next");
     }
 
     void getField(void* instance, Zeta::String* fieldName) override {
@@ -189,6 +194,48 @@ public:
                 return;
             }
             vm->push(Zeta::Value(p->x + p->y));
+        } else if (methodName == nameEquals) {
+            // _equals(other) -> Bool; used by == / !=
+            if (argc != 2) {
+                vm->reportError("HostPoint._equals: argc must be 2 (this + other)");
+                vm->push(Zeta::Value::Error);
+                return;
+            }
+            Zeta::Value other = vm->getLocal(1);
+            bool eq = false;
+            if (other.isUserData()) {
+                auto* oud = static_cast<Zeta::UserData*>(other.ptrValue);
+                if (oud->getNativeType() == this) {
+                    auto* op = static_cast<HostPoint*>(oud->getData());
+                    eq = (p->x == op->x && p->y == op->y);
+                }
+            }
+            vm->push(Zeta::Value(eq));
+        } else if (methodName == nameIter) {
+            // _iter() -> this (iterates x then y)
+            if (argc != 1) {
+                vm->reportError("HostPoint._iter: argc must be 1 (this)");
+                vm->push(Zeta::Value::Error);
+                return;
+            }
+            p->iterPos = 0;
+            vm->push(vm->getLocal(0));
+        } else if (methodName == nameNext) {
+            // _next() -> Int or Error when exhausted
+            if (argc != 1) {
+                vm->reportError("HostPoint._next: argc must be 1 (this)");
+                vm->push(Zeta::Value::Error);
+                return;
+            }
+            if (p->iterPos == 0) {
+                p->iterPos = 1;
+                vm->push(Zeta::Value(p->x));
+            } else if (p->iterPos == 1) {
+                p->iterPos = 2;
+                vm->push(Zeta::Value(p->y));
+            } else {
+                vm->push(Zeta::Value::Error);
+            }
         } else {
             vm->reportError("HostPoint: unknown method");
             vm->push(Zeta::Value::Error);
@@ -202,6 +249,9 @@ private:
     Zeta::String* nameGetY = nullptr;
     Zeta::String* nameSetX = nullptr;
     Zeta::String* nameSum = nullptr;
+    Zeta::String* nameEquals = nullptr;
+    Zeta::String* nameIter = nullptr;
+    Zeta::String* nameNext = nullptr;
 };
 
 // Shared with make_point() so Zeta scripts can allocate UserData instances.

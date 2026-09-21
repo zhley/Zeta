@@ -445,6 +445,8 @@ public:
     // Invoke method: VM has already set up an independent native frame whose
     // locals are [this(UserData), arg0, ...]; argc includes `this`. 
     // Implementation must push exactly one return value.
+    // Special protocol methods (_equals, _iter, _next) will be invoked by VM when the corresponding operator is used on the UserData object.
+    // _init is treated as a normal method.
     virtual void callMethod(void* instance, String* methodName, int argc) = 0;
 
 protected:

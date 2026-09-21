@@ -1,6 +1,7 @@
 // Driven by cpp_interop_test; not run standalone.
 // Zeta uses a C++-registered factory `make_point()` to obtain a UserData
-// wrapping a host-owned HostPoint, then exercises field get/set and methods.
+// wrapping a host-owned HostPoint, then exercises fields, methods, and
+// protocol methods (_equals / _iter / _next).
 fn main() {
     var p = make_point();
     expect_eq(type(p) == "UserData", true);
@@ -14,5 +15,31 @@ fn main() {
     p.set_x(20);
     expect_eq(p.x, 20);
     expect_eq(p.sum(), 22);
+
+    // _equals: two HostPoints with the same fields compare equal
+    var q = make_point();
+    expect_eq(p == q, false);
+    q.x = 20;
+    expect_eq(p == q, true);
+    expect_eq(p != q, false);
+    var r = make_point();
+    expect_eq(p == r, false);
+    expect_eq(p != r, true);
+
+    // use fields to re-init r for the iteration check below
+    r.x = 7;
+    r.y = 8;
+    expect_eq(r.sum(), 15);
+
+    // _iter / _next: for-in over userdata yields x then y
+    var sum = 0;
+    var count = 0;
+    for (i : r) {
+        sum = sum + i;
+        count = count + 1;
+    }
+    expect_eq(sum, 15);
+    expect_eq(count, 2);
+
     return 0;
 }
