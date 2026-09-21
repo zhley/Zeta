@@ -297,19 +297,6 @@ public:
     void newStrObj(std::string_view str);
 
     /**
-     * @brief 将 C++ 原始指针包装成一个实例对象（带 _cpp_ptr 字段），并压入栈顶。
-     * @param ptr C++ 原始指针
-     * @param class_ 用作包装的类，原则上该类必须具有 _cpp_ptr 字段
-     */
-    void wrapPointer(void* ptr, Value class_);
-
-    /**
-     * @brief 从栈顶实例对象中解包出 C++ 原始指针。
-     * @return 解包出的指针；类型不符或缺少 _cpp_ptr 字段时报告错误并返回 nullptr
-     */
-    void* unwrapPointer();
-
-    /**
      * @brief 创建 UserData 包装对象并压入栈顶。
      * @param data 宿主拥有的原生指针
      * @param type 宿主定义的 NativeType，生命周期必须长于所有引用它的 UserData 对象
@@ -441,7 +428,6 @@ public:
         String* true_;    ///< 内置字面量 "true"
         String* false_;   ///< 内置字面量 "false"
         String* null;     ///< 内置字面量 "null"
-        String* _cpp_ptr; ///< C++ 互操作指针字段名 "_cpp_ptr"
     };
     /// 已驻留的协议方法名/类型名字符串实例。
     const Strings STRINGS = {
@@ -470,8 +456,7 @@ public:
         internString("UserData"),
         internString("true"),
         internString("false"),
-        internString("null"),
-        internString("_cpp_ptr")
+        internString("null")
     };
 };
 

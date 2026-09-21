@@ -2,8 +2,7 @@
 //
 // Links against zeta_core and exercises the public C++-host interop surface
 // declared in src/vm/vm.h: registerFunction / registerClass / call / callMethod /
-// getLocal / setLocal / wrapPointer / unwrapPointer / internString / temp roots /
-// stack ops / globals.
+// getLocal / setLocal / newUserData / internString / temp roots / stack ops / globals.
 //
 // Zeta-side scripts live next to this file as *.zt and are compiled via
 // compileModule; their path is resolved through the CPP_TEST_DIR macro set by
@@ -13,6 +12,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "zeta/vm/vm.h"
 #include "zeta/compiler/compiler.h"
@@ -75,7 +75,7 @@ void nativeAdd(Zeta::VM* vm, int argc) {
     vm->push(Zeta::Value(a.intValue + b.intValue));
 }
 
-// expect_eq(a, b): asserts strict value equality (test data is Int only).
+// expect_eq(a, b): asserts Value equality (type + payload).
 void nativeExpectEq(Zeta::VM* vm, int argc) {
     Zeta::Value a = vm->getLocal(0);
     Zeta::Value b = vm->getLocal(1);
@@ -103,6 +103,123 @@ void nativeSetX(Zeta::VM* vm, int argc) {
     Zeta::Value v = vm->getLocal(1);
     inst[vm->internString("x")] = v;
     vm->push(Zeta::Value());
+}
+
+// ---- UserData / NativeType test fixtures ----
+
+struct HostPoint {
+    int64_t x = 1;
+    int64_t y = 2;
+};
+
+// NativeType bound to a VM; field get pushes to the operand stack, field set
+// receives the value as a parameter, methods run on a native frame
+// [this(UserData), args...] with argc including `this`.
+class HostPointType : public Zeta::NativeType {
+public:
+    explicit HostPointType(Zeta::VM* vm) : Zeta::NativeType(vm) {
+        nameX = vm->internString("x");
+        nameY = vm->internString("y");
+        nameGetX = vm->internString("get_x");
+        nameGetY = vm->internString("get_y");
+        nameSetX = vm->internString("set_x");
+        nameSum = vm->internString("sum");
+    }
+
+    void getField(void* instance, Zeta::String* fieldName) override {
+        auto* p = static_cast<HostPoint*>(instance);
+        if (fieldName == nameX) {
+            vm->push(Zeta::Value(p->x));
+        } else if (fieldName == nameY) {
+            vm->push(Zeta::Value(p->y));
+        } else {
+            vm->push(Zeta::Value::Error);
+        }
+    }
+
+    void setField(void* instance, Zeta::String* fieldName, const Zeta::Value& value) override {
+        auto* p = static_cast<HostPoint*>(instance);
+        if (value.type != Zeta::Value::Type::Int) {
+            vm->reportError("HostPoint.setField: value must be Int");
+            return;
+        }
+        if (fieldName == nameX) {
+            p->x = value.intValue;
+        } else if (fieldName == nameY) {
+            p->y = value.intValue;
+        } else {
+            vm->reportError("HostPoint.setField: unknown field");
+        }
+    }
+
+    void callMethod(void* instance, Zeta::String* methodName, int argc) override {
+        auto* p = static_cast<HostPoint*>(instance);
+        if (methodName == nameGetX) {
+            if (argc != 1) {
+                vm->reportError("HostPoint.get_x: argc must be 1 (this)");
+                vm->push(Zeta::Value::Error);
+                return;
+            }
+            vm->push(Zeta::Value(p->x));
+        } else if (methodName == nameGetY) {
+            if (argc != 1) {
+                vm->reportError("HostPoint.get_y: argc must be 1 (this)");
+                vm->push(Zeta::Value::Error);
+                return;
+            }
+            vm->push(Zeta::Value(p->y));
+        } else if (methodName == nameSetX) {
+            if (argc != 2) {
+                vm->reportError("HostPoint.set_x: argc must be 2 (this + v)");
+                vm->push(Zeta::Value::Error);
+                return;
+            }
+            Zeta::Value v = vm->getLocal(1);
+            if (v.type != Zeta::Value::Type::Int) {
+                vm->reportError("HostPoint.set_x: v must be Int");
+                vm->push(Zeta::Value::Error);
+                return;
+            }
+            p->x = v.intValue;
+            vm->push(Zeta::Value::Null);
+        } else if (methodName == nameSum) {
+            if (argc != 1) {
+                vm->reportError("HostPoint.sum: argc must be 1 (this)");
+                vm->push(Zeta::Value::Error);
+                return;
+            }
+            vm->push(Zeta::Value(p->x + p->y));
+        } else {
+            vm->reportError("HostPoint: unknown method");
+            vm->push(Zeta::Value::Error);
+        }
+    }
+
+private:
+    Zeta::String* nameX = nullptr;
+    Zeta::String* nameY = nullptr;
+    Zeta::String* nameGetX = nullptr;
+    Zeta::String* nameGetY = nullptr;
+    Zeta::String* nameSetX = nullptr;
+    Zeta::String* nameSum = nullptr;
+};
+
+// Shared with make_point() so Zeta scripts can allocate UserData instances.
+// The NativeType must outlive every UserData that references it.
+HostPointType* g_hostPointType = nullptr;
+std::vector<std::unique_ptr<HostPoint>> g_hostPoints;
+
+// make_point() -> UserData wrapping a fresh HostPoint{x=1,y=2}
+void nativeMakePoint(Zeta::VM* vm, int argc) {
+    auto pt = std::make_unique<HostPoint>();
+    HostPoint* raw = pt.get();
+    g_hostPoints.push_back(std::move(pt));
+    if (g_hostPointType == nullptr) {
+        vm->reportError("make_point: HostPointType not bound");
+        vm->push(Zeta::Value::Error);
+        return;
+    }
+    vm->newUserData(raw, g_hostPointType);
 }
 
 // ---- test cases ----
@@ -275,23 +392,87 @@ void testGetSetLocal() {
     vm.pop();
 }
 
-void testWrapUnwrapPointer() {
-    beginTest("wrapPointer / unwrapPointer");
+void testUserDataCpp() {
+    beginTest("UserData / NativeType (C++ 侧)");
+    Zeta::VM vm;
+    vm.setErrorHandler(silentErrorHandler);
+    HostPointType type(&vm);
+    HostPoint pt{3, 4};
+
+    vm.newUserData(&pt, &type);
+    Zeta::Value udVal = vm.pop();
+    check(udVal.isUserData(), "newUserData 结果 isUserData()");
+    check(udVal.type == Zeta::Value::Type::Object &&
+              udVal.ptrValue->getType() == Zeta::Object::Type::UserData,
+          "newUserData 类型为 UserData");
+    check(static_cast<bool>(udVal), "UserData 真值为 true");
+
+    auto udOpt = udVal.as<Zeta::UserData*>();
+    check(udOpt.has_value(), "Value::as<UserData*>()");
+    check(udOpt && (*udOpt)->getData() == &pt, "getData() 返回宿主指针");
+    check(udOpt && (*udOpt)->getNativeType() == &type, "getNativeType() 返回类型");
+
+    // Field get via UserData wrapper (result pushed on current frame stack).
+    if (udOpt) {
+        (*udOpt)->getField(vm.internString("x"));
+        Zeta::Value x = vm.pop();
+        check(x.type == Zeta::Value::Type::Int && x.intValue == 3, "getField(x) == 3");
+
+        (*udOpt)->setField(vm.internString("x"), Zeta::Value(int64_t(30)));
+        check(pt.x == 30, "setField 直接写入宿主数据");
+        (*udOpt)->getField(vm.internString("x"));
+        x = vm.pop();
+        check(x.intValue == 30, "getField 读回 30");
+    }
+
+    // callMethod via VM (independent native frame).
+    vm.push(udVal);
+    vm.callMethod("get_y", 0);
+    Zeta::Value y = vm.pop();
+    check(y.type == Zeta::Value::Type::Int && y.intValue == 4, "callMethod get_y == 4");
+
+    vm.push(udVal);
+    vm.callMethod("sum", 0);
+    Zeta::Value sum = vm.pop();
+    check(sum.type == Zeta::Value::Type::Int && sum.intValue == 34, "callMethod sum == 30+4");
+
+    vm.push(Zeta::Value(int64_t(99)));
+    vm.push(udVal);
+    vm.callMethod("set_x", 1);
+    vm.pop();
+    check(pt.x == 99, "callMethod set_x 写入宿主数据");
+
+    // Negative: null data / null type rejected.
+    HostPoint dummy{0, 0};
+    vm.newUserData(nullptr, &type);
+    Zeta::Value badData = vm.pop();
+    check(badData.type == Zeta::Value::Type::Error, "newUserData(nullptr, type) -> Error");
+
+    vm.newUserData(&dummy, nullptr);
+    Zeta::Value badType = vm.pop();
+    check(badType.type == Zeta::Value::Type::Error, "newUserData(data, nullptr) -> Error");
+}
+
+void testUserDataZeta() {
+    beginTest("UserData / NativeType (Zeta 调用)");
     Zeta::VM vm;
     vm.setErrorHandler(silentErrorHandler);
 
-    int clsIdx = vm.registerClass("Wrapper", {}, {});
-    check(clsIdx >= 0, "registerClass Wrapper");
+    HostPointType type(&vm);
+    g_hostPointType = &type;
+    g_hostPoints.clear();
 
-    int sentinel = 12345;
-    vm.wrapPointer(&sentinel, vm.getGlobal(clsIdx));
-    void* unwrapped = vm.unwrapPointer();
-    check(unwrapped == &sentinel, "unwrapPointer 返回同一地址");
+    vm.registerFunction("expect_eq", nativeExpectEq);
+    vm.registerFunction("make_point", nativeMakePoint);
 
-    // Negative path: top of stack is not an instance -> error + nullptr.
-    vm.push(Zeta::Value(int64_t(0)));
-    void* bad = vm.unwrapPointer();
-    check(bad == nullptr, "unwrapPointer 非实例返回 nullptr");
+    auto module = loadScript(vm, "userdata.zt");
+    if (!module) {
+        g_hostPointType = nullptr;
+        return;
+    }
+    callMain(vm, *module);
+    vm.pop();
+    g_hostPointType = nullptr;
 }
 
 void testTempRoot() {
@@ -421,7 +602,8 @@ int main() {
     testRegisterFunctionCppCall();
     testRegisterClassCppCall();
     testGetSetLocal();
-    testWrapUnwrapPointer();
+    testUserDataCpp();
+    testUserDataZeta();
     testTempRoot();
     testRegisterFunctionZetaCall();
     testRegisterClassZetaCall();

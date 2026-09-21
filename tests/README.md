@@ -87,6 +87,7 @@ tests/
     ├── cpp_interop_test.cpp # C++ 测试宿主程序 (链接 zeta_core)
     ├── native_function.zt   # Zeta 调用注册的原生函数
     ├── native_class.zt      # Zeta 调用注册的原生类
+    ├── userdata.zt          # Zeta 使用 UserData 字段/方法
     ├── zeta_function.zt     # 定义 Zeta 函数供 C++ 调用
     ├── zeta_class.zt        # 定义 Zeta 类供 C++ 调用方法
     ├── zeta_global.zt       # 定义 Zeta 全局供 C++ 读写
@@ -154,7 +155,7 @@ bash tests/gc/run_gc.sh       # 全部 GC 测试 (bash)
 
 ## C++ 互操作测试 (`tests/cpp/`)
 
-C++ 互操作测试用**链接 `zeta_core` 的 C++ 宿主程序** (`cpp_interop_test`) 验证 `src/vm/vm.h` 中面向 C++ 宿主的公共接口: `registerFunction` / `registerClass` / `call` / `callMethod` / `wrapPointer` / `unwrapPointer` / `internString` / 临时根 (`pushTempRoot`/`popTempRoot`) / 栈操作 (`push`/`pop`/`peek`) / 全局变量读写 (`findGlobal`/`getGlobal`/`setGlobal`) / 对象创建 (`newInstance`/`newArray`/`newMap`/`newStrObj`)。Zeta 侧测试代码为同目录下的 `*.zt` 文件, 由宿主程序通过 `compileModule` 编译。
+C++ 互操作测试用**链接 `zeta_core` 的 C++ 宿主程序** (`cpp_interop_test`) 验证 `src/vm/vm.h` 中面向 C++ 宿主的公共接口: `registerFunction` / `registerClass` / `call` / `callMethod` / `newUserData` / `internString` / 临时根 (`pushTempRoot`/`popTempRoot`) / 栈操作 (`push`/`pop`/`peek`) / 全局变量读写 (`findGlobal`/`getGlobal`/`setGlobal`) / 对象创建 (`newInstance`/`newArray`/`newMap`/`newStrObj`)。Zeta 侧测试代码为同目录下的 `*.zt` 文件, 由宿主程序通过 `compileModule` 编译。
 
 `tests/cpp/` 是独立 CMake 子项目, 由根 `CMakeLists.txt` 通过 `add_subdirectory(tests/cpp)` 纳入; 构建后产出 `build/bin/cpp_interop_test`。宿主程序通过编译期宏 `CPP_TEST_DIR` 定位配套 `.zt` 文件, 与运行时工作目录无关。
 
@@ -171,4 +172,5 @@ bash tests/cpp/run_cpp.sh      # 运行全部 C++ 互操作测试
 
 - `cpp_interop_test.cpp`: 测试宿主程序, 内含极简断言计数与各用例。
 - `native_function.zt` / `native_class.zt`: Zeta 调用 C++ 注册的原生函数/类。
+- `userdata.zt`: Zeta 通过 `make_point()` 获取 UserData, 走字段读写与方法调用。
 - `zeta_function.zt` / `zeta_class.zt` / `zeta_global.zt`: 定义 Zeta 函数/类/全局, 供 C++ 宿主直接调用/读写。

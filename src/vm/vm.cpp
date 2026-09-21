@@ -309,35 +309,6 @@ void VM::newStrObj(std::string_view str) {
     gc->unlock();
 }
 
-void VM::wrapPointer(void* ptr, Value class_) {
-    if(class_.type != Value::Type::Object || class_.ptrValue->type != Object::Type::Class) {
-        reportError("wrapPointer() expects a Class object", Error::Type::RuntimeError);
-        push(Value::Error);
-        return;
-    }
-    gc->lock();
-    Class* cls = static_cast<Class*>(class_.ptrValue);
-    Instance* instance = gc->allocate<Instance>(gc.get(), cls);
-    instance->fields->set(STRINGS._cpp_ptr, Value((int64_t)ptr));
-    push(Value(instance));
-    gc->unlock();
-}
-
-void* VM::unwrapPointer() {
-    Value obj = pop();
-    if(obj.type != Value::Type::Object || obj.ptrValue->type != Object::Type::Instance) {
-        reportError("unwrapPointer() expects an Instance object", Error::Type::RuntimeError);
-        return nullptr;
-    }
-    Instance* instance = static_cast<Instance*>(obj.ptrValue);
-    auto ptrValOpt = instance->fields->get(STRINGS._cpp_ptr);
-    if(!ptrValOpt.has_value() || ptrValOpt.value().type != Value::Type::Int) {
-        reportError("unwrapPointer() expects an Instance with a _cpp_ptr field of type Int", Error::Type::RuntimeError);
-        return nullptr;
-    }
-    return (void*)(ptrValOpt.value().intValue);
-}
-
 void VM::newUserData(void* data, NativeType* type) {
     if(type == nullptr) {
         reportError("newUserData() requires a non-null NativeType", Error::Type::VMError);
