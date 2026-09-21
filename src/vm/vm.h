@@ -45,7 +45,7 @@ public:
     };
 
     /**
-     * @brief 操作数栈的底层表示。
+     * @brief 栈区的底层表示。
      */
     struct Stack{
         Value* base;    ///< 栈底指针

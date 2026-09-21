@@ -44,14 +44,14 @@ struct Value {
     } type = Type::Null;
     union {
         int64_t intValue;
-        bool boolValue;
+        uint64_t boolValue;
         double floatValue;
         String* strValue;
         Routine* funcValue;
         NativeFunction nativeFuncValue;
         Object* ptrValue; // NOTE: 只要类型是 Object, ptrValue 就必定不是 nullptr, 也就是程序需要在任何情况下都能断言assert(ptrValue != nullptr)
         uint64_t val;
-    };
+    }; // NOTE: 每个域都必须占满 8 字节.
 
     explicit Value() : type(Type::Null) {}
     explicit Value(int64_t i) : type(Type::Int), intValue(i) {}
