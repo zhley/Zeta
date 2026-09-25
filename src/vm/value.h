@@ -337,7 +337,9 @@ public:
     friend class VM;
     friend class Object;
 
-    Class* getClass() const { return cls; }
+    const Class* getClass() const { return cls; }
+    const Map* getFields() const { return fields; }
+
     std::optional<Value> getField(String* fieldName) const { return fields->get(fieldName); }
     void setField(String* fieldName, const Value& value) { fields->set(fieldName, value); }
 
@@ -441,6 +443,8 @@ public:
 
     // Write field: value is passed by parameter.
     virtual void setField(void* instance, String* fieldName, const Value& value) = 0;
+
+    // TODO: argc 不应该包含 this.
 
     // Invoke method: VM has already set up an independent native frame whose
     // locals are [this(UserData), arg0, ...]; argc includes `this`. 
@@ -614,6 +618,7 @@ inline Value::ProxyStr::operator Value() const {
     return Value::Error;
 }
 
+// TODO: 这东西容易歧义, 删掉
 inline Value::ProxyStr& Value::ProxyStr::operator=(const Value& val) {
     if (value.type == Value::Type::Object && value.ptrValue->type == Object::Type::Map) {
         Map* map = static_cast<Map*>(value.ptrValue);
