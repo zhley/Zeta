@@ -248,7 +248,7 @@ void VM::callMethod(String* methodName, int argc) {
         StackFrame* prevFrame = curFrame - 1;
         std::memcpy(curFrame->base + 1, prevFrame->top - argc, argc * sizeof(Value));
         prevFrame->top -= argc;
-        ud->callMethod(methodName, argc + 1);
+        ud->callMethod(methodName, argc);
         Value retVal = pop();
         popFrame();
         push(retVal);
@@ -714,7 +714,7 @@ void VM::execute() {
             std::memcpy(curFrame->base + 1, prevFrame->top - (argc), (argc) * sizeof(Value)); \
             prevFrame->top -= (argc); \
         } \
-        ud->callMethod((methodName), (argc) + 1); \
+        ud->callMethod((methodName), (argc)); \
         Value retVal = POP(); \
         popFrame(); \
         PUSH(retVal); \
@@ -1499,7 +1499,7 @@ void VM::execute() {
                             StackFrame* prevFrame = curFrame - 1;
                             std::memcpy(curFrame->base + 1, prevFrame->top - argCount, argCount * sizeof(Value));
                             prevFrame->top -= argCount;
-                            ud->callMethod(methodName, argCount + 1);
+                            ud->callMethod(methodName, argCount);
                             Value retVal = pop();
                             popFrame();
                             push(retVal);

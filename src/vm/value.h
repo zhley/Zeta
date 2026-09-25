@@ -74,30 +74,6 @@ struct Value {
 
     explicit operator bool() const;
 
-    class ProxyInt {
-    private:
-        Value& value;
-        uint32_t index;
-    public:
-        ProxyInt(Value& value, uint32_t index) : value(value), index(index) {}
-        operator Value() const;
-        ProxyInt& operator=(const Value& val);
-    };
-    class ProxyStr {
-    private:
-        Value& value;
-        String* key;
-    public:
-        ProxyStr(Value& value, String* key) : value(value), key(key) {}
-        operator Value() const;
-        ProxyStr& operator=(const Value& val);
-    };
-
-    ProxyInt operator[](uint32_t index) { return ProxyInt(*this, index); }
-    Value operator[](uint32_t index) const;
-    ProxyStr operator[](String* key) { return ProxyStr(*this, key); }
-    Value operator[](String* key) const;
-
     bool isNumber() const;
     bool isString() const;
     bool isFunction() const;
@@ -343,29 +319,6 @@ public:
     std::optional<Value> getField(String* fieldName) const { return fields->get(fieldName); }
     void setField(String* fieldName, const Value& value) { fields->set(fieldName, value); }
 
-    class Proxy {
-    private:
-        Instance& instance;
-        String* fieldName;
-    public:
-        Proxy(Instance& instance, String* fieldName) : instance(instance), fieldName(fieldName) {}
-        operator Value() const {
-            return instance.getField(fieldName).value_or(Value::Error);
-        }
-        Proxy& operator=(const Value& value) {
-            instance.setField(fieldName, value);
-            return *this;
-        }
-    };
-
-    Proxy operator[](String* fieldName) {
-        return Proxy(*this, fieldName);
-    }
-    
-    Value operator[](String* fieldName) const {
-        return getField(fieldName).value_or(Value::Error);
-    }
-
 private:
     Class* cls;
     Map* fields; // field name -> value
@@ -444,10 +397,8 @@ public:
     // Write field: value is passed by parameter.
     virtual void setField(void* instance, String* fieldName, const Value& value) = 0;
 
-    // TODO: argc 不应该包含 this.
-
     // Invoke method: VM has already set up an independent native frame whose
-    // locals are [this(UserData), arg0, ...]; argc includes `this`. 
+    // locals are [this(UserData), arg0, ...]; argc counts only the arguments, excluding `this`.
     // Implementation must push exactly one return value.
     // Special protocol methods (_equals, _iter, _next) will be invoked by VM when the corresponding operator is used on the UserData object.
     // _init is treated as a normal method.
@@ -589,64 +540,6 @@ inline Value::operator bool() const  {
         case Type::Error: return true;
     }
     return false;
-}
-
-inline Value::ProxyInt::operator Value() const {
-    if (value.type == Value::Type::Object && value.ptrValue->type == Object::Type::Array) {
-        Array* arr = static_cast<Array*>(value.ptrValue);
-        return arr->get(index);
-    }
-    return Value::Error;
-}
-
-inline Value::ProxyInt& Value::ProxyInt::operator=(const Value& val) {
-    if (value.type == Value::Type::Object && value.ptrValue->type == Object::Type::Array) {
-        Array* arr = static_cast<Array*>(value.ptrValue);
-        arr->set(index, val);
-    }
-    return *this;
-}
-
-inline Value::ProxyStr::operator Value() const {
-    if (value.type == Value::Type::Object && value.ptrValue->type == Object::Type::Map) {
-        Map* map = static_cast<Map*>(value.ptrValue);
-        return map->get(key).value_or(Value::Error);
-    } else if (value.type == Value::Type::Object && value.ptrValue->type == Object::Type::Instance) {
-        Instance* inst = static_cast<Instance*>(value.ptrValue);
-        return inst->getField(key).value_or(Value::Error);
-    }
-    return Value::Error;
-}
-
-// TODO: 这东西容易歧义, 删掉
-inline Value::ProxyStr& Value::ProxyStr::operator=(const Value& val) {
-    if (value.type == Value::Type::Object && value.ptrValue->type == Object::Type::Map) {
-        Map* map = static_cast<Map*>(value.ptrValue);
-        map->set(key, val);
-    } else if (value.type == Value::Type::Object && value.ptrValue->type == Object::Type::Instance) {
-        Instance* inst = static_cast<Instance*>(value.ptrValue);
-        inst->setField(key, val);
-    }
-    return *this;
-}
-
-inline Value Value::operator[](uint32_t index) const {
-    if (type == Value::Type::Object && ptrValue->type == Object::Type::Array) {
-        Array* arr = static_cast<Array*>(ptrValue);
-        return arr->get(index);
-    }
-    return Value::Error;
-}
-
-inline Value Value::operator[](String* key) const {
-    if (type == Value::Type::Object && ptrValue->type == Object::Type::Map) {
-        Map* map = static_cast<Map*>(ptrValue);
-        return map->get(key).value_or(Value::Error);
-    } else if (type == Value::Type::Object && ptrValue->type == Object::Type::Instance) {
-        Instance* inst = static_cast<Instance*>(ptrValue);
-        return inst->getField(key).value_or(Value::Error);
-    }
-    return Value::Error;
 }
 
 inline bool Value::isNumber() const {

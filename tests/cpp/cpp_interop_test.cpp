@@ -83,17 +83,27 @@ void nativeExpectEq(Zeta::VM* vm, int argc) {
     vm->push(Zeta::Value());
 }
 
+// instanceField(this, name): reads a field from an Instance value.
+Zeta::Value instanceField(Zeta::VM* vm, const Zeta::Value& inst, const char* name) {
+    if (inst.type == Zeta::Value::Type::Object &&
+        inst.ptrValue->getType() == Zeta::Object::Type::Instance) {
+        return static_cast<Zeta::Instance*>(inst.ptrValue)
+            ->getField(vm->internString(name)).value_or(Zeta::Value::Error);
+    }
+    return Zeta::Value::Error;
+}
+
 // get_x(): returns the instance's "x" field. this is local 0.
 void nativeGetX(Zeta::VM* vm, int argc) {
     check(argc == 1, "native method argc == 实际传参个数 (含 this)");
     Zeta::Value inst = vm->getLocal(0);
-    vm->push(inst[vm->internString("x")]);
+    vm->push(instanceField(vm, inst, "x"));
 }
 
 // get_y(): returns the instance's "y" field.
 void nativeGetY(Zeta::VM* vm, int argc) {
     Zeta::Value inst = vm->getLocal(0);
-    vm->push(inst[vm->internString("y")]);
+    vm->push(instanceField(vm, inst, "y"));
 }
 
 // set_x(v): writes the instance's "x" field via setLocal-style access to this.
@@ -101,7 +111,9 @@ void nativeSetX(Zeta::VM* vm, int argc) {
     check(argc == 2, "set_x argc == 2 (this + v)");
     Zeta::Value inst = vm->getLocal(0);
     Zeta::Value v = vm->getLocal(1);
-    inst[vm->internString("x")] = v;
+    check(inst.type == Zeta::Value::Type::Object &&
+          inst.ptrValue->getType() == Zeta::Object::Type::Instance, "set_x this is an Instance");
+    static_cast<Zeta::Instance*>(inst.ptrValue)->setField(vm->internString("x"), v);
     vm->push(Zeta::Value());
 }
 
@@ -160,22 +172,22 @@ public:
     void callMethod(void* instance, Zeta::String* methodName, int argc) override {
         auto* p = static_cast<HostPoint*>(instance);
         if (methodName == nameGetX) {
-            if (argc != 1) {
-                vm->reportError("HostPoint.get_x: argc must be 1 (this)");
+            if (argc != 0) {
+                vm->reportError("HostPoint.get_x: argc must be 0");
                 vm->push(Zeta::Value::Error);
                 return;
             }
             vm->push(Zeta::Value(p->x));
         } else if (methodName == nameGetY) {
-            if (argc != 1) {
-                vm->reportError("HostPoint.get_y: argc must be 1 (this)");
+            if (argc != 0) {
+                vm->reportError("HostPoint.get_y: argc must be 0");
                 vm->push(Zeta::Value::Error);
                 return;
             }
             vm->push(Zeta::Value(p->y));
         } else if (methodName == nameSetX) {
-            if (argc != 2) {
-                vm->reportError("HostPoint.set_x: argc must be 2 (this + v)");
+            if (argc != 1) {
+                vm->reportError("HostPoint.set_x: argc must be 1 (v, excluding this)");
                 vm->push(Zeta::Value::Error);
                 return;
             }
@@ -188,16 +200,16 @@ public:
             p->x = v.intValue;
             vm->push(Zeta::Value::Null);
         } else if (methodName == nameSum) {
-            if (argc != 1) {
-                vm->reportError("HostPoint.sum: argc must be 1 (this)");
+            if (argc != 0) {
+                vm->reportError("HostPoint.sum: argc must be 0");
                 vm->push(Zeta::Value::Error);
                 return;
             }
             vm->push(Zeta::Value(p->x + p->y));
         } else if (methodName == nameEquals) {
             // _equals(other) -> Bool; used by == / !=
-            if (argc != 2) {
-                vm->reportError("HostPoint._equals: argc must be 2 (this + other)");
+            if (argc != 1) {
+                vm->reportError("HostPoint._equals: argc must be 1 (other, excluding this)");
                 vm->push(Zeta::Value::Error);
                 return;
             }
@@ -213,8 +225,8 @@ public:
             vm->push(Zeta::Value(eq));
         } else if (methodName == nameIter) {
             // _iter() -> this (iterates x then y)
-            if (argc != 1) {
-                vm->reportError("HostPoint._iter: argc must be 1 (this)");
+            if (argc != 0) {
+                vm->reportError("HostPoint._iter: argc must be 0");
                 vm->push(Zeta::Value::Error);
                 return;
             }
@@ -222,8 +234,8 @@ public:
             vm->push(vm->getLocal(0));
         } else if (methodName == nameNext) {
             // _next() -> Int or Error when exhausted
-            if (argc != 1) {
-                vm->reportError("HostPoint._next: argc must be 1 (this)");
+            if (argc != 0) {
+                vm->reportError("HostPoint._next: argc must be 0");
                 vm->push(Zeta::Value::Error);
                 return;
             }
